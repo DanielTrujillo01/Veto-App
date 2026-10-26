@@ -1,0 +1,8 @@
+node_modules
+dist
+.next
+coverage
+pnpm-lock.yaml
+db/migrations
+docs/diagramas_er.html
+docs/diagramas_er.md

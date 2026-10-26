@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.next/
+coverage/
+*.tsbuildinfo
+.turbo/
+
+# Variables de entorno reales (los .env.example sí se versionan)
+.env
+.env.local
+.env.*.local
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log

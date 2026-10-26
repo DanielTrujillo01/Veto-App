@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Veto · Diagramas ER</title>
+<style>
+:root{--bg:#FFF6EE;--fg:#1E1E1E;--muted:#5b5350;--card:#fff;--line:#e6d9cf;--brand:#6A0C18}
+@media (prefers-color-scheme:dark){:root{--bg:#1b1416;--fg:#f4ece8;--muted:#b9a9a3;--card:#251b1e;--line:#3a2b2f;--brand:#e58a94}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:24px 16px 8px;max-width:1280px;margin:auto}
+h1{margin:0;color:var(--brand);font-size:26px} p.sub{margin:4px 0 12px;color:var(--muted)}
+nav{display:flex;flex-wrap:wrap;gap:8px;position:sticky;top:0;background:var(--bg);padding:10px 16px;max-width:1280px;margin:auto;border-bottom:1px solid var(--line)}
+nav a{color:var(--brand);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:13px;background:var(--card)}
+section{max-width:1280px;margin:20px auto;padding:0 16px}
+h2{font-size:18px;margin:0 0 8px}
+pre.mermaid{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;overflow:auto;margin:0}
+</style></head><body>
+<header><h1>Veto · Modelo de datos</h1>
+<p class="sub">Diagramas entidad-relación generados desde el esquema PostgreSQL real (db/migrations). PK = llave primaria · FK = llave foránea · UK = único. Se omiten creado_en/actualizado_en. Las tablas que solo muestran su id son referencias a otro módulo.</p></header>
+<nav><a href="#vista_general">Vista general</a> <a href="#cuentas">1 · Usuarios, aliados y veterinarios</a> <a href="#servicios">2 · Mascotas, servicios y horarios</a> <a href="#citas">3 · Citas y registro de consulta</a> <a href="#pedidos">4 · Productos y pedidos</a> <a href="#adopcion">5 · Adopción</a> <a href="#soporte">6 · Notificaciones y administración</a></nav>
+<section id="vista_general"><h2>Vista general (entidades principales, sin columnas)</h2><pre class="mermaid">
+erDiagram
+    usuario ||--o| aliado : &quot;&quot;
+    aliado ||--o{ veterinario : &quot;&quot;
+    usuario ||--o| veterinario : &quot;&quot;
+    aliado ||--o{ sede : &quot;&quot;
+    usuario ||--o{ mascota : &quot;&quot;
+    especie ||--o{ mascota : &quot;&quot;
+    aliado ||--o{ servicio : &quot;&quot;
+    tipo_servicio ||--o{ servicio : &quot;&quot;
+    sede |o--o{ servicio : &quot;&quot;
+    servicio ||--o{ servicio_regla_precio : &quot;&quot;
+    especie |o--o{ servicio_regla_precio : &quot;&quot;
+    aliado ||--o{ horario : &quot;&quot;
+    veterinario |o--o{ horario : &quot;&quot;
+    usuario ||--o{ cita : &quot;&quot;
+    aliado ||--o{ cita : &quot;&quot;
+    mascota ||--o{ cita : &quot;&quot;
+    servicio ||--o{ cita : &quot;&quot;
+    veterinario |o--o{ cita : &quot;&quot;
+    veterinario ||--o{ consulta : &quot;&quot;
+    cita ||--o{ consulta : &quot;&quot;
+    consulta ||--o{ consulta_anotacion : &quot;&quot;
+    usuario ||--o{ consulta_anotacion : &quot;&quot;
+    aliado ||--o{ producto : &quot;&quot;
+    categoria_producto ||--o{ producto : &quot;&quot;
+    usuario ||--o{ pedido : &quot;&quot;
+    aliado ||--o{ pedido : &quot;&quot;
+    pedido ||--o{ pedido_item : &quot;&quot;
+    producto ||--o{ pedido_item : &quot;&quot;
+    aliado ||--o{ mascota_adopcion : &quot;&quot;
+    especie ||--o{ mascota_adopcion : &quot;&quot;
+    mascota_adopcion ||--o{ solicitud_adopcion : &quot;&quot;
+    usuario ||--o{ solicitud_adopcion : &quot;&quot;
+    usuario ||--o{ notificacion : &quot;&quot;
+    usuario ||--o{ accion_admin : &quot;&quot;
+</pre></section>
+<section id="cuentas"><h2>1 · Usuarios, aliados y veterinarios</h2><pre class="mermaid">
+erDiagram
+    aliado {
+        uuid id PK
+        uuid usuario_id FK,UK
+        tipo_aliado tipo
+        text nombre
+        text descripcion
+        text logo_url
+        text contacto
+        estado_aliado estado
+        text ciudad
+        text ubicacion
+        int2 anio_fundacion
+    }
+    aliado_especie {
+        uuid aliado_id PK,FK
+        int2 especie_id PK,FK
+    }
+    especie {
+        int2 id PK
+        text nombre UK
+    }
+    sede {
+        uuid id PK
+        uuid aliado_id FK
+        text nombre
+        text direccion
+        text ciudad
+        bool activa
+    }
+    usuario {
+        uuid id PK
+        text nombre
+        text celular
+        citext correo UK
+        text password_hash
+        rol_usuario rol
+        estado_cuenta estado
+        timestamptz eliminado_en
+    }
+    veterinario {
+        uuid id PK
+        uuid aliado_id FK
+        uuid usuario_id FK,UK
+        text foto_url
+        text descripcion
+        bool activo
+    }
+    usuario ||--o| aliado : &quot;usuario_id&quot;
+    aliado ||--o{ veterinario : &quot;aliado_id&quot;
+    usuario ||--o| veterinario : &quot;usuario_id&quot;
+    aliado ||--o{ sede : &quot;aliado_id&quot;
+    aliado ||--o{ aliado_especie : &quot;aliado_id&quot;
+    especie ||--o{ aliado_especie : &quot;especie_id&quot;
+</pre></section>
+<section id="servicios"><h2>2 · Mascotas, servicios y horarios</h2><pre class="mermaid">
+erDiagram
+    aliado {
+        uuid id PK
+    }
+    especie {
+        int2 id PK
+        text nombre UK
+    }
+    horario {
+        uuid id PK
+        uuid aliado_id FK
+        uuid veterinario_id FK
+        int2 dia_semana
+        time hora_inicio
+        time hora_fin
+        date vigente_desde
+        date vigente_hasta
+        uuid agenda_clave
+        tsrange franja
+        daterange vigencia
+    }
+    mascota {
+        uuid id PK
+        uuid tutor_id FK
+        text nombre
+        int2 especie_id FK
+        sexo_animal sexo
+        text raza
+        date fecha_nacimiento
+        int2 edad_meses
+        text color
+        numeric peso_kg
+        text chip UK
+    }
+    mascota_foto {
+        uuid id PK
+        uuid mascota_id FK
+        text url
+    }
+    sede {
+        uuid id PK
+    }
+    servicio {
+        uuid id PK
+        uuid aliado_id FK
+        int2 tipo_servicio_id FK
+        text nombre
+        text descripcion
+        modalidad_servicio modalidad
+        uuid sede_id FK
+        int2 duracion_min
+        numeric precio_base
+        bool activo
+        estado_moderacion moderacion
+    }
+    servicio_regla_precio {
+        uuid id PK
+        uuid servicio_id FK
+        int2 especie_id FK
+        numeric peso_min_kg
+        numeric peso_max_kg
+        int4 edad_min_meses
+        int4 edad_max_meses
+        numeric precio
+        int2 prioridad
+    }
+    tipo_servicio {
+        int2 id PK
+        text nombre UK
+    }
+    usuario {
+        uuid id PK
+    }
+    veterinario {
+        uuid id PK
+    }
+    usuario ||--o{ mascota : &quot;tutor_id&quot;
+    especie ||--o{ mascota : &quot;especie_id&quot;
+    mascota ||--o{ mascota_foto : &quot;mascota_id&quot;
+    aliado ||--o{ servicio : &quot;aliado_id&quot;
+    tipo_servicio ||--o{ servicio : &quot;tipo_servicio_id&quot;
+    sede |o--o{ servicio : &quot;sede_id+aliado_id&quot;
+    servicio ||--o{ servicio_regla_precio : &quot;servicio_id&quot;
+    especie |o--o{ servicio_regla_precio : &quot;especie_id&quot;
+    aliado ||--o{ horario : &quot;aliado_id&quot;
+    veterinario |o--o{ horario : &quot;veterinario_id+aliado_id&quot;
+</pre></section>
+<section id="citas"><h2>3 · Citas y registro de consulta</h2><pre class="mermaid">
+erDiagram
+    aliado {
+        uuid id PK
+    }
+    cita {
+        uuid id PK
+        uuid tutor_id FK
+        uuid mascota_id FK
+        uuid aliado_id FK
+        uuid servicio_id FK
+        uuid veterinario_id FK
+        timestamptz inicio
+        timestamptz fin
+        estado_cita estado
+        numeric precio
+        text recomendaciones
+    }
+    consulta {
+        uuid id PK
+        uuid cita_id FK,UK
+        uuid mascota_id FK
+        uuid veterinario_id FK
+        text motivo_consulta
+        text descripcion_propietario
+        text estado_mental
+        text condicion_corporal
+        text comportamiento
+        text estado_general
+        estado_consulta estado
+        timestamptz cerrada_en
+        uuid cerrada_por FK
+    }
+    consulta_anotacion {
+        uuid id PK
+        uuid consulta_id FK
+        uuid autor_id FK
+        text campo
+        text texto
+    }
+    historial_estado {
+        int8 id PK
+        text entidad
+        uuid entidad_id
+        text estado_anterior
+        text estado_nuevo
+        uuid cambiado_por FK
+        text motivo
+        timestamptz cambiado_en
+    }
+    mascota {
+        uuid id PK
+    }
+    servicio {
+        uuid id PK
+    }
+    usuario {
+        uuid id PK
+    }
+    veterinario {
+        uuid id PK
+    }
+    usuario ||--o{ cita : &quot;tutor_id&quot;
+    aliado ||--o{ cita : &quot;aliado_id&quot;
+    mascota ||--o{ cita : &quot;mascota_id+tutor_id&quot;
+    servicio ||--o{ cita : &quot;servicio_id+aliado_id&quot;
+    veterinario |o--o{ cita : &quot;veterinario_id+aliado_id&quot;
+    usuario |o--o{ historial_estado : &quot;cambiado_por&quot;
+    veterinario ||--o{ consulta : &quot;veterinario_id&quot;
+    usuario |o--o{ consulta : &quot;cerrada_por&quot;
+    cita ||--o{ consulta : &quot;cita_id+mascota_id&quot;
+    consulta ||--o{ consulta_anotacion : &quot;consulta_id&quot;
+    usuario ||--o{ consulta_anotacion : &quot;autor_id&quot;
+</pre></section>
+<section id="pedidos"><h2>4 · Productos y pedidos</h2><pre class="mermaid">
+erDiagram
+    aliado {
+        uuid id PK
+    }
+    categoria_producto {
+        int2 id PK
+        text nombre UK
+    }
+    pedido {
+        uuid id PK
+        uuid tutor_id FK
+        uuid aliado_id FK
+        estado_pedido estado
+        numeric total
+    }
+    pedido_item {
+        uuid id PK
+        uuid pedido_id FK
+        uuid producto_id FK
+        int4 cantidad
+        numeric precio_unitario
+    }
+    producto {
+        uuid id PK
+        uuid aliado_id FK
+        int2 categoria_id FK
+        text nombre
+        text descripcion
+        numeric precio
+        int4 stock
+        bool activo
+        estado_moderacion moderacion
+    }
+    producto_foto {
+        uuid id PK
+        uuid producto_id FK
+        text url
+        estado_moderacion moderacion
+    }
+    usuario {
+        uuid id PK
+    }
+    aliado ||--o{ producto : &quot;aliado_id&quot;
+    categoria_producto ||--o{ producto : &quot;categoria_id&quot;
+    producto ||--o{ producto_foto : &quot;producto_id&quot;
+    usuario ||--o{ pedido : &quot;tutor_id&quot;
+    aliado ||--o{ pedido : &quot;aliado_id&quot;
+    pedido ||--o{ pedido_item : &quot;pedido_id&quot;
+    producto ||--o{ pedido_item : &quot;producto_id&quot;
+</pre></section>
+<section id="adopcion"><h2>5 · Adopción</h2><pre class="mermaid">
+erDiagram
+    aliado {
+        uuid id PK
+    }
+    especie {
+        int2 id PK
+        text nombre UK
+    }
+    mascota_adopcion {
+        uuid id PK
+        uuid fundacion_id FK
+        text nombre
+        int2 especie_id FK
+        int2 edad_meses
+        sexo_animal sexo
+        tamano_mascota tamano
+        text ubicacion
+        text descripcion
+        text foto_url
+        estado_mascota_adopcion estado
+    }
+    solicitud_adopcion {
+        uuid id PK
+        uuid mascota_adopcion_id FK
+        uuid tutor_id FK
+        estado_solicitud estado
+        jsonb datos_personales
+        jsonb hogar_experiencia
+        text motivacion
+        int2 calificacion
+        text motivo_decision
+        uuid decidido_por FK
+        timestamptz decidido_en
+    }
+    usuario {
+        uuid id PK
+    }
+    aliado ||--o{ mascota_adopcion : &quot;fundacion_id&quot;
+    especie ||--o{ mascota_adopcion : &quot;especie_id&quot;
+    mascota_adopcion ||--o{ solicitud_adopcion : &quot;mascota_adopcion_id&quot;
+    usuario ||--o{ solicitud_adopcion : &quot;tutor_id&quot;
+    usuario |o--o{ solicitud_adopcion : &quot;decidido_por&quot;
+</pre></section>
+<section id="soporte"><h2>6 · Notificaciones y administración</h2><pre class="mermaid">
+erDiagram
+    accion_admin {
+        uuid id PK
+        uuid admin_id FK
+        text objetivo_tipo
+        uuid objetivo_id
+        tipo_accion_admin accion
+        text motivo
+    }
+    notificacion {
+        uuid id PK
+        uuid usuario_id FK
+        text tipo
+        text mensaje
+        uuid referencia_id
+        timestamptz leida_en
+    }
+    usuario {
+        uuid id PK
+    }
+    usuario ||--o{ notificacion : &quot;usuario_id&quot;
+    usuario ||--o{ accion_admin : &quot;admin_id&quot;
+</pre></section>
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11.4.0/dist/mermaid.esm.min.mjs";
+const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+mermaid.initialize({startOnLoad:true,theme:dark?"dark":"neutral",er:{useMaxWidth:false},maxTextSize:400000});
+</script></body></html>

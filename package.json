@@ -1,0 +1,34 @@
+{
+  "name": "veto",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Veto: plataforma que conecta tutores con clínicas, veterinarios, tiendas y fundaciones.",
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm build:shared && pnpm --parallel --filter @veto/shared --filter @veto/api --filter @veto/web dev",
+    "build": "pnpm build:shared && pnpm --filter @veto/api --filter @veto/web build",
+    "build:shared": "pnpm --filter @veto/shared build",
+    "lint": "eslint .",
+    "typecheck": "pnpm build:shared && pnpm -r typecheck",
+    "test": "pnpm build:shared && pnpm -r test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d --wait db",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d --wait db && node db/migrate.mjs",
+    "db:migrate": "node db/migrate.mjs",
+    "db:test": "node db/test.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "pg": "^8.23.1",
+    "prettier": "^3.9.10",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}

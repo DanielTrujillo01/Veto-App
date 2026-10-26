@@ -1,0 +1,10 @@
+# Quién debe revisar los cambios de cada carpeta. GitHub lo pide automáticamente en cada pull request.
+# Reemplaza los @usuario por los usuarios reales de GitHub y descomenta las líneas.
+#
+# Cambios en la base de datos: los revisa el Backend Lead.
+# /db/            @usuario-david
+# Cambios en la web y en el kit de componentes: los revisa el UX/UI Lead.
+# /apps/web/      @usuario-johan
+# CI y despliegue: los revisa QA/DevOps.
+# /.github/       @usuario-jhonier
+# /docker-compose.yml @usuario-jhonier

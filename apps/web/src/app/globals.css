@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+
+/* Colores como variables: cambiar la identidad visual es editar solo este bloque. */
+:root {
+  --fondo: #fafaf7;
+  --superficie: #ffffff;
+  --texto: #1c1c1a;
+  --texto-suave: #5f5f58;
+  --borde: #e4e4dc;
+  --acento: #1f6f5c;
+  --acento-texto: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fondo: #141413;
+    --superficie: #1d1d1b;
+    --texto: #f1f1ec;
+    --texto-suave: #a8a8a0;
+    --borde: #2f2f2b;
+    --acento: #4fb89f;
+    --acento-texto: #0d1f1a;
+  }
+}
+
+@theme inline {
+  --color-fondo: var(--fondo);
+  --color-superficie: var(--superficie);
+  --color-texto: var(--texto);
+  --color-suave: var(--texto-suave);
+  --color-borde: var(--borde);
+  --color-acento: var(--acento);
+  --color-acento-texto: var(--acento-texto);
+}
+
+body {
+  background: var(--fondo);
+  color: var(--texto);
+}

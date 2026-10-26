@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm bloquea por defecto los scripts de instalación de las dependencias.
+# Se permiten solo los que se necesitan:
+onlyBuiltDependencies:
+  - esbuild # usado por vitest
+  - '@parcel/watcher' # recarga en caliente de la API (nest start --watch)
+
+# Se rechazan expresamente (no se necesitan):
+ignoredBuiltDependencies:
+  - unrs-resolver
+  - '@scarf/scarf'
