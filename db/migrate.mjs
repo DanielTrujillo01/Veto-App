@@ -12,13 +12,18 @@ try {
   // Sin .env: se usan las variables del entorno (por ejemplo, en CI).
 }
 
-const url = process.env.DATABASE_URL ?? 'postgres://veto:veto@localhost:5440/veto';
+const url = process.env.DATABASE_URL;
+if (!url) {
+  console.error('Falta DATABASE_URL. Configúrala en el archivo .env de la raíz o en el entorno.');
+  process.exit(1);
+}
+const ssl = url.includes('.supabase.co') ? { rejectUnauthorized: false } : undefined;
 const carpeta = join(aqui, 'migrations');
 const archivos = readdirSync(carpeta)
   .filter((f) => f.endsWith('.sql'))
   .sort();
 
-const client = new pg.Client({ connectionString: url });
+const client = new pg.Client({ connectionString: url, ssl, connectionTimeoutMillis: 10_000 });
 await client.connect();
 
 try {
