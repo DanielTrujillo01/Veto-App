@@ -130,8 +130,7 @@ Lo que queda en la aplicación: calcular los espacios libres del calendario, los
 ## 6. Cómo usarlo
 
 ```bash
-pnpm db:up        # levanta PostgreSQL en Docker
-pnpm db:migrate   # aplica db/migrations/0001_baseline.sql
+pnpm db:migrate   # crea el esquema en la base configurada por DATABASE_URL (Supabase o local)
 ```
 
 Para verificar las reglas (no deja datos):
@@ -140,6 +139,6 @@ Para verificar las reglas (no deja datos):
 pnpm db:test
 ```
 
-Debe terminar con `=== TODAS LAS PRUEBAS PASARON ===`. La API ya se conecta con `search_path = veto, public`; si usas otro cliente SQL, ejecuta `SET search_path TO veto, public;`.
+Debe terminar con `=== TODAS LAS PRUEBAS PASARON ===`. La migración crea el esquema `veto` y sus tablas automáticamente. La API se conecta con `search_path = veto, public`; si usas otro cliente SQL, ejecuta `SET search_path TO veto, public;`.
 
 Los cambios al modelo se hacen con migraciones nuevas (`0002_...sql`), nunca editando la `0001`. Ver el README de la raíz.

@@ -29,7 +29,7 @@ La justificación de estas decisiones está en [`docs/adr/0001-arquitectura.md`]
   corepack enable
   ```
   o instálalo con `npm install -g pnpm@10`.
-- **Docker Desktop** (para la base de datos). Debe estar abierto antes de `pnpm db:up`.
+- Una cuenta/proyecto de **Supabase** con acceso a la cadena de conexión PostgreSQL. Docker es opcional si prefieres ejecutar PostgreSQL localmente.
 - **Git**.
 
 ## Puesta en marcha
@@ -37,12 +37,12 @@ La justificación de estas decisiones está en [`docs/adr/0001-arquitectura.md`]
 ```bash
 # 1. Variables de entorno
 cp .env.example .env              # en PowerShell: Copy-Item .env.example .env
+# Edita .env y reemplaza [YOUR-PASSWORD] por la contraseña de Supabase.
 
 # 2. Dependencias
 pnpm install
 
-# 3. Base de datos (PostgreSQL en Docker) y su esquema
-pnpm db:up
+# 3. Crea automáticamente el esquema, tipos, tablas, índices y reglas en Supabase
 pnpm db:migrate
 
 # 4. Todo en modo desarrollo (shared + API + web)
@@ -56,10 +56,12 @@ Cuando termine de arrancar:
 | Web                               | http://localhost:3000                                 |
 | API                               | http://localhost:3001/api/health                      |
 | Documentación de la API (OpenAPI) | http://localhost:3001/api/docs                        |
-| PostgreSQL                        | `localhost:5440` (usuario, contraseña y base: `veto`) |
+| PostgreSQL                        | Tu proyecto Supabase (configurado en `DATABASE_URL`) |
 
-> El puerto de la base es **5440**, no 5432, para que no choque con un PostgreSQL que ya tengas
-> instalado en tu equipo.
+> `pnpm db:migrate` crea las tablas desde los archivos versionados de `db/migrations/`; no tienes
+> que crear tablas manualmente en el panel web de Supabase. Si la conexión directa falla por una
+> limitación de IPv6, usa la cadena de conexión del pooler que ofrece Supabase para tu proyecto.
+> La contraseña se mantiene en `.env`, que está excluido de Git.
 
 Si tu API no corre en el puerto 3001, copia `apps/web/.env.example` a `apps/web/.env.local` y
 ajusta `NEXT_PUBLIC_API_URL`.
@@ -76,10 +78,10 @@ Se ejecutan desde la raíz del repositorio.
 | `pnpm lint`                         | ESLint sobre todo el repositorio                                  |
 | `pnpm typecheck`                    | Revisa los tipos de todos los paquetes                            |
 | `pnpm format` / `pnpm format:check` | Aplica / verifica el formato con Prettier                         |
-| `pnpm db:up` / `pnpm db:down`       | Levanta / detiene la base de datos                                |
+| `pnpm db:up` / `pnpm db:down`       | Levanta / detiene PostgreSQL local opcional (Docker)              |
 | `pnpm db:migrate`                   | Aplica las migraciones pendientes                                 |
 | `pnpm db:test`                      | Corre las pruebas de las reglas de la base de datos               |
-| `pnpm db:reset`                     | **Borra** la base de datos local y la recrea desde cero           |
+| `pnpm db:reset`                     | **Borra** la base de datos local de Docker y la recrea desde cero |
 
 Para un solo paquete: `pnpm --filter @veto/api test`, `pnpm --filter @veto/web dev`, etc.
 
@@ -177,10 +179,11 @@ pruebas de la base y del código, y compila todo. Si falla, no se mezcla.
 | Síntoma                                                      | Causa y solución                                                                           |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `pnpm: command not found`                                    | Corre `corepack enable` o `npm install -g pnpm@10`                                         |
-| `pnpm db:up` falla con "cannot connect to the Docker daemon" | Abre Docker Desktop y espera a que inicie                                                  |
+| `pnpm db:up` falla con "cannot connect to the Docker daemon" | Abre Docker Desktop; solo es necesario para PostgreSQL local                                      |
 | `port is already allocated` (5440, 3000 o 3001)              | Otro programa usa ese puerto. Ciérralo o cambia el puerto en `.env` / `docker-compose.yml` |
-| La API arranca y dice `Variables de entorno inválidas`       | Falta el archivo `.env`: `cp .env.example .env`                                            |
-| `/api/health` responde 503                                   | La base no está arriba o no se migró: `pnpm db:up && pnpm db:migrate`                      |
+| La API arranca y dice `Variables de entorno inválidas`       | Falta `DATABASE_URL` o está vacía; configura el archivo `.env` desde `.env.example`          |
+| `/api/health` responde 503                                   | Revisa `DATABASE_URL`, la conectividad a Supabase y ejecuta `pnpm db:migrate`                 |
 | `relation "veto.…" does not exist`                           | Falta aplicar migraciones: `pnpm db:migrate`                                               |
+| Error de conexión SSL o red con Supabase                      | Verifica `DATABASE_URL`; si la conexión directa requiere IPv6, usa el pooler de Supabase   |
 | `Cannot find module '@veto/shared'`                          | Falta compilar el paquete: `pnpm build:shared`                                             |
 | Quieres empezar con la base limpia                           | `pnpm db:reset` (borra todos los datos locales)                                            |
