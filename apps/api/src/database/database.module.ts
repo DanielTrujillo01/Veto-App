@@ -14,7 +14,9 @@ import { DatabaseService, PG_POOL } from './database.service';
         new Pool({
           connectionString: env.DATABASE_URL,
           // Supabase requiere TLS; la base local de Docker puede seguir usando una conexión sin TLS.
-          ssl: env.DATABASE_URL.includes('.supabase.co') ? { rejectUnauthorized: false } : undefined,
+          ssl: env.DATABASE_URL.includes('.supabase.co')
+            ? { rejectUnauthorized: false }
+            : undefined,
           options: '-c search_path=veto,public',
           connectionTimeoutMillis: 10_000,
           max: 10,
