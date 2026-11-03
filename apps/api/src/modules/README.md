@@ -28,3 +28,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 4. **Validación de entrada** con los esquemas Zod de `@veto/shared`.
 5. **Permisos:** cada endpoint debe comprobar rol y pertenencia (por ejemplo, un tutor solo ve sus
    mascotas).
+
+Ver contratos, datos simulados, dependencias pendientes y lÃ­mites del esquema para HU-001/007/015/019 en docs/historias/hu001-hu007-hu015-hu019.md.
+
+Ver contratos, datos simulados, dependencias pendientes y lÃ­mites del esquema para HU-001/007/015/019 en docs/historias/hu001-hu007-hu015-hu019.md.
