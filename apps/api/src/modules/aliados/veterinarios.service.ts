@@ -1,5 +1,3 @@
-import { promisify } from 'node:util';
-import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
 import {
   ConflictException,
   BadRequestException,
@@ -10,8 +8,7 @@ import {
 import type { QueryResultRow } from 'pg';
 import { crearVeterinarioSchema, type CrearVeterinario } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
-
-const scrypt = promisify(scryptCallback);
+import { hashContrasena } from '../identidad/seguridad';
 
 interface VeterinarioRow extends QueryResultRow {
   id: string;
@@ -34,7 +31,7 @@ export class VeterinariosService {
       });
     }
     const datos = resultado.data;
-    const passwordHash = await this.hashPassword(datos.contrasena);
+    const passwordHash = await hashContrasena(datos.contrasena);
 
     return this.db.withUser(actorId, async (client) => {
       const aliado = await client.query<{
@@ -89,12 +86,6 @@ export class VeterinariosService {
         throw error;
       }
     });
-  }
-
-  private async hashPassword(password: string): Promise<string> {
-    const salt = randomBytes(16).toString('hex');
-    const key = (await scrypt(password, salt, 64)) as Buffer;
-    return `scrypt:${salt}:${key.toString('hex')}`;
   }
 
   private isUniqueViolation(error: unknown): error is { code: string } {

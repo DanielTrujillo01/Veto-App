@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { IdentidadModule } from '../identidad/identidad.module';
 import { VeterinariosController } from './veterinarios.controller';
 import { VeterinariosService } from './veterinarios.service';
 
@@ -12,6 +13,7 @@ import { VeterinariosService } from './veterinarios.service';
  * lo pide a través de un servicio exportado por este módulo, nunca con SQL directo.
  */
 @Module({
+  imports: [IdentidadModule],
   controllers: [VeterinariosController],
   providers: [VeterinariosService],
   exports: [VeterinariosService],
