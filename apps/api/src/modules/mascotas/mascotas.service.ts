@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import type { CrearMascota, Mascota } from '@veto/shared';
+import type { ActualizarMascota, CrearMascota, Mascota } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { MascotasRepository } from './mascotas.repository';
@@ -24,6 +24,22 @@ export class MascotasService {
     return this.db.withUser(tutorId, (client) =>
       this.traducirErrores(async () => {
         const id = await this.repo.insertar(client, tutorId, datos);
+        await this.repo.reemplazarFotos(client, id, datos.fotos ?? []);
+        return (await this.repo.buscarDelTutor(client, id, tutorId)) as Mascota;
+      }),
+    );
+  }
+
+  /**
+   * HU-010: reemplaza los campos editables (mismas reglas que la creación). Solo el tutor
+   * dueño puede editar; para cualquier otro la mascota "no existe" (404).
+   */
+  async actualizar(tutorId: string, id: string, datos: ActualizarMascota): Promise<Mascota> {
+    return this.db.withUser(tutorId, (client) =>
+      this.traducirErrores(async () => {
+        if (!(await this.repo.actualizar(client, id, tutorId, datos))) {
+          throw new NotFoundException(NO_ENCONTRADA);
+        }
         await this.repo.reemplazarFotos(client, id, datos.fotos ?? []);
         return (await this.repo.buscarDelTutor(client, id, tutorId)) as Mascota;
       }),

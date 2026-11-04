@@ -169,3 +169,60 @@ describe('HU-008 · crear perfil de mascota', () => {
     await app.close();
   });
 });
+
+describe('HU-010 · editar mascota', () => {
+  it('el tutor dueño guarda los cambios y los ve en la respuesta', async () => {
+    const { db, consultas } = crearBdFalsa(mascotasEnBd());
+    const app = await crearApp([MascotasModule], db);
+    await request(app.getHttpServer())
+      .put(`/api/mascotas/${MASCOTA_ID}`)
+      .set('Cookie', COOKIE)
+      .send({ ...minimos, nombre: 'Firu', pesoKg: 30, fotos: ['https://fotos.veto.co/n.jpg'] })
+      .expect(200);
+    const update = consultas.find((c) => c.sql.includes('UPDATE mascota'));
+    expect(update?.valores.slice(0, 3)).toEqual([MASCOTA_ID, TUTOR.id, 'Firu']);
+    expect(update?.usuarioTx).toBe(TUTOR.id);
+    expect(consultas.some((c) => c.sql.includes('DELETE FROM mascota_foto'))).toBe(true);
+    await app.close();
+  });
+
+  it('aplica las mismas validaciones de la creación', async () => {
+    const { db, consultas } = crearBdFalsa(mascotasEnBd());
+    const app = await crearApp([MascotasModule], db);
+    const r = await request(app.getHttpServer())
+      .put(`/api/mascotas/${MASCOTA_ID}`)
+      .set('Cookie', COOKIE)
+      .send({ nombre: 'Firu', especieId: 1, sexo: 'OTRO', fechaNacimiento: '2999-01-01' })
+      .expect(400);
+    expect(Object.keys(r.body.errores)).toEqual(expect.arrayContaining(['sexo']));
+    expect(consultas.some((c) => c.sql.includes('UPDATE mascota'))).toBe(false);
+    await app.close();
+  });
+
+  it('no permite editar la mascota de otro tutor', async () => {
+    const { db, consultas } = crearBdFalsa(mascotasEnBd());
+    const app = await crearApp([MascotasModule], db);
+    await request(app.getHttpServer())
+      .put(`/api/mascotas/${AJENA_ID}`)
+      .set('Cookie', COOKIE)
+      .send(minimos)
+      .expect(404);
+    expect(consultas.some((c) => c.sql.includes('mascota_foto'))).toBe(false);
+    await app.close();
+  });
+
+  it('un chip ya usado por otra mascota responde 409', async () => {
+    const { db } = crearBdFalsa(
+      mascotasEnBd((sql) => {
+        if (sql.includes('UPDATE mascota')) throw errorPg('23505');
+      }),
+    );
+    const app = await crearApp([MascotasModule], db);
+    await request(app.getHttpServer())
+      .put(`/api/mascotas/${MASCOTA_ID}`)
+      .set('Cookie', COOKIE)
+      .send({ ...minimos, chip: 'REPETIDO' })
+      .expect(409);
+    await app.close();
+  });
+});

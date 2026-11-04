@@ -7,11 +7,12 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { crearMascotaSchema } from '@veto/shared';
+import { actualizarMascotaSchema, crearMascotaSchema } from '@veto/shared';
 import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from '../identidad/auth.guard';
 import { Roles, RolesGuard } from '../identidad/roles.guard';
@@ -56,5 +57,22 @@ export class MascotasController {
   @ApiOperation({ summary: 'Consultar el perfil de una mascota propia' })
   obtener(@Req() request: RequestAutenticada, @Param('id', new ParseUUIDPipe()) id: string) {
     return this.mascotas.obtener(request.usuario.id, id);
+  }
+
+  @Put(':id')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('TUTOR')
+  @ApiOperation({
+    summary: 'Editar los datos de una mascota propia (HU-010)',
+    description:
+      'Reemplaza todos los campos editables con las mismas validaciones de la creación; ' +
+      'un opcional omitido queda vacío y "fotos" reemplaza la lista.',
+  })
+  actualizar(
+    @Req() request: RequestAutenticada,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.mascotas.actualizar(request.usuario.id, id, validar(actualizarMascotaSchema, body));
   }
 }
