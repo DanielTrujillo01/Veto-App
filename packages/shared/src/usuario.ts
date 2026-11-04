@@ -24,3 +24,40 @@ export const loginSchema = z.object({
   contrasena: z.string().min(1, 'La contraseña es obligatoria'),
 });
 export type Login = z.infer<typeof loginSchema>;
+
+/** HU-006: editar el perfil. Cambiar el correo exige la contraseña actual. */
+export const actualizarPerfilSchema = z
+  .object({
+    nombre: registroUsuarioSchema.shape.nombre.optional(),
+    celular: celularSchema.optional(),
+    correo: correoSchema.optional(),
+    contrasenaActual: z.string().min(1, 'La contraseña es obligatoria').optional(),
+  })
+  .strict()
+  .refine(
+    (datos) =>
+      datos.nombre !== undefined || datos.celular !== undefined || datos.correo !== undefined,
+    { message: 'Debes enviar al menos un dato para actualizar', path: ['nombre'] },
+  );
+export type ActualizarPerfil = z.infer<typeof actualizarPerfilSchema>;
+
+/** Texto que el usuario debe escribir para confirmar que quiere eliminar su cuenta. */
+export const CONFIRMACION_ELIMINAR_CUENTA = 'ELIMINAR';
+
+/** HU-006: eliminar la cuenta requiere la contraseña y una confirmación explícita. */
+export const eliminarCuentaSchema = z.object({
+  contrasena: z.string().min(1, 'La contraseña es obligatoria'),
+  confirmacion: z.literal(CONFIRMACION_ELIMINAR_CUENTA, {
+    error: `Escribe ${CONFIRMACION_ELIMINAR_CUENTA} para confirmar la eliminación`,
+  }),
+});
+export type EliminarCuenta = z.infer<typeof eliminarCuentaSchema>;
+
+/** Perfil del usuario autenticado tal como lo devuelve la API. */
+export type PerfilUsuario = {
+  id: string;
+  nombre: string;
+  celular: string;
+  correo: string;
+  rol: string;
+};

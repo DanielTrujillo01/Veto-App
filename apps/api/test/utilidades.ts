@@ -5,7 +5,7 @@ import { DatabaseService } from '../src/database/database.service';
 export type Fila = Record<string, unknown>;
 export type Resultado = { rows: Fila[]; rowCount?: number };
 /** Responde a cada consulta SQL de la prueba. Puede lanzar un error con `code` para simular PostgreSQL. */
-export type Manejador = (sql: string, valores: unknown[]) => Resultado | undefined;
+export type Manejador = (sql: string, valores: unknown[]) => Resultado | undefined | void;
 
 export type UsuarioPrueba = {
   id: string;
