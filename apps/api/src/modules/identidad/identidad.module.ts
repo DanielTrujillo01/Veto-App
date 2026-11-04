@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthGuard } from './auth.guard';
 import { IdentidadController } from './identidad.controller';
 import { IdentidadService } from './identidad.service';
+import { RolesGuard } from './roles.guard';
 
 /**
  * Módulo identidad: Cuentas, registro e inicio de sesión.
@@ -14,7 +15,7 @@ import { IdentidadService } from './identidad.service';
  */
 @Module({
   controllers: [IdentidadController],
-  providers: [IdentidadService, AuthGuard],
-  exports: [IdentidadService, AuthGuard],
+  providers: [IdentidadService, AuthGuard, RolesGuard],
+  exports: [IdentidadService, AuthGuard, RolesGuard],
 })
 export class IdentidadModule {}
