@@ -1,11 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
+import type { PoolClient, QueryResultRow } from 'pg';
 import type { CrearMascota, Mascota } from '@veto/shared';
-
-/** PoolClient de una transacción o DatabaseService para lecturas simples. */
-export type Consultor = {
-  query<T extends QueryResultRow>(texto: string, valores?: unknown[]): Promise<QueryResult<T>>;
-};
+import type { Consultor } from '../../database/database.service';
 
 interface MascotaRow extends QueryResultRow {
   id: string;

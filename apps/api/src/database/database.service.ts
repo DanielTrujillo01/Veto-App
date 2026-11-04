@@ -3,6 +3,11 @@ import type { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 
 export const PG_POOL = Symbol('PG_POOL');
 
+/** Algo que ejecuta consultas: el PoolClient de una transacción o el propio DatabaseService. */
+export type Consultor = {
+  query<T extends QueryResultRow>(texto: string, valores?: unknown[]): Promise<QueryResult<T>>;
+};
+
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}

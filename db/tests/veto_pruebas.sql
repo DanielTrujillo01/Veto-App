@@ -279,6 +279,49 @@ BEGIN
     PERFORM pg_temp.debe_pasar('v_ventas_productos suma los pedidos',
         (SELECT sum(subtotal) FROM v_ventas_productos WHERE aliado_id = a_tienda AND estado = 'DESPACHADO') = 300000);
 
+    -- ---------- HU-006 · Eliminar cuenta: anonimizar y conservar ----------
+    DECLARE
+        u_borrar uuid; masc_b uuid; srv_b uuid; cita_b uuid;
+    BEGIN
+        INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Tutor Borrar','3007778899','borrar@mail.com','h') RETURNING id INTO u_borrar;
+        INSERT INTO mascota (tutor_id, nombre, especie_id, sexo) VALUES (u_borrar,'Toby',perro,'MACHO') RETURNING id INTO masc_b;
+        INSERT INTO aliado_especie VALUES (a_clinica2, perro);
+        INSERT INTO servicio (aliado_id, tipo_servicio_id, nombre, modalidad, precio_base)
+            VALUES (a_clinica2, t_cons, 'Consulta a domicilio', 'A_DOMICILIO', 50000) RETURNING id INTO srv_b;
+        PERFORM set_config('app.usuario_id', u_borrar::text, true);
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, inicio, fin, precio)
+            VALUES (u_borrar, masc_b, a_clinica2, srv_b, now() + interval '4 days', now() + interval '4 days 30 minutes', 50000) RETURNING id INTO cita_b;
+
+        -- Lo mismo que hace IdentidadService.eliminarCuenta
+        UPDATE cita SET estado = 'CANCELADA' WHERE tutor_id = u_borrar AND estado = 'AGENDADA' AND inicio > now();
+        UPDATE usuario SET estado = 'ELIMINADA', eliminado_en = now(), nombre = 'Usuario eliminado',
+               celular = '0000000000', correo = 'eliminado+' || u_borrar || '@veto.invalid', password_hash = 'ELIMINADA'
+         WHERE id = u_borrar;
+        PERFORM pg_temp.debe_pasar('la cuenta eliminada queda anonimizada y cumple las reglas',
+            (SELECT estado = 'ELIMINADA' AND eliminado_en IS NOT NULL AND correo <> 'borrar@mail.com' FROM usuario WHERE id = u_borrar));
+        PERFORM pg_temp.debe_pasar('las citas futuras de la cuenta eliminada se cancelan con historial',
+            (SELECT estado FROM cita WHERE id = cita_b) = 'CANCELADA'
+            AND EXISTS (SELECT 1 FROM historial_estado WHERE entidad = 'cita' AND entidad_id = cita_b AND estado_nuevo = 'CANCELADA'));
+        PERFORM pg_temp.debe_pasar('las mascotas de la cuenta eliminada se conservan', EXISTS (SELECT 1 FROM mascota WHERE id = masc_b));
+        INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Nuevo','3007778800','borrar@mail.com','h');
+        PERFORM pg_temp.debe_pasar('el correo de la cuenta eliminada se puede volver a registrar', true);
+
+        -- ---------- HU-018 · Servicios desactivados y citas históricas ----------
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica2, srv_b, now() + interval '8 days', now() + interval '8 days 30 minutes', 50000) RETURNING id INTO cita_b;
+        UPDATE servicio SET activo = false, precio_base = 70000, nombre = 'Consulta a domicilio (nueva)' WHERE id = srv_b;
+        PERFORM pg_temp.debe_fallar('un servicio desactivado no recibe nuevas reservas',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, inicio, fin, precio)
+                      VALUES (%L,%L,%L,%L, now() + interval '10 days', now() + interval '10 days 30 minutes',1)$q$, u_tutor, masc, a_clinica2, srv_b), '23514');
+        PERFORM pg_temp.debe_pasar('editar el servicio no cambia el precio de las citas ya reservadas',
+            (SELECT precio FROM cita WHERE id = cita_b) = 50000);
+        PERFORM set_config('app.usuario_id', u_clinica2::text, true);
+        UPDATE cita SET estado = 'FINALIZADA' WHERE id = cita_b;
+        PERFORM pg_temp.debe_pasar('una cita existente de un servicio desactivado se puede finalizar',
+            (SELECT estado FROM cita WHERE id = cita_b) = 'FINALIZADA');
+    END;
+
     RAISE NOTICE '=== TODAS LAS PRUEBAS PASARON ===';
 END $$;
 ROLLBACK;
