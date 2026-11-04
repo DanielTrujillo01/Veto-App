@@ -41,3 +41,17 @@ modelo de datos (`docs/modelo-de-datos.md`).
 - **Servicios exportados entre módulos:** `CitasService` (cancelar citas futuras de un tutor, saber si
   un servicio tiene citas), `AliadosService` (verificar administrador, sede activa, aliado activo),
   `MascotasService.perteneceAlTutor`. Reciben el `client` de la transacción de `withUser`.
+
+## HU-015 · Sedes de clínicas
+
+- `GET /api/aliados/:aliadoId/sedes` expone únicamente las sedes activas de una clínica activa.
+- `GET /api/aliados/:aliadoId/sedes/gestion` lista las sedes activas e inactivas al administrador
+  autenticado de esa clínica; `GET .../sedes/:sedeId` consulta una sede de su clínica.
+- `POST /api/aliados/:aliadoId/sedes`, `PUT .../sedes/:sedeId` y
+  `PATCH .../sedes/:sedeId/desactivar` crean, actualizan y desactivan sedes. Las escrituras
+  requieren rol `ALIADO`, propiedad de la clínica y clínica activa de tipo `CLINICA`.
+- `nombre`, `direccion` y `ciudad` son obligatorios; se recortan espacios externos y se limitan a
+  120, 250 y 120 caracteres, respectivamente.
+- Una sede inactiva no se incluye en el catálogo público ni en los servicios disponibles para
+  reservar. La migración `0003_sede_activa_citas.sql` también rechaza nuevas citas para servicios
+  presenciales en esa sede; las citas ya existentes no se modifican.

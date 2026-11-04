@@ -4,6 +4,8 @@ import { AliadosService } from './aliados.service';
 import { ClinicasController } from './clinicas.controller';
 import { VeterinariosController } from './veterinarios.controller';
 import { VeterinariosService } from './veterinarios.service';
+import { SedesController } from './sedes.controller';
+import { SedesService } from './sedes.service';
 
 /**
  * Módulo aliados: Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes.
@@ -16,8 +18,8 @@ import { VeterinariosService } from './veterinarios.service';
  */
 @Module({
   imports: [IdentidadModule],
-  controllers: [VeterinariosController, ClinicasController],
-  providers: [VeterinariosService, AliadosService],
-  exports: [VeterinariosService, AliadosService],
+  controllers: [VeterinariosController, ClinicasController, SedesController],
+  providers: [VeterinariosService, SedesService, AliadosService],
+  exports: [VeterinariosService, SedesService, AliadosService],
 })
 export class AliadosModule {}

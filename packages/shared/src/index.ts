@@ -4,3 +4,4 @@ export * from './mascota';
 export * from './veterinario';
 export * from './horarios';
 export * from './servicio';
+export * from './sede';

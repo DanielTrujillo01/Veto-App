@@ -49,7 +49,7 @@ function bd(e: Escenario = {}, usuario = ALIADO) {
         ],
       };
     }
-    if (sql.includes('FROM sede')) return { rows: [{ ok: valores[0] === SEDE_ID }] };
+    if (sql.includes('FROM sede WHERE')) return { rows: [{ ok: valores[0] === SEDE_ID }] };
     if (sql.includes('FROM aliado WHERE'))
       return { rows: [{ ok: (e.estado ?? 'ACTIVO') === 'ACTIVO' }] };
     if (sql.includes('FROM cita')) return { rows: [{ tiene: e.tieneCitas ?? false }] };
@@ -58,7 +58,14 @@ function bd(e: Escenario = {}, usuario = ALIADO) {
       if (sql.includes('s.id = $1'))
         return { rows: valores[0] === SERVICIO_ID ? [servicios[0]] : [] };
       const disponibles = sql.includes('s.activo AND');
-      return { rows: servicios.filter((s) => !disponibles || s.activo) };
+      return {
+        rows: servicios.filter(
+          (s) =>
+            !disponibles ||
+            (s.activo &&
+              (!sql.includes('se.activa') || s.modalidad !== 'EN_SEDE' || s.sede_activa !== false)),
+        ),
+      };
     }
   }, usuario);
 }
@@ -222,15 +229,26 @@ describe('HU-018 · desactivar servicio', () => {
     const servicios = [
       filaServicio(),
       filaServicio({ id: SEDE_AJENA, nombre: 'Baño', activo: false }),
+      filaServicio({
+        id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        nombre: 'Consulta en sede desactivada',
+        modalidad: 'EN_SEDE',
+        sede_id: SEDE_ID,
+        sede_activa: false,
+      }),
     ];
-    const app = await crearApp([ServiciosModule], bd({ servicios }).db);
+    const { db, consultas } = bd({ servicios });
+    const app = await crearApp([ServiciosModule], db);
     const publico = await request(app.getHttpServer()).get(base).expect(200);
     expect(publico.body.map((s: { nombre: string }) => s.nombre)).toEqual(['Consulta general']);
+    expect(consultas.find((c) => c.sql.includes('FROM servicio s'))?.sql).toContain(
+      'se.id = s.sede_id AND se.aliado_id = s.aliado_id AND se.activa',
+    );
     const gestion = await request(app.getHttpServer())
       .get(`${base}/gestion`)
       .set('Cookie', COOKIE)
       .expect(200);
-    expect(gestion.body).toHaveLength(2);
+    expect(gestion.body).toHaveLength(3);
     await app.close();
   });
 
