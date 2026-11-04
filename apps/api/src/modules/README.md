@@ -8,7 +8,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 | `identidad`      | Cuentas, registro e inicio de sesión                                               | usuario                                                          | HU-001, 002, 006                         |
 | `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                        | HU-007, 012–016, 021, 078                |
 | `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                   | HU-008–011                               |
-| `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, tipo_servicio          | HU-018–022, 024–028                      |
+| `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, tipo_servicio          | HU-016, 018–022, 024–028                 |
 | `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                           | HU-029, 031, 032, 034                    |
 | `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                     | HU-017, 037, 042, 043                    |
 | `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto | HU-044–050                               |
@@ -28,3 +28,16 @@ modelo de datos (`docs/modelo-de-datos.md`).
 4. **Validación de entrada** con los esquemas Zod de `@veto/shared`.
 5. **Permisos:** cada endpoint debe comprobar rol y pertenencia (por ejemplo, un tutor solo ve sus
    mascotas).
+
+## Piezas comunes
+
+- **Autenticación:** `@UseGuards(AuthGuard)` (cookie `veto_session`); el usuario queda en
+  `(request as RequestAutenticada).usuario`. Nunca tomes el actor de un header o del body.
+- **Roles:** `@UseGuards(AuthGuard, RolesGuard)` + `@Roles('TUTOR')`. Rol incorrecto → 403.
+- **Pertenencia:** filtra por el dueño en el SQL (`WHERE id = $1 AND tutor_id = $2`); si no es suyo
+  responde 404 para no revelar que existe.
+- **Validación:** `validar(esquema, body)` de `src/common/validacion.ts` responde 400 con
+  `{ message, errores: { campo: mensaje } }`; `esErrorPg(error, PG.UNICO)` traduce errores de PostgreSQL.
+- **Servicios exportados entre módulos:** `CitasService` (cancelar citas futuras de un tutor, saber si
+  un servicio tiene citas), `AliadosService` (verificar administrador, sede activa, aliado activo),
+  `MascotasService.perteneceAlTutor`. Reciben el `client` de la transacción de `withUser`.
