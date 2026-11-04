@@ -11,3 +11,14 @@ export const crearVeterinarioSchema = z.object({
 });
 
 export type CrearVeterinario = z.infer<typeof crearVeterinarioSchema>;
+
+export const actualizarPerfilVeterinarioSchema = z
+  .object({
+    fotoUrl: z.string().url('La foto no es válida').max(2_048).nullable().optional(),
+    descripcion: z.string().trim().max(2_000).nullable().optional(),
+  })
+  .refine((datos) => datos.fotoUrl !== undefined || datos.descripcion !== undefined, {
+    message: 'Indica la foto o la descripción que deseas actualizar',
+  });
+
+export type ActualizarPerfilVeterinario = z.infer<typeof actualizarPerfilVeterinarioSchema>;

@@ -6,7 +6,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { QueryResultRow } from 'pg';
-import { crearVeterinarioSchema, type CrearVeterinario } from '@veto/shared';
+import {
+  actualizarPerfilVeterinarioSchema,
+  crearVeterinarioSchema,
+  type ActualizarPerfilVeterinario,
+  type CrearVeterinario,
+} from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { hashContrasena } from '../identidad/seguridad';
 
@@ -21,6 +26,85 @@ interface VeterinarioRow extends QueryResultRow {
 @Injectable()
 export class VeterinariosService {
   constructor(private readonly db: DatabaseService) {}
+
+  async listarClinicas() {
+    const resultado = await this.db.query<{
+      id: string;
+      nombre: string;
+      descripcion: string | null;
+    }>(
+      `SELECT id, nombre, descripcion FROM aliado
+        WHERE tipo = 'CLINICA' AND estado = 'ACTIVO' ORDER BY nombre`,
+    );
+    return resultado.rows;
+  }
+
+  async listarPublicos(clinicaId: string) {
+    const clinica = await this.db.query<{ id: string; nombre: string; descripcion: string | null }>(
+      `SELECT id, nombre, descripcion FROM aliado
+        WHERE id = $1 AND tipo = 'CLINICA' AND estado = 'ACTIVO'`,
+      [clinicaId],
+    );
+    if (clinica.rowCount === 0) throw new NotFoundException('La clínica no existe');
+    const veterinarios = await this.db.query<VeterinarioRow & { nombre: string }>(
+      `SELECT v.id, v.usuario_id, v.aliado_id, v.foto_url, v.descripcion, u.nombre
+         FROM veterinario v JOIN usuario u ON u.id = v.usuario_id
+        WHERE v.aliado_id = $1 AND v.activo ORDER BY u.nombre`,
+      [clinicaId],
+    );
+    return {
+      id: clinica.rows[0].id,
+      nombre: clinica.rows[0].nombre,
+      descripcion: clinica.rows[0].descripcion,
+      veterinarios: veterinarios.rows.map((row) => ({
+        id: row.id,
+        nombre: row.nombre,
+        fotoUrl: row.foto_url,
+        descripcion: row.descripcion,
+      })),
+    };
+  }
+
+  async actualizarPerfil(
+    actorId: string,
+    clinicaId: string,
+    veterinarioId: string,
+    entrada: ActualizarPerfilVeterinario,
+  ) {
+    const resultado = actualizarPerfilVeterinarioSchema.safeParse(entrada);
+    if (!resultado.success) {
+      throw new BadRequestException({
+        message: 'Los datos del perfil no son válidos',
+        errors: resultado.error.flatten().fieldErrors,
+      });
+    }
+    return this.db.withUser(actorId, async (client) => {
+      const admin = await client.query<{ ok: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM aliado a JOIN usuario u ON u.id = a.usuario_id
+            WHERE a.id = $1 AND a.tipo = 'CLINICA' AND a.estado = 'ACTIVO'
+              AND a.usuario_id = $2 AND u.rol = 'ALIADO' AND u.estado = 'ACTIVA'
+         ) AS ok`,
+        [clinicaId, actorId],
+      );
+      if (!admin.rows[0]?.ok) throw new ForbiddenException('No puedes gestionar esta clínica');
+      const cambios = resultado.data;
+      const campos = Object.keys(cambios);
+      const valores: unknown[] = [veterinarioId, clinicaId];
+      const asignaciones = campos.map((campo) => {
+        valores.push(cambios[campo as keyof typeof cambios]);
+        return `${campo === 'fotoUrl' ? 'foto_url' : 'descripcion'} = $${valores.length}`;
+      });
+      const actualizado = await client.query<VeterinarioRow>(
+        `UPDATE veterinario SET ${asignaciones.join(', ')}
+          WHERE id = $1 AND aliado_id = $2 AND activo
+          RETURNING id, usuario_id, aliado_id, foto_url, descripcion`,
+        valores,
+      );
+      if (actualizado.rowCount === 0) throw new NotFoundException('El veterinario no existe');
+      return this.toResponse(actualizado.rows[0]);
+    });
+  }
 
   async crear(actorId: string, aliadoId: string, entrada: CrearVeterinario) {
     const resultado = crearVeterinarioSchema.safeParse(entrada);
