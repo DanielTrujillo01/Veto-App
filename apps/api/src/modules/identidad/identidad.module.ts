@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
+import { CitasModule } from '../citas/citas.module';
 import { AuthGuard } from './auth.guard';
 import { IdentidadController } from './identidad.controller';
 import { IdentidadService } from './identidad.service';
+import { RolesGuard } from './roles.guard';
 
 /**
  * Módulo identidad: Cuentas, registro e inicio de sesión.
@@ -13,8 +15,9 @@ import { IdentidadService } from './identidad.service';
  * lo pide a través de un servicio exportado por este módulo, nunca con SQL directo.
  */
 @Module({
+  imports: [CitasModule],
   controllers: [IdentidadController],
-  providers: [IdentidadService, AuthGuard],
-  exports: [IdentidadService, AuthGuard],
+  providers: [IdentidadService, AuthGuard, RolesGuard],
+  exports: [IdentidadService, AuthGuard, RolesGuard],
 })
 export class IdentidadModule {}

@@ -1,19 +1,28 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
+  Patch,
   Post,
   Req,
   Res,
   UnauthorizedException,
   UseGuards,
-  BadRequestException,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { loginSchema } from '@veto/shared';
-import type { Request, Response } from 'express';
+import { actualizarPerfilSchema, eliminarCuentaSchema, loginSchema } from '@veto/shared';
+import type { Response } from 'express';
+import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from './auth.guard';
 import { IdentidadService, NOMBRE_COOKIE_SESION } from './identidad.service';
+
+function cookieSesion(valor: string, maxAge: number): string {
+  const seguro = process.env.NODE_ENV === 'production';
+  return `${NOMBRE_COOKIE_SESION}=${valor}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${seguro ? '; Secure' : ''}`;
+}
 
 @ApiTags('identidad')
 @Controller('identidad')
@@ -23,35 +32,46 @@ export class IdentidadController {
   @Post('login')
   @ApiOperation({ summary: 'Iniciar sesión con correo y contraseña' })
   async login(@Body() body: unknown, @Res({ passthrough: true }) response: Response) {
-    const validacion = loginSchema.safeParse(body);
-    if (!validacion.success) {
-      throw new BadRequestException({
-        message: 'Revisa los datos ingresados',
-        errores: Object.fromEntries(
-          validacion.error.issues.map((issue) => [issue.path.join('.'), issue.message]),
-        ),
-      });
-    }
-
-    const resultado = await this.identidad.iniciarSesion(
-      validacion.data.correo,
-      validacion.data.contrasena,
-    );
+    const datos = validar(loginSchema, body);
+    const resultado = await this.identidad.iniciarSesion(datos.correo, datos.contrasena);
     if (!resultado) throw new UnauthorizedException('El correo o la contraseña no son correctos');
 
-    const seguro = process.env.NODE_ENV === 'production';
-    response.setHeader(
-      'Set-Cookie',
-      `${NOMBRE_COOKIE_SESION}=${resultado.token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=604800${seguro ? '; Secure' : ''}`,
-    );
+    response.setHeader('Set-Cookie', cookieSesion(resultado.token, 604800));
     return { usuario: resultado.usuario };
   }
 
   @Get('me')
   @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Obtener el usuario autenticado' })
-  me(@Req() request: Request) {
-    const autenticada = request as RequestAutenticada;
-    return { usuario: autenticada.usuario };
+  @ApiOperation({ summary: 'Obtener el perfil del usuario autenticado (HU-006)' })
+  async me(@Req() request: RequestAutenticada) {
+    return { usuario: await this.identidad.obtenerPerfil(request.usuario.id) };
+  }
+
+  @Patch('me')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Editar nombre, celular o correo del perfil (HU-006)' })
+  async actualizar(@Req() request: RequestAutenticada, @Body() body: unknown) {
+    const datos = validar(actualizarPerfilSchema, body);
+    return { usuario: await this.identidad.actualizarPerfil(request.usuario.id, datos) };
+  }
+
+  @Delete('me')
+  @UseGuards(AuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Eliminar la cuenta (HU-006)',
+    description:
+      'Requiere { contrasena, confirmacion: "ELIMINAR" }. Anonimiza los datos personales, cierra ' +
+      'todas las sesiones y cancela las citas futuras; se conservan mascotas e historial clínico.',
+  })
+  async eliminar(
+    @Req() request: RequestAutenticada,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const datos = validar(eliminarCuentaSchema, body);
+    await this.identidad.eliminarCuenta(request.usuario.id, datos);
+    response.setHeader('Set-Cookie', cookieSesion('', 0));
+    return { mensaje: 'Tu cuenta fue eliminada. Ya no podrás iniciar sesión con ella.' };
   }
 }
