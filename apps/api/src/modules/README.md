@@ -6,7 +6,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 | Módulo           | Qué hace                                                                           | Tablas propias                                                   | Historias                                |
 | ---------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
 | `identidad`      | Cuentas, registro e inicio de sesión                                               | usuario                                                          | HU-001, 002, 006                         |
-| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                        | HU-007, 012–016, 021, 078                |
+| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                        | HU-007, 012–016, 021, 023, 078           |
 | `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                   | HU-008–011                               |
 | `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, tipo_servicio          | HU-016, 018–022, 024–028                 |
 | `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                           | HU-029, 031, 032, 034                    |
@@ -54,3 +54,9 @@ consultaId)`: lanza 404 si no es suya.
 aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con ninguna). La base
   la aplica también al reservar: una cita exige que el aliado atienda la especie de la mascota.
   Ejemplo ya implementado: `GET /api/aliados/:aliadoId/servicios?especieId=N`.
+- **Confirmación de citas (HU-023):** `PUT /api/aliados/:aliadoId/confirmacion` con `{ "modo": "AUTOMATICA" | "MANUAL" }`;
+  `GET` (público) devuelve `{ modo, estadoInicialCita }` para avisar al tutor. **No calcules el estado de la
+  cita en la aplicación**: al hacer `INSERT INTO cita` la base lo fija (`AGENDADA` en automático, `PENDIENTE`
+  en manual) y devuelve el estado real con `RETURNING estado`; muéstrale ese al tutor. Una cita `PENDIENTE`
+  también ocupa el espacio. Aceptarla es `UPDATE cita SET estado = 'AGENDADA'` y rechazarla,
+  `'CANCELADA'` (solo el aliado acepta); cualquier consulta de "citas vigentes" debe incluir ambos estados.

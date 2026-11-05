@@ -93,6 +93,8 @@ Detalles de diseño:
 | Solo el aliado (administrador o veterinario) finaliza o marca "no asistió" (HU-032)                                  | Trigger `fn_cita_validar`                      |
 | Reprogramar conserva la fecha anterior (HU-034)                                                                      | Se registra en `historial_estado`              |
 | Cita finalizada o cancelada ya no cambia                                                                             | Trigger `fn_cita_validar`                      |
+| Estado inicial de la cita según la confirmación del aliado: automática → AGENDADA, manual → PENDIENTE (HU-023)       | Trigger `fn_cita_validar`                      |
+| Una cita pendiente también ocupa el espacio; solo el aliado la acepta (→ AGENDADA) o la rechaza (→ CANCELADA)        | Trigger + `EXCLUDE` e índice                   |
 | Precio según peso, edad o especie; sin regla o sin dato → precio base (HU-020)                                       | Función `fn_precio_servicio`                   |
 | Consulta cerrada no se edita ni se borra; se corrige con anotación (HU-042)                                          | Triggers + tabla de solo inserción             |
 | Pedido: valida producto activo, descuenta stock, lo devuelve al cancelar; no se cancela tras despachar (HU-046, 049) | Triggers `fn_pedido_item` y `fn_pedido_estado` |
@@ -122,6 +124,12 @@ SET LOCAL app.usuario_id = '<uuid del usuario autenticado>';
 | 9   | **Catálogos**                                      | Los valores iniciales de `especie`, `tipo_servicio` y `categoria_producto` son ejemplos.                                                                                                                                                                                                                                                                                                                                                                                                  |
 | 10  | **Veterinario independiente**                      | Es un `aliado` más una fila en `veterinario` con su misma cuenta, para poder asignarle citas y horarios.                                                                                                                                                                                                                                                                                                                                                                                  |
 | 11  | **Horario mensual**                                | Se modela con la vigencia (`vigente_desde` / `vigente_hasta`) de un horario semanal.                                                                                                                                                                                                                                                                                                                                                                                                      |
+
+**Confirmación de citas (HU-023).** HU-023 estaba entre las excluidas; se agregó después. Cada aliado Vet tiene
+`modo_confirmacion` (`AUTOMATICA` por defecto o `MANUAL`). La cita nace `AGENDADA` (confirmada) o `PENDIENTE`
+según ese modo, lo decide el trigger `fn_cita_validar` y no quien reserva. La cita pendiente ocupa el
+espacio igual que una confirmada. Cambiar el modo solo afecta a las reservas nuevas. Aceptar o rechazar
+una cita pendiente ya está permitido en la base de datos; falta el endpoint, que va con la agenda del aliado.
 
 **Servicios (HU-018).** Un servicio nunca se borra: se desactiva (`activo = false`) y deja de
 listarse como disponible; la base rechaza nuevas citas sobre él, y las citas existentes conservan su
