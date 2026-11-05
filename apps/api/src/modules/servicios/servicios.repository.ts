@@ -86,7 +86,13 @@ export class ServiciosRepository {
 
   /** Todos los servicios del aliado (gestión) o solo los disponibles para reservar. */
   async listar(client: Consultor, aliadoId: string, soloDisponibles: boolean): Promise<Servicio[]> {
-    const filtro = soloDisponibles ? " AND s.activo AND s.moderacion = 'PUBLICADO'" : '';
+    const filtro = soloDisponibles
+      ? ` AND s.activo AND s.moderacion = 'PUBLICADO'
+          AND (s.modalidad <> 'EN_SEDE' OR EXISTS (
+            SELECT 1 FROM sede se
+             WHERE se.id = s.sede_id AND se.aliado_id = s.aliado_id AND se.activa
+          ))`
+      : '';
     const r = await client.query<ServicioRow>(
       `${SELECT_SERVICIO} WHERE s.aliado_id = $1${filtro} ORDER BY s.activo DESC, s.nombre`,
       [aliadoId],

@@ -6,10 +6,13 @@ import { AliadoConfirmacionService } from './aliado-confirmacion.service';
 import { AliadoEspeciesController } from './aliado-especies.controller';
 import { AliadoEspeciesService } from './aliado-especies.service';
 import { AliadosService } from './aliados.service';
+import { ClinicasController } from './clinicas.controller';
 import { VeterinarioPerfilController } from './veterinario-perfil.controller';
 import { VeterinarioGuard } from './veterinario.guard';
 import { VeterinariosController } from './veterinarios.controller';
 import { VeterinariosService } from './veterinarios.service';
+import { SedesController } from './sedes.controller';
+import { SedesService } from './sedes.service';
 
 /**
  * Módulo aliados: Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes.
@@ -27,14 +30,23 @@ import { VeterinariosService } from './veterinarios.service';
     VeterinarioPerfilController,
     AliadoEspeciesController,
     AliadoConfirmacionController,
+    ClinicasController,
+    SedesController,
   ],
   providers: [
     VeterinariosService,
+    SedesService,
     AliadosService,
     AliadoEspeciesService,
     AliadoConfirmacionService,
     VeterinarioGuard,
   ],
-  exports: [VeterinariosService, AliadosService, AliadoEspeciesService, VeterinarioGuard],
+  exports: [
+    VeterinariosService,
+    SedesService,
+    AliadosService,
+    AliadoEspeciesService,
+    VeterinarioGuard,
+  ],
 })
 export class AliadosModule {}

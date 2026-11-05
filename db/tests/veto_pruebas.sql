@@ -125,6 +125,12 @@ BEGIN
         VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '2 days', now() + interval '2 days 30 minutes', 90000) RETURNING id INTO cita1;
     INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
         VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '6 days', now() + interval '6 days 30 minutes', 60000) RETURNING id INTO cita2;
+    UPDATE sede SET activa = false WHERE id = sede1;
+    PERFORM pg_temp.debe_fallar('no se agenda en una sede desactivada',
+        format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+                  VALUES (%L,%L,%L,%L,%L, now() + interval '4 days', now() + interval '4 days 30 minutes',1)$q$,
+                u_tutor, masc, a_clinica, srv, vet1), '23514');
+    UPDATE sede SET activa = true WHERE id = sede1;
     PERFORM pg_temp.debe_fallar('cita solapada con la del mismo veterinario',
         format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
                   VALUES (%L,%L,%L,%L,%L, now() + interval '2 days 10 minutes', now() + interval '2 days 40 minutes',1)$q$,
