@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CitasModule } from '../citas/citas.module';
 import { AuthGuard } from './auth.guard';
-import { IdentidadController } from './identidad.controller';
+import { IdentidadController, RegistroUsuariosController } from './identidad.controller';
 import { IdentidadService } from './identidad.service';
 import { RolesGuard } from './roles.guard';
 
@@ -16,7 +16,7 @@ import { RolesGuard } from './roles.guard';
  */
 @Module({
   imports: [CitasModule],
-  controllers: [IdentidadController],
+  controllers: [IdentidadController, RegistroUsuariosController],
   providers: [IdentidadService, AuthGuard, RolesGuard],
   exports: [IdentidadService, AuthGuard, RolesGuard],
 })

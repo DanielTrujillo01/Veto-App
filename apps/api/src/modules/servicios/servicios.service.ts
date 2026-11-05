@@ -102,6 +102,16 @@ export class ServiciosService {
     });
   }
 
+  /** Detalle de un servicio para el aliado que lo administra. */
+  async obtenerGestion(usuarioId: string, aliadoId: string, servicioId: string): Promise<Servicio> {
+    return this.db.withUser(usuarioId, async (client) => {
+      await this.aliados.verificarAdministrador(client, usuarioId, aliadoId, TIPOS_CON_SERVICIOS);
+      const servicio = await this.repo.buscar(client, servicioId, aliadoId);
+      if (!servicio) throw new NotFoundException(NO_ENCONTRADO);
+      return servicio;
+    });
+  }
+
   /**
    * Público: solo los servicios disponibles para nuevas reservas de un aliado activo.
    * HU-021: con `especieId`, solo cuenta si el aliado atiende esa especie; si no, no hay
@@ -118,6 +128,13 @@ export class ServiciosService {
       return [];
     }
     return this.repo.listar(this.db, aliadoId, true);
+  }
+
+  /** Detalle público de un servicio disponible. */
+  async obtenerDisponible(servicioId: string): Promise<Servicio> {
+    const servicio = await this.repo.buscarDisponible(this.db, servicioId);
+    if (!servicio) throw new NotFoundException('No se encontró un servicio disponible.');
+    return servicio;
   }
 
   listarTipos() {

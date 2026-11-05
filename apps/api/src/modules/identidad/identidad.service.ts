@@ -5,15 +5,22 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
+import { promisify } from 'node:util';
 import type { PoolClient } from 'pg';
-import type { ActualizarPerfil, EliminarCuenta, PerfilUsuario } from '@veto/shared';
+import type {
+  ActualizarPerfil,
+  EliminarCuenta,
+  PerfilUsuario,
+  RegistroUsuario,
+} from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { CitasService } from '../citas/citas.service';
 import { hashSesion, verificarContrasena } from './seguridad';
 
 const DURACION_SESION_MS = 1000 * 60 * 60 * 24 * 7;
+const scrypt = promisify(scryptCallback);
 export const NOMBRE_COOKIE_SESION = 'veto_session';
 
 /** Valores con los que se reemplazan los datos personales de una cuenta eliminada (HU-006). */
@@ -25,13 +32,31 @@ export const ANONIMO = {
 };
 
 export type UsuarioSesion = PerfilUsuario;
+type UsuarioPublico = PerfilUsuario & { estado: string; creado_en: Date };
 
 @Injectable()
 export class IdentidadService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly citas: CitasService,
+    private readonly citas?: CitasService,
   ) {}
+
+  async createTutor(input: RegistroUsuario): Promise<UsuarioPublico> {
+    const passwordHash = await this.hashPassword(input.contrasena);
+    try {
+      return await this.db.withUser(null, (client) =>
+        this.insertUser(client, input, passwordHash, 'TUTOR'),
+      );
+    } catch (error) {
+      if (esErrorPg(error, PG.UNICO)) {
+        throw new ConflictException({
+          code: 'ACCOUNT_EXISTS',
+          message: 'Ya existe una cuenta con ese correo.',
+        });
+      }
+      throw error;
+    }
+  }
 
   async iniciarSesion(
     correo: string,
@@ -57,6 +82,21 @@ export class IdentidadService {
     );
     const { password_hash: _hash, ...usuario } = cuenta;
     return { token, usuario };
+  }
+
+  async insertUser(
+    client: PoolClient,
+    input: Pick<RegistroUsuario, 'nombre' | 'celular' | 'correo'>,
+    passwordHash: string,
+    rol: 'TUTOR' | 'ALIADO',
+  ): Promise<UsuarioPublico> {
+    const resultado = await client.query<UsuarioPublico>(
+      `INSERT INTO usuario (nombre, celular, correo, password_hash, rol)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, nombre, celular, correo, rol, estado, creado_en`,
+      [input.nombre, input.celular, input.correo.toLowerCase(), passwordHash, rol],
+    );
+    return resultado.rows[0];
   }
 
   async usuarioDeSesion(cookieHeader?: string): Promise<UsuarioSesion | null> {
@@ -142,7 +182,7 @@ export class IdentidadService {
         );
       }
 
-      await this.citas.cancelarFuturasDelTutor(client, usuarioId);
+      await this.citas?.cancelarFuturasDelTutor(client, usuarioId);
       await client.query(
         `UPDATE usuario
             SET estado = 'ELIMINADA', eliminado_en = now(),
@@ -170,5 +210,11 @@ export class IdentidadService {
     const cuenta = resultado.rows[0];
     if (!cuenta) throw new NotFoundException('La cuenta no existe');
     return cuenta;
+  }
+
+  async hashPassword(password: string): Promise<string> {
+    const salt = randomBytes(16);
+    const key = (await scrypt(password, salt, 64)) as Buffer;
+    return `scrypt$${salt.toString('hex')}$${key.toString('hex')}`;
   }
 }

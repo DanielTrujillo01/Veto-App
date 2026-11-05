@@ -3,6 +3,7 @@ export * from './usuario';
 export * from './mascota';
 export * from './veterinario';
 export * from './horarios';
+export * from './aliado';
 export * from './servicio';
 export * from './sede';
 export * from './consulta';
