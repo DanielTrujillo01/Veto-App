@@ -292,6 +292,28 @@ BEGIN
     PERFORM pg_temp.debe_pasar('v_ventas_productos suma los pedidos',
         (SELECT sum(subtotal) FROM v_ventas_productos WHERE aliado_id = a_tienda AND estado = 'DESPACHADO') = 300000);
 
+    -- ---------- HU-009 · Un tutor registra varias mascotas independientes ----------
+    DECLARE
+        m1 uuid; m2 uuid; antes record;
+    BEGIN
+        INSERT INTO mascota (tutor_id, nombre, especie_id, sexo, color) VALUES (u_tutor2,'Rocky',perro,'MACHO','Negro') RETURNING id INTO m1;
+        INSERT INTO mascota (tutor_id, nombre, especie_id, sexo, color) VALUES (u_tutor2,'Rocky',gato,'HEMBRA','Blanco') RETURNING id INTO m2;
+        INSERT INTO mascota_foto (mascota_id, url) VALUES (m1,'https://fotos.veto.co/1.jpg'), (m2,'https://fotos.veto.co/2.jpg');
+        PERFORM pg_temp.debe_pasar('un tutor puede tener varias mascotas, incluso con el mismo nombre',
+            (SELECT count(*) FROM mascota WHERE tutor_id = u_tutor2) = 2);
+        SELECT nombre, especie_id, sexo, color INTO antes FROM mascota WHERE id = m2;
+        -- Lo mismo que hace MascotasRepository al editar m1
+        UPDATE mascota SET nombre = 'Rocky Jr', color = 'Café' WHERE id = m1 AND tutor_id = u_tutor2;
+        DELETE FROM mascota_foto WHERE mascota_id = m1;
+        INSERT INTO mascota_foto (mascota_id, url) VALUES (m1,'https://fotos.veto.co/1b.jpg');
+        PERFORM pg_temp.debe_pasar('editar una mascota no cambia los datos de las demás',
+            (SELECT (nombre, especie_id, sexo, color) = (antes.nombre, antes.especie_id, antes.sexo, antes.color) FROM mascota WHERE id = m2));
+        PERFORM pg_temp.debe_pasar('editar las fotos de una mascota no toca las de las demás',
+            (SELECT array_agg(url) FROM mascota_foto WHERE mascota_id = m2) = ARRAY['https://fotos.veto.co/2.jpg']);
+        PERFORM pg_temp.debe_pasar('una mascota de otro tutor no se edita con el filtro por tutor',
+            NOT EXISTS (SELECT 1 FROM mascota WHERE id = masc AND tutor_id = u_tutor2));
+    END;
+
     -- ---------- HU-006 · Eliminar cuenta: anonimizar y conservar ----------
     DECLARE
         u_borrar uuid; masc_b uuid; srv_b uuid; cita_b uuid;

@@ -91,3 +91,21 @@ describe('crearMascotaSchema · validaciones de formato (HU-008 / HU-010)', () =
     ).toBe(false);
   });
 });
+
+describe('mensajes de campos obligatorios en español', () => {
+  it('registro y login dicen qué falta', () => {
+    const r = registroUsuarioSchema.safeParse({});
+    const mensajes = Object.fromEntries(
+      (r.error?.issues ?? []).map((i) => [i.path.join('.'), i.message]),
+    );
+    expect(mensajes).toEqual({
+      nombre: 'El nombre es obligatorio',
+      celular: 'El celular es obligatorio',
+      correo: 'El correo es obligatorio',
+      contrasena: 'La contraseña es obligatoria',
+    });
+    expect(loginSchema.safeParse({ correo: 'a@b.co' }).error?.issues[0].message).toBe(
+      'La contraseña es obligatoria',
+    );
+  });
+});

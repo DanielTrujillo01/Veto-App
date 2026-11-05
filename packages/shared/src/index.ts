@@ -1,4 +1,5 @@
 export * from './enums';
+export * from './imagen';
 export * from './usuario';
 export * from './mascota';
 export * from './veterinario';

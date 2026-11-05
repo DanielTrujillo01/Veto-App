@@ -38,27 +38,24 @@ export const ANONIMO = {
 };
 
 export type UsuarioSesion = PerfilUsuario;
-type UsuarioPublico = PerfilUsuario & { estado: string; creado_en: Date };
 
 @Injectable()
 export class IdentidadService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly citas?: CitasService,
+    private readonly citas: CitasService,
   ) {}
 
-  async createTutor(input: RegistroUsuario): Promise<UsuarioPublico> {
-    const passwordHash = await this.hashPassword(input.contrasena);
+  /** HU-001: registra una cuenta de tutor. */
+  async createTutor(input: RegistroUsuario): Promise<PerfilUsuario> {
+    const passwordHash = await hashContrasena(input.contrasena);
     try {
       return await this.db.withUser(null, (client) =>
         this.insertUser(client, input, passwordHash, 'TUTOR'),
       );
     } catch (error) {
       if (esErrorPg(error, PG.UNICO)) {
-        throw new ConflictException({
-          code: 'ACCOUNT_EXISTS',
-          message: 'Ya existe una cuenta con ese correo.',
-        });
+        throw new ConflictException('Ya existe una cuenta con ese correo');
       }
       throw error;
     }
@@ -209,16 +206,21 @@ export class IdentidadService {
     return { token, usuario };
   }
 
+  /**
+   * Crea la fila de usuario dentro de la transacción de quien llama. Es la única forma de crear
+   * cuentas desde otros módulos (registro de aliados, veterinarios de una clínica): solo este
+   * módulo escribe en `usuario`. Un correo repetido lanza el error 23505 de PostgreSQL.
+   */
   async insertUser(
     client: PoolClient,
     input: Pick<RegistroUsuario, 'nombre' | 'celular' | 'correo'>,
     passwordHash: string,
-    rol: 'TUTOR' | 'ALIADO',
-  ): Promise<UsuarioPublico> {
-    const resultado = await client.query<UsuarioPublico>(
+    rol: 'TUTOR' | 'ALIADO' | 'VETERINARIO',
+  ): Promise<PerfilUsuario> {
+    const resultado = await client.query<PerfilUsuario>(
       `INSERT INTO usuario (nombre, celular, correo, password_hash, rol)
        VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, nombre, celular, correo, rol, estado, creado_en`,
+       RETURNING id, nombre, celular, correo, rol`,
       [input.nombre, input.celular, input.correo.toLowerCase(), passwordHash, rol],
     );
     return resultado.rows[0];
@@ -307,7 +309,7 @@ export class IdentidadService {
         );
       }
 
-      await this.citas?.cancelarFuturasDelTutor(client, usuarioId);
+      await this.citas.cancelarFuturasDelTutor(client, usuarioId);
       await client.query(
         `UPDATE usuario
             SET estado = 'ELIMINADA', eliminado_en = now(),
@@ -335,9 +337,5 @@ export class IdentidadService {
     const cuenta = resultado.rows[0];
     if (!cuenta) throw new NotFoundException('La cuenta no existe');
     return cuenta;
-  }
-
-  async hashPassword(password: string): Promise<string> {
-    return hashContrasena(password);
   }
 }
