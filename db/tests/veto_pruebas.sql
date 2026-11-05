@@ -267,6 +267,19 @@ BEGIN
     PERFORM pg_temp.debe_fallar('fundación PENDIENTE no puede publicar mascotas',
         format($q$INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
                   VALUES (%L,'Rocky',%L,12,'MACHO','MEDIANO','Suba')$q$, a_fund_pend, perro), '23514');
+    UPDATE aliado SET estado = 'ACTIVO' WHERE id = a_fund_pend;
+    INSERT INTO accion_admin (admin_id, objetivo_tipo, objetivo_id, accion)
+        VALUES (u_admin, 'aliado', a_fund_pend, 'APROBAR_FUNDACION');
+    INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
+        VALUES (a_fund_pend, 'Nube', perro, 10, 'HEMBRA', 'PEQUENO', 'Suba');
+    PERFORM pg_temp.debe_pasar('una fundación aprobada puede publicar mascotas',
+        EXISTS (SELECT 1 FROM mascota_adopcion WHERE fundacion_id = a_fund_pend AND nombre = 'Nube'));
+    UPDATE aliado SET estado = 'RECHAZADO' WHERE id = a_fund_pend;
+    INSERT INTO accion_admin (admin_id, objetivo_tipo, objetivo_id, accion)
+        VALUES (u_admin, 'aliado', a_fund_pend, 'RECHAZAR_FUNDACION');
+    PERFORM pg_temp.debe_fallar('una fundación rechazada no puede publicar mascotas',
+        format($q$INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
+                  VALUES (%L,'Luna',%L,8,'HEMBRA','PEQUENO','Suba')$q$, a_fund_pend, perro), '23514');
     PERFORM pg_temp.debe_fallar('una clínica no publica mascotas en adopción',
         format($q$INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
                   VALUES (%L,'Rocky',%L,12,'MACHO','MEDIANO','Suba')$q$, a_clinica, perro), '23514');

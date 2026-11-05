@@ -1,7 +1,9 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { registroAliadoSchema } from '@veto/shared';
 import { validar } from '../../common/validacion';
+import { AuthGuard, type RequestAutenticada } from '../identidad/auth.guard';
+import { Roles, RolesGuard } from '../identidad/roles.guard';
 import { AliadosService } from './aliados.service';
 
 @ApiTags('aliados')
@@ -21,5 +23,15 @@ export class AliadosController {
   @ApiCreatedResponse({ description: 'Cuenta y aliado creados: { usuario, aliado }.' })
   register(@Body() body: unknown) {
     return this.aliados.register(validar(registroAliadoSchema, body));
+  }
+
+  @Get('me/fundacion')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({ summary: 'Consultar el estado de la solicitud de fundación (HU-079)' })
+  async estadoFundacion(@Req() request: RequestAutenticada) {
+    return {
+      fundacion: await this.aliados.estadoFundacionPropia(request.usuario.id),
+    };
   }
 }

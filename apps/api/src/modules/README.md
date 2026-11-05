@@ -6,14 +6,14 @@ modelo de datos (`docs/modelo-de-datos.md`).
 | Módulo           | Qué hace                                                                           | Tablas propias                                                   | Historias                                |
 | ---------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
 | `identidad`      | Cuentas, registro e inicio de sesión                                               | usuario                                                          | HU-001, 002, 006                         |
-| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                        | HU-007, 012–016, 021, 023, 078           |
+| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                        | HU-007, 012–016, 021, 023, 078–079       |
 | `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                   | HU-008–011                               |
 | `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, tipo_servicio          | HU-016, 018–022, 024–028                 |
 | `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                           | HU-029, 031, 032, 034                    |
 | `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                     | HU-014, 017, 037, 042, 043               |
 | `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto | HU-044–050                               |
 | `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, solicitud_adopcion                             | HU-080, 082, 083, 086, 087, 090, 092–094 |
-| `admin`          | Moderación y estado de cuentas del Equipo Veto                                     | accion_admin                                                     | HU-065, 066, 067                         |
+| `admin`          | Moderación, revisión de fundaciones y estado de cuentas del Equipo Veto            | accion_admin                                                     | HU-065–067, 079                          |
 | `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                              | v_citas_reporte, v_ventas_productos                              | HU-070, 073, 074                         |
 | `notificaciones` | Notificaciones internas de la aplicación                                           | notificacion                                                     | HU-048, 052, 054                         |
 
@@ -41,6 +41,14 @@ modelo de datos (`docs/modelo-de-datos.md`).
   veterinarios. Un correo ya registrado responde 409.
 - **Cuentas:** solo `identidad` escribe en `usuario`; los demás módulos crean cuentas con
   `IdentidadService.insertUser(client, ...)` dentro de su propia transacción.
+- **Revisión de fundaciones (HU-079):** `GET /api/admin/fundaciones/pendientes`,
+  `GET /api/admin/fundaciones/:fundacionId`, `PATCH .../:fundacionId/aprobar` y
+  `PATCH .../:fundacionId/rechazar` son exclusivos de `EQUIPO_VETO`. Una decisión transiciona
+  solamente desde `PENDIENTE`: aprobar deja el aliado `ACTIVO`, rechazar lo deja `RECHAZADO`;
+  ambas acciones se registran en `accion_admin` dentro de la misma transacción. La fundación
+  consulta su propio resultado con `GET /api/aliados/me/fundacion`. Solo aliados `ACTIVO` pueden
+  publicar mascotas en adopción; la base de datos rechaza también las publicaciones de fundaciones
+  rechazadas.
 
 ## Piezas comunes
 
