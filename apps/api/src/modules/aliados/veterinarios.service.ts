@@ -12,6 +12,8 @@ import type {
   TipoAliado,
 } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
+import { esErrorPg, PG } from '../../common/validacion';
+import { IdentidadService } from '../identidad/identidad.service';
 import { hashContrasena } from '../identidad/seguridad';
 
 /** Perfil de veterinario de la cuenta autenticada, con el estado de su aliado (HU-014). */
@@ -36,7 +38,10 @@ interface VeterinarioRow extends QueryResultRow {
 
 @Injectable()
 export class VeterinariosService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly identidad: IdentidadService,
+  ) {}
 
   async listarClinicas() {
     const resultado = await this.db.query<{
@@ -152,22 +157,17 @@ export class VeterinariosService {
       }
 
       try {
-        const usuario = await client.query<{ id: string }>(
-          `INSERT INTO usuario (nombre, celular, correo, password_hash, rol)
-           VALUES ($1, $2, $3, $4, 'VETERINARIO')
-           RETURNING id`,
-          [datos.nombre, datos.celular, datos.correo, passwordHash],
-        );
+        const usuario = await this.identidad.insertUser(client, datos, passwordHash, 'VETERINARIO');
         const veterinario = await client.query<VeterinarioRow>(
           `INSERT INTO veterinario
              (aliado_id, usuario_id, foto_url, descripcion)
            VALUES ($1, $2, $3, $4)
            RETURNING id, usuario_id, aliado_id, foto_url, descripcion`,
-          [aliadoId, usuario.rows[0].id, datos.fotoUrl ?? null, datos.descripcion ?? null],
+          [aliadoId, usuario.id, datos.fotoUrl ?? null, datos.descripcion ?? null],
         );
         return this.toResponse(veterinario.rows[0]);
       } catch (error) {
-        if (this.isUniqueViolation(error)) {
+        if (esErrorPg(error, PG.UNICO)) {
           throw new ConflictException('Ya existe un usuario con ese correo');
         }
         throw error;
@@ -209,10 +209,6 @@ export class VeterinariosService {
       descripcion: fila.descripcion,
       activo: fila.activo,
     };
-  }
-
-  private isUniqueViolation(error: unknown): error is { code: string } {
-    return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
   }
 
   private toResponse(row: VeterinarioRow) {

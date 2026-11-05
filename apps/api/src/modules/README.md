@@ -29,6 +29,19 @@ modelo de datos (`docs/modelo-de-datos.md`).
 5. **Permisos:** cada endpoint debe comprobar rol y pertenencia (por ejemplo, un tutor solo ve sus
    mascotas).
 
+## Contrato común de la API
+
+- **Respuestas en camelCase**, sin envoltorio `{ data }`. Las de identidad envuelven al usuario:
+  `{ usuario }` (login, `/me`, registro de tutor); el registro de aliado devuelve `{ usuario, aliado }`.
+- **Errores de validación (400):** `{ message: 'Revisa los datos ingresados', errores: { campo: mensaje } }`,
+  generados por `validar()`. Los demás errores usan las excepciones de Nest (`{ message, error, statusCode }`).
+- **Registro:** `POST /api/usuarios` (tutor, HU-001) y `POST /api/aliados` (clínica, veterinario
+  independiente o tienda, HU-007) reciben `contrasena` (no `password`). El aliado queda `PENDIENTE`
+  hasta que el Equipo Veto lo active, y mientras tanto no puede gestionar sedes, servicios ni
+  veterinarios. Un correo ya registrado responde 409.
+- **Cuentas:** solo `identidad` escribe en `usuario`; los demás módulos crean cuentas con
+  `IdentidadService.insertUser(client, ...)` dentro de su propia transacción.
+
 ## Piezas comunes
 
 - **Autenticación:** `@UseGuards(AuthGuard)` (cookie `veto_session`); el usuario queda en

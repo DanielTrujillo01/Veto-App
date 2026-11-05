@@ -1,6 +1,5 @@
 import {
   Body,
-  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -21,7 +20,6 @@ import {
   registroUsuarioSchema,
 } from '@veto/shared';
 import type { Response } from 'express';
-import { ZodError } from 'zod';
 import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from './auth.guard';
 import { IdentidadService, NOMBRE_COOKIE_SESION } from './identidad.service';
@@ -90,24 +88,14 @@ export class RegistroUsuariosController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Registrar tutor (HU-001)' })
-  @ApiCreatedResponse({ description: 'Cuenta creada; la contraseña nunca se devuelve.' })
+  @ApiOperation({
+    summary: 'Registrar tutor (HU-001)',
+    description: 'Body { nombre, celular, correo, contrasena }. Correo repetido → 409.',
+  })
+  @ApiCreatedResponse({
+    description: 'Cuenta creada: { usuario }. La contraseña nunca se devuelve.',
+  })
   async register(@Body() body: unknown) {
-    try {
-      const payload = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
-      const input = registroUsuarioSchema.parse({
-        ...payload,
-        contrasena: payload.contrasena ?? payload.password,
-      });
-      return { data: await this.identidad.createTutor(input) };
-    } catch (error) {
-      if (error instanceof ZodError) {
-        throw new BadRequestException({
-          code: 'VALIDATION_ERROR',
-          message: error.issues[0]?.message ?? 'Datos inválidos.',
-        });
-      }
-      throw error;
-    }
+    return { usuario: await this.identidad.createTutor(validar(registroUsuarioSchema, body)) };
   }
 }
