@@ -1,6 +1,6 @@
 import {
   Body,
-BadRequestException,
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -14,7 +14,12 @@ BadRequestException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { actualizarPerfilSchema, eliminarCuentaSchema, loginSchema, registroUsuarioSchema } from '@veto/shared';
+import {
+  actualizarPerfilSchema,
+  eliminarCuentaSchema,
+  loginSchema,
+  registroUsuarioSchema,
+} from '@veto/shared';
 import type { Response } from 'express';
 import { ZodError } from 'zod';
 import { validar } from '../../common/validacion';
@@ -81,28 +86,28 @@ export class IdentidadController {
 @ApiTags('identidad')
 @Controller('usuarios')
 export class RegistroUsuariosController {
-constructor(private readonly identidad: IdentidadService) {}
+  constructor(private readonly identidad: IdentidadService) {}
 
-@Post()
-@HttpCode(HttpStatus.CREATED)
-@ApiOperation({ summary: 'Registrar tutor (HU-001)' })
-@ApiCreatedResponse({ description: 'Cuenta creada; la contraseña nunca se devuelve.' })
-async register(@Body() body: unknown) {
-try {
-const payload = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
-const input = registroUsuarioSchema.parse({
-...payload,
-contrasena: payload.contrasena ?? payload.password,
-});
-return { data: await this.identidad.createTutor(input) };
-} catch (error) {
-if (error instanceof ZodError) {
-throw new BadRequestException({
-code: 'VALIDATION_ERROR',
-message: error.issues[0]?.message ?? 'Datos inválidos.',
-});
-}
-throw error;
-}
-}
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Registrar tutor (HU-001)' })
+  @ApiCreatedResponse({ description: 'Cuenta creada; la contraseña nunca se devuelve.' })
+  async register(@Body() body: unknown) {
+    try {
+      const payload = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+      const input = registroUsuarioSchema.parse({
+        ...payload,
+        contrasena: payload.contrasena ?? payload.password,
+      });
+      return { data: await this.identidad.createTutor(input) };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: error.issues[0]?.message ?? 'Datos inválidos.',
+        });
+      }
+      throw error;
+    }
+  }
 }

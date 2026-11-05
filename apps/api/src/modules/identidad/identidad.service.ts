@@ -8,7 +8,12 @@ import {
 import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { PoolClient } from 'pg';
-import type { ActualizarPerfil, EliminarCuenta, PerfilUsuario, RegistroUsuario } from '@veto/shared';
+import type {
+  ActualizarPerfil,
+  EliminarCuenta,
+  PerfilUsuario,
+  RegistroUsuario,
+} from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { CitasService } from '../citas/citas.service';
@@ -33,23 +38,25 @@ type UsuarioPublico = PerfilUsuario & { estado: string; creado_en: Date };
 export class IdentidadService {
   constructor(
     private readonly db: DatabaseService,
-private readonly citas?: CitasService,
+    private readonly citas?: CitasService,
   ) {}
 
-async createTutor(input: RegistroUsuario): Promise<UsuarioPublico> {
-const passwordHash = await this.hashPassword(input.contrasena);
-try {
-      return await this.db.withUser(null, (client) => this.insertUser(client, input, passwordHash, 'TUTOR'));
-} catch (error) {
-if (esErrorPg(error, PG.UNICO)) {
-throw new ConflictException({
-code: 'ACCOUNT_EXISTS',
-message: 'Ya existe una cuenta con ese correo.',
-});
-}
-throw error;
-}
-}
+  async createTutor(input: RegistroUsuario): Promise<UsuarioPublico> {
+    const passwordHash = await this.hashPassword(input.contrasena);
+    try {
+      return await this.db.withUser(null, (client) =>
+        this.insertUser(client, input, passwordHash, 'TUTOR'),
+      );
+    } catch (error) {
+      if (esErrorPg(error, PG.UNICO)) {
+        throw new ConflictException({
+          code: 'ACCOUNT_EXISTS',
+          message: 'Ya existe una cuenta con ese correo.',
+        });
+      }
+      throw error;
+    }
+  }
 
   async iniciarSesion(
     correo: string,
@@ -175,7 +182,7 @@ throw error;
         );
       }
 
-await this.citas?.cancelarFuturasDelTutor(client, usuarioId);
+      await this.citas?.cancelarFuturasDelTutor(client, usuarioId);
       await client.query(
         `UPDATE usuario
             SET estado = 'ELIMINADA', eliminado_en = now(),
@@ -206,8 +213,8 @@ await this.citas?.cancelarFuturasDelTutor(client, usuarioId);
   }
 
   async hashPassword(password: string): Promise<string> {
-const salt = randomBytes(16);
-const key = (await scrypt(password, salt, 64)) as Buffer;
-return `scrypt$${salt.toString('hex')}$${key.toString('hex')}`;
-}
+    const salt = randomBytes(16);
+    const key = (await scrypt(password, salt, 64)) as Buffer;
+    return `scrypt$${salt.toString('hex')}$${key.toString('hex')}`;
+  }
 }

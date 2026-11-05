@@ -16,9 +16,8 @@ import { RolesGuard } from './roles.guard';
  */
 @Module({
   imports: [CitasModule],
-controllers: [IdentidadController, RegistroUsuariosController],
+  controllers: [IdentidadController, RegistroUsuariosController],
   providers: [IdentidadService, AuthGuard, RolesGuard],
   exports: [IdentidadService, AuthGuard, RolesGuard],
-
 })
 export class IdentidadModule {}
