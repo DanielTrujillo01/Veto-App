@@ -2,20 +2,22 @@ import {
   Body,
   Controller,
   Get,
-  Headers,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
   Put,
-  UnauthorizedException,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { type GuardarHorarios } from '@veto/shared';
+import { AuthGuard, type RequestAutenticada } from '../identidad/auth.guard';
 import { HorariosService } from './horarios.service';
 
 @ApiTags('servicios')
 @Controller('aliados/:clinicaId/veterinarios/:veterinarioId/horarios')
+@UseGuards(AuthGuard)
 export class HorariosController {
   constructor(private readonly horarios: HorariosService) {}
 
@@ -25,13 +27,10 @@ export class HorariosController {
   guardar(
     @Param('clinicaId', new ParseUUIDPipe()) clinicaId: string,
     @Param('veterinarioId', new ParseUUIDPipe()) veterinarioId: string,
-    @Headers('x-user-id') administradorId: string | undefined,
+    @Req() request: RequestAutenticada,
     @Body() entrada: GuardarHorarios,
   ) {
-    if (!administradorId) {
-      throw new UnauthorizedException('Se requiere el administrador autenticado');
-    }
-    return this.horarios.guardar(administradorId, clinicaId, veterinarioId, entrada);
+    return this.horarios.guardar(request.usuario.id, clinicaId, veterinarioId, entrada);
   }
 
   @Get()
@@ -39,11 +38,8 @@ export class HorariosController {
   listar(
     @Param('clinicaId', new ParseUUIDPipe()) clinicaId: string,
     @Param('veterinarioId', new ParseUUIDPipe()) veterinarioId: string,
-    @Headers('x-user-id') administradorId: string | undefined,
+    @Req() request: RequestAutenticada,
   ) {
-    if (!administradorId) {
-      throw new UnauthorizedException('Se requiere el administrador autenticado');
-    }
-    return this.horarios.listar(administradorId, clinicaId, veterinarioId);
+    return this.horarios.listar(request.usuario.id, clinicaId, veterinarioId);
   }
 }

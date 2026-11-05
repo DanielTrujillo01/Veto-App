@@ -1,68 +1,137 @@
 import {
-  BadRequestException,
   Body,
   Controller,
-  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
+  Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ZodError } from 'zod';
-import { servicioInputSchema } from '@veto/shared';
-import type { AuthenticatedRequest } from '../../auth/development-ally.guard';
-import { DevelopmentAllyGuard } from '../../auth/development-ally.guard';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { filtrarServiciosSchema, guardarServicioSchema } from '@veto/shared';
+import { validar } from '../../common/validacion';
+import { AuthGuard, type RequestAutenticada } from '../identidad/auth.guard';
+import { Roles, RolesGuard } from '../identidad/roles.guard';
 import { ServiciosService } from './servicios.service';
 
+const DESCRIPCION_CAMPOS =
+  'Obligatorios: tipoServicioId, nombre, modalidad (EN_SEDE | A_DOMICILIO), duracionMin, ' +
+  'precioBase; sedeId obligatorio si es EN_SEDE. Opcional: descripcion.';
+
 @ApiTags('servicios')
-@Controller('aliados/:allyId/servicios')
-@UseGuards(DevelopmentAllyGuard)
+@Controller('servicios')
+export class TiposServicioController {
+  constructor(private readonly servicios: ServiciosService) {}
+
+  @Get('tipos')
+  @ApiOperation({ summary: 'Catálogo de tipos de servicio (consulta general, baño, ...)' })
+  tipos() {
+    return this.servicios.listarTipos();
+  }
+}
+
+@ApiTags('servicios')
+@Controller('aliados/:aliadoId/servicios')
 export class ServiciosController {
   constructor(private readonly servicios: ServiciosService) {}
 
+  @Get()
+  @ApiOperation({
+    summary: 'Servicios disponibles para reservar de un aliado (público)',
+    description:
+      'Filtro opcional ?especieId=N (HU-021): si el aliado no atiende esa especie, la lista ' +
+      'llega vacía.',
+  })
+  disponibles(@Param('aliadoId', new ParseUUIDPipe()) aliadoId: string, @Query() query: unknown) {
+    return this.servicios.listarDisponibles(aliadoId, validar(filtrarServiciosSchema, query));
+  }
+
+  @Get('gestion')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({ summary: 'Todos los servicios del aliado, activos e inactivos (HU-018)' })
+  gestion(
+    @Req() request: RequestAutenticada,
+    @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
+  ) {
+    return this.servicios.listarGestion(request.usuario.id, aliadoId);
+  }
+
+  @Get(':servicioId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({ summary: 'Consultar un servicio del aliado para gestión' })
+  obtener(
+    @Req() request: RequestAutenticada,
+    @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    return this.servicios.obtenerGestion(request.usuario.id, aliadoId, servicioId);
+  }
+
   @Post()
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Crear servicio de clínica o veterinario (HU-019)' })
-  @ApiCreatedResponse({ description: 'Servicio persistido.' })
-  async create(
-    @Param('allyId') allyId: string,
+  @ApiOperation({ summary: 'Crear un servicio (HU-018)', description: DESCRIPCION_CAMPOS })
+  crear(
+    @Req() request: RequestAutenticada,
+    @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
     @Body() body: unknown,
-    @Req() req: AuthenticatedRequest,
   ) {
-    this.assertOwnAlly(allyId, req);
-    try {
-      return { data: await this.servicios.create(allyId, servicioInputSchema.parse(body)) };
-    } catch (error) {
-      if (error instanceof ZodError)
-        throw new BadRequestException({
-          code: 'VALIDATION_ERROR',
-          message: error.issues[0]?.message ?? 'Datos inválidos.',
-        });
-      throw error;
-    }
+    return this.servicios.crear(request.usuario.id, aliadoId, validar(guardarServicioSchema, body));
   }
 
-  @Get(':serviceId')
-  async get(
-    @Param('allyId') allyId: string,
-    @Param('serviceId') serviceId: string,
-    @Req() req: AuthenticatedRequest,
+  @Put(':servicioId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({ summary: 'Editar un servicio (HU-018)', description: DESCRIPCION_CAMPOS })
+  actualizar(
+    @Req() request: RequestAutenticada,
+    @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+    @Body() body: unknown,
   ) {
-    this.assertOwnAlly(allyId, req);
-    return { data: await this.servicios.getForAlly(allyId, serviceId) };
+    return this.servicios.actualizar(
+      request.usuario.id,
+      aliadoId,
+      servicioId,
+      validar(guardarServicioSchema, body),
+    );
   }
 
-  private assertOwnAlly(allyId: string, req: AuthenticatedRequest): void {
-    if (req.auth?.rol !== 'ALIADO' || req.auth.aliadoId !== allyId) {
-      throw new ForbiddenException({
-        code: 'FORBIDDEN',
-        message: 'No tienes permiso para este aliado.',
-      });
-    }
+  @Patch(':servicioId/desactivar')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({
+    summary: 'Desactivar un servicio (HU-018)',
+    description:
+      'Deja de aparecer como disponible para nuevas reservas; las citas existentes no cambian.',
+  })
+  desactivar(
+    @Req() request: RequestAutenticada,
+    @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    return this.servicios.cambiarActivo(request.usuario.id, aliadoId, servicioId, false);
+  }
+
+  @Patch(':servicioId/activar')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({ summary: 'Volver a activar un servicio desactivado (HU-018)' })
+  activar(
+    @Req() request: RequestAutenticada,
+    @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    return this.servicios.cambiarActivo(request.usuario.id, aliadoId, servicioId, true);
   }
 }
 
@@ -71,9 +140,9 @@ export class ServiciosController {
 export class PublicServiciosController {
   constructor(private readonly servicios: ServiciosService) {}
 
-  @Get(':serviceId')
+  @Get(':servicioId')
   @ApiOperation({ summary: 'Consultar detalle público de un servicio disponible' })
-  async get(@Param('serviceId') serviceId: string) {
-    return { data: await this.servicios.getPublic(serviceId) };
+  obtener(@Param('servicioId', new ParseUUIDPipe()) servicioId: string) {
+    return this.servicios.obtenerDisponible(servicioId);
   }
 }

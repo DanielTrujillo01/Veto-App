@@ -1,6 +1,7 @@
 import {
   registroAliadoSchema,
   registroUsuarioSchema,
+  guardarServicioSchema,
   servicioInputSchema,
   sedeInputSchema,
 } from '@veto/shared';
@@ -172,7 +173,7 @@ describe('HU-001, HU-007, HU-015 y HU-019: validación y persistencia', () => {
     );
   });
 
-  it('crea servicio con los valores que se devuelven al tutor', async () => {
+  it('crea servicio con el flujo de gestión actual', async () => {
     const row = {
       id: 'sv1',
       nombre: 'Consulta',
@@ -181,28 +182,33 @@ describe('HU-001, HU-007, HU-015 y HU-019: validación y persistencia', () => {
       precio_base: '45000.00',
       descripcion: 'Consulta general',
     };
-    const client = { query: jest.fn().mockResolvedValue({ rows: [row] }) };
+    const client = {};
     const database = { withUser: jest.fn((_id, fn) => fn(client)) };
-    const allies = { assertCanOfferServices: jest.fn(), assertActiveBranch: jest.fn() };
-    const service = new ServiciosService(database as never, allies as never);
-    const input = servicioInputSchema.parse({
+    const repo = {
+      insertar: jest.fn().mockResolvedValue(row.id),
+      buscar: jest.fn().mockResolvedValue(row),
+    };
+    const allies = {
+      verificarAdministrador: jest.fn(),
+      sedeActivaDelAliado: jest.fn().mockResolvedValue(true),
+    };
+    const service = new ServiciosService(
+      database as never,
+      repo as never,
+      allies as never,
+      {} as never,
+      {} as never,
+    );
+    const input = guardarServicioSchema.parse({
       tipoServicioId: 1,
       nombre: 'Consulta',
       descripcion: 'Consulta general',
       modalidad: 'EN_SEDE',
       sedeId: row.sede_id,
+      duracionMin: 30,
       precioBase: 45000,
     });
-    expect(await service.create('a1', input)).toEqual(row);
-    expect(client.query.mock.calls[0][1]).toEqual([
-      'a1',
-      1,
-      'Consulta',
-      'Consulta general',
-      'EN_SEDE',
-      row.sede_id,
-      30,
-      45000,
-    ]);
+    expect(await service.crear('u1', 'a1', input)).toEqual(row);
+    expect(repo.insertar).toHaveBeenCalledWith(client, 'a1', input);
   });
 });

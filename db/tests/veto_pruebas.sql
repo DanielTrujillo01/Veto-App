@@ -125,6 +125,12 @@ BEGIN
         VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '2 days', now() + interval '2 days 30 minutes', 90000) RETURNING id INTO cita1;
     INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
         VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '6 days', now() + interval '6 days 30 minutes', 60000) RETURNING id INTO cita2;
+    UPDATE sede SET activa = false WHERE id = sede1;
+    PERFORM pg_temp.debe_fallar('no se agenda en una sede desactivada',
+        format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+                  VALUES (%L,%L,%L,%L,%L, now() + interval '4 days', now() + interval '4 days 30 minutes',1)$q$,
+                u_tutor, masc, a_clinica, srv, vet1), '23514');
+    UPDATE sede SET activa = true WHERE id = sede1;
     PERFORM pg_temp.debe_fallar('cita solapada con la del mismo veterinario',
         format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
                   VALUES (%L,%L,%L,%L,%L, now() + interval '2 days 10 minutes', now() + interval '2 days 40 minutes',1)$q$,
@@ -182,6 +188,13 @@ BEGIN
     PERFORM pg_temp.debe_pasar('el historial de estados guardó quién finalizó',
         (SELECT count(*) FROM historial_estado WHERE entidad='cita' AND entidad_id=cita1
             AND estado_nuevo='FINALIZADA' AND cambiado_por=u_vet) = 1);
+    -- HU-014: vista de consultas del veterinario
+    PERFORM pg_temp.debe_pasar('v_consulta_detalle: el veterinario ve su consulta con cita, servicio y mascota',
+        (SELECT count(*) FROM v_consulta_detalle
+          WHERE veterinario_id = vet1 AND id = cons AND servicio = 'Consulta general'
+            AND mascota_nombre = 'Firulais' AND especie = 'Perro') = 1);
+    PERFORM pg_temp.debe_pasar('v_consulta_detalle: otro veterinario no tiene esa consulta',
+        (SELECT count(*) FROM v_consulta_detalle WHERE veterinario_id = vet2) = 0);
     PERFORM pg_temp.debe_fallar('el historial de estados no se puede alterar',
         $q$UPDATE historial_estado SET estado_nuevo='X'$q$, '55000');
 
@@ -278,6 +291,159 @@ BEGIN
         (SELECT count(*) FROM v_citas_reporte WHERE aliado_id = a_clinica AND especie = 'Perro' AND estado = 'FINALIZADA') = 1);
     PERFORM pg_temp.debe_pasar('v_ventas_productos suma los pedidos',
         (SELECT sum(subtotal) FROM v_ventas_productos WHERE aliado_id = a_tienda AND estado = 'DESPACHADO') = 300000);
+
+    -- ---------- HU-006 · Eliminar cuenta: anonimizar y conservar ----------
+    DECLARE
+        u_borrar uuid; masc_b uuid; srv_b uuid; cita_b uuid;
+    BEGIN
+        INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Tutor Borrar','3007778899','borrar@mail.com','h') RETURNING id INTO u_borrar;
+        INSERT INTO mascota (tutor_id, nombre, especie_id, sexo) VALUES (u_borrar,'Toby',perro,'MACHO') RETURNING id INTO masc_b;
+        INSERT INTO aliado_especie VALUES (a_clinica2, perro);
+        INSERT INTO servicio (aliado_id, tipo_servicio_id, nombre, modalidad, precio_base)
+            VALUES (a_clinica2, t_cons, 'Consulta a domicilio', 'A_DOMICILIO', 50000) RETURNING id INTO srv_b;
+        PERFORM set_config('app.usuario_id', u_borrar::text, true);
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, inicio, fin, precio)
+            VALUES (u_borrar, masc_b, a_clinica2, srv_b, now() + interval '4 days', now() + interval '4 days 30 minutes', 50000) RETURNING id INTO cita_b;
+
+        -- Lo mismo que hace IdentidadService.eliminarCuenta
+        UPDATE cita SET estado = 'CANCELADA' WHERE tutor_id = u_borrar AND estado IN ('PENDIENTE','AGENDADA') AND inicio > now();
+        UPDATE usuario SET estado = 'ELIMINADA', eliminado_en = now(), nombre = 'Usuario eliminado',
+               celular = '0000000000', correo = 'eliminado+' || u_borrar || '@veto.invalid', password_hash = 'ELIMINADA'
+         WHERE id = u_borrar;
+        PERFORM pg_temp.debe_pasar('la cuenta eliminada queda anonimizada y cumple las reglas',
+            (SELECT estado = 'ELIMINADA' AND eliminado_en IS NOT NULL AND correo <> 'borrar@mail.com' FROM usuario WHERE id = u_borrar));
+        PERFORM pg_temp.debe_pasar('las citas futuras de la cuenta eliminada se cancelan con historial',
+            (SELECT estado FROM cita WHERE id = cita_b) = 'CANCELADA'
+            AND EXISTS (SELECT 1 FROM historial_estado WHERE entidad = 'cita' AND entidad_id = cita_b AND estado_nuevo = 'CANCELADA'));
+        PERFORM pg_temp.debe_pasar('las mascotas de la cuenta eliminada se conservan', EXISTS (SELECT 1 FROM mascota WHERE id = masc_b));
+        INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Nuevo','3007778800','borrar@mail.com','h');
+        PERFORM pg_temp.debe_pasar('el correo de la cuenta eliminada se puede volver a registrar', true);
+
+        -- ---------- HU-018 · Servicios desactivados y citas históricas ----------
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica2, srv_b, now() + interval '8 days', now() + interval '8 days 30 minutes', 50000) RETURNING id INTO cita_b;
+        UPDATE servicio SET activo = false, precio_base = 70000, nombre = 'Consulta a domicilio (nueva)' WHERE id = srv_b;
+        PERFORM pg_temp.debe_fallar('un servicio desactivado no recibe nuevas reservas',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, inicio, fin, precio)
+                      VALUES (%L,%L,%L,%L, now() + interval '10 days', now() + interval '10 days 30 minutes',1)$q$, u_tutor, masc, a_clinica2, srv_b), '23514');
+        PERFORM pg_temp.debe_pasar('editar el servicio no cambia el precio de las citas ya reservadas',
+            (SELECT precio FROM cita WHERE id = cita_b) = 50000);
+        PERFORM set_config('app.usuario_id', u_clinica2::text, true);
+        UPDATE cita SET estado = 'FINALIZADA' WHERE id = cita_b;
+        PERFORM pg_temp.debe_pasar('una cita existente de un servicio desactivado se puede finalizar',
+            (SELECT estado FROM cita WHERE id = cita_b) = 'FINALIZADA');
+    END;
+
+    -- ---------- HU-023 · Confirmación automática o manual de las citas ----------
+    DECLARE
+        c_auto uuid; c_man uuid; c_forzada uuid; c_rech uuid; c_tutor uuid; c_pend uuid; c_vet uuid;
+    BEGIN
+        PERFORM pg_temp.debe_pasar('por defecto la confirmación es automática',
+            (SELECT modo_confirmacion FROM aliado WHERE id = a_clinica) = 'AUTOMATICA');
+        UPDATE aliado SET estado = 'ACTIVO' WHERE id = a_clinica;   -- las pruebas anteriores la suspendieron
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+
+        -- Automática: la reserva válida queda confirmada (AGENDADA)
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '20 days', now() + interval '20 days 30 minutes', 60000) RETURNING id INTO c_auto;
+        PERFORM pg_temp.debe_pasar('automática: la reserva válida queda AGENDADA',
+            (SELECT estado FROM cita WHERE id = c_auto) = 'AGENDADA');
+
+        -- Manual: la reserva válida queda pendiente de aceptación
+        UPDATE aliado SET modo_confirmacion = 'MANUAL' WHERE id = a_clinica;
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '21 days', now() + interval '21 days 30 minutes', 60000) RETURNING id INTO c_man;
+        PERFORM pg_temp.debe_pasar('manual: la reserva válida queda PENDIENTE',
+            (SELECT estado FROM cita WHERE id = c_man) = 'PENDIENTE');
+        PERFORM pg_temp.debe_pasar('el historial registra la cita nueva como PENDIENTE',
+            EXISTS (SELECT 1 FROM historial_estado WHERE entidad = 'cita' AND entidad_id = c_man
+                      AND estado_anterior IS NULL AND estado_nuevo = 'PENDIENTE'));
+        PERFORM pg_temp.debe_pasar('la configuración es por aliado (la otra clínica sigue automática)',
+            (SELECT modo_confirmacion FROM aliado WHERE id = a_clinica2) = 'AUTOMATICA');
+
+        -- Quien reserva no elige el estado: lo decide la configuración
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio, estado)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '22 days', now() + interval '22 days 30 minutes', 60000, 'AGENDADA') RETURNING id INTO c_forzada;
+        PERFORM pg_temp.debe_pasar('en modo manual no se puede reservar ya confirmada',
+            (SELECT estado FROM cita WHERE id = c_forzada) = 'PENDIENTE');
+        PERFORM pg_temp.debe_fallar('una cita nueva no puede nacer finalizada',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio, estado)
+                      VALUES (%L,%L,%L,%L,%L, now() + interval '23 days', now() + interval '23 days 30 minutes', 1, 'FINALIZADA')$q$,
+                   u_tutor, masc, a_clinica, srv, vet1), '23514');
+
+        -- Sin reservas duplicadas para el mismo espacio: la cita pendiente también lo ocupa
+        PERFORM pg_temp.debe_fallar('una cita pendiente ocupa el espacio del veterinario',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+                      VALUES (%L,%L,%L,%L,%L, now() + interval '21 days 10 minutes', now() + interval '21 days 40 minutes', 1)$q$,
+                   u_tutor, masc, a_clinica, srv, vet1), '23P01');
+        PERFORM pg_temp.debe_fallar('doble clic: la solicitud pendiente no se duplica',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, inicio, fin, precio)
+                      SELECT tutor_id, mascota_id, aliado_id, servicio_id, inicio, fin, precio FROM cita WHERE id = %L$q$, c_man), '23505');
+
+        -- Aceptar: solo el aliado; el tutor no puede confirmar su propia cita
+        PERFORM pg_temp.debe_fallar('el tutor no puede aceptar su propia cita',
+            format($q$UPDATE cita SET estado = 'AGENDADA' WHERE id = %L$q$, c_man), '42501');
+        PERFORM set_config('app.usuario_id', u_clinica::text, true);
+        PERFORM pg_temp.debe_fallar('una cita pendiente no se finaliza sin aceptarla antes',
+            format($q$UPDATE cita SET estado = 'FINALIZADA' WHERE id = %L$q$, c_man), '23514');
+        PERFORM pg_temp.debe_fallar('una cita pendiente no admite consulta clínica',
+            format($q$INSERT INTO consulta (cita_id, mascota_id, veterinario_id, motivo_consulta) VALUES (%L,%L,%L,'x')$q$, c_man, masc, vet1), '23514');
+        UPDATE cita SET estado = 'AGENDADA' WHERE id = c_man;
+        PERFORM pg_temp.debe_pasar('el aliado acepta la cita pendiente y queda AGENDADA con historial',
+            (SELECT estado FROM cita WHERE id = c_man) = 'AGENDADA'
+            AND EXISTS (SELECT 1 FROM historial_estado WHERE entidad = 'cita' AND entidad_id = c_man
+                          AND estado_anterior = 'PENDIENTE' AND estado_nuevo = 'AGENDADA' AND cambiado_por = u_clinica));
+        PERFORM pg_temp.debe_fallar('una cita confirmada no vuelve a pendiente',
+            format($q$UPDATE cita SET estado = 'PENDIENTE' WHERE id = %L$q$, c_man), '23514');
+
+        -- Rechazar: el aliado la cancela y el espacio queda libre
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '24 days', now() + interval '24 days 30 minutes', 60000) RETURNING id INTO c_rech;
+        PERFORM set_config('app.usuario_id', u_clinica::text, true);
+        PERFORM set_config('app.motivo', 'Sin disponibilidad', true);
+        UPDATE cita SET estado = 'CANCELADA' WHERE id = c_rech;
+        PERFORM set_config('app.motivo', '', true);
+        PERFORM pg_temp.debe_pasar('el aliado rechaza la cita pendiente (CANCELADA) y queda el motivo',
+            (SELECT estado FROM cita WHERE id = c_rech) = 'CANCELADA'
+            AND EXISTS (SELECT 1 FROM historial_estado WHERE entidad = 'cita' AND entidad_id = c_rech
+                          AND estado_anterior = 'PENDIENTE' AND estado_nuevo = 'CANCELADA' AND motivo = 'Sin disponibilidad'));
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '24 days', now() + interval '24 days 30 minutes', 60000);
+        PERFORM pg_temp.debe_pasar('al rechazarse una cita pendiente su espacio se puede volver a reservar', true);
+
+        -- El tutor puede cancelar mientras espera
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '25 days', now() + interval '25 days 30 minutes', 60000) RETURNING id INTO c_tutor;
+        UPDATE cita SET estado = 'CANCELADA' WHERE id = c_tutor;
+        PERFORM pg_temp.debe_pasar('el tutor cancela una cita mientras espera la aceptación',
+            (SELECT estado FROM cita WHERE id = c_tutor) = 'CANCELADA');
+
+        -- El veterinario del aliado también puede aceptar
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '26 days', now() + interval '26 days 30 minutes', 60000) RETURNING id INTO c_vet;
+        PERFORM set_config('app.usuario_id', u_vet::text, true);
+        UPDATE cita SET estado = 'AGENDADA' WHERE id = c_vet;
+        PERFORM pg_temp.debe_pasar('el veterinario del aliado acepta la cita',
+            (SELECT estado FROM cita WHERE id = c_vet) = 'AGENDADA');
+        PERFORM set_config('app.usuario_id', u_vet2::text, true);
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '27 days', now() + interval '27 days 30 minutes', 60000) RETURNING id INTO c_pend;
+        PERFORM pg_temp.debe_fallar('un veterinario de otra clínica no acepta citas ajenas',
+            format($q$UPDATE cita SET estado = 'AGENDADA' WHERE id = %L$q$, c_pend), '42501');
+
+        -- Volver a automática solo afecta a las reservas nuevas
+        UPDATE aliado SET modo_confirmacion = 'AUTOMATICA' WHERE id = a_clinica;
+        PERFORM pg_temp.debe_pasar('al pasar a automática, la cita pendiente sigue pendiente',
+            (SELECT estado FROM cita WHERE id = c_pend) = 'PENDIENTE');
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, now() + interval '28 days', now() + interval '28 days 30 minutes', 60000) RETURNING id INTO c_auto;
+        PERFORM pg_temp.debe_pasar('al pasar a automática, las reservas nuevas quedan AGENDADA',
+            (SELECT estado FROM cita WHERE id = c_auto) = 'AGENDADA');
+    END;
 
     RAISE NOTICE '=== TODAS LAS PRUEBAS PASARON ===';
 END $$;

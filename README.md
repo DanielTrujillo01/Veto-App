@@ -118,7 +118,7 @@ veto/
 
 ## Base de datos
 
-El modelo cubre las 55 historias esenciales del backlog: 25 tablas, 4 vistas y las reglas de
+El modelo cubre las 55 historias esenciales del backlog: 25 tablas, 5 vistas y las reglas de
 negocio principales hechas en la propia base (citas sin solapamiento, consulta clínica inmutable
 al cerrarse, stock de pedidos, etc.). Documentación y diagramas:
 
