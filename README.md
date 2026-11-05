@@ -51,11 +51,11 @@ pnpm dev
 
 Cuando termine de arrancar:
 
-| Servicio                          | URL                                                   |
-| --------------------------------- | ----------------------------------------------------- |
-| Web                               | http://localhost:3000                                 |
-| API                               | http://localhost:3001/api/health                      |
-| Documentación de la API (OpenAPI) | http://localhost:3001/api/docs                        |
+| Servicio                          | URL                                                  |
+| --------------------------------- | ---------------------------------------------------- |
+| Web                               | http://localhost:3000                                |
+| API                               | http://localhost:3001/api/health                     |
+| Documentación de la API (OpenAPI) | http://localhost:3001/api/docs                       |
 | PostgreSQL                        | Tu proyecto Supabase (configurado en `DATABASE_URL`) |
 
 > `pnpm db:migrate` crea las tablas desde los archivos versionados de `db/migrations/`; no tienes
@@ -179,11 +179,11 @@ pruebas de la base y del código, y compila todo. Si falla, no se mezcla.
 | Síntoma                                                      | Causa y solución                                                                           |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `pnpm: command not found`                                    | Corre `corepack enable` o `npm install -g pnpm@10`                                         |
-| `pnpm db:up` falla con "cannot connect to the Docker daemon" | Abre Docker Desktop; solo es necesario para PostgreSQL local                                      |
+| `pnpm db:up` falla con "cannot connect to the Docker daemon" | Abre Docker Desktop; solo es necesario para PostgreSQL local                               |
 | `port is already allocated` (5440, 3000 o 3001)              | Otro programa usa ese puerto. Ciérralo o cambia el puerto en `.env` / `docker-compose.yml` |
-| La API arranca y dice `Variables de entorno inválidas`       | Falta `DATABASE_URL` o está vacía; configura el archivo `.env` desde `.env.example`          |
-| `/api/health` responde 503                                   | Revisa `DATABASE_URL`, la conectividad a Supabase y ejecuta `pnpm db:migrate`                 |
+| La API arranca y dice `Variables de entorno inválidas`       | Falta `DATABASE_URL` o está vacía; configura el archivo `.env` desde `.env.example`        |
+| `/api/health` responde 503                                   | Revisa `DATABASE_URL`, la conectividad a Supabase y ejecuta `pnpm db:migrate`              |
 | `relation "veto.…" does not exist`                           | Falta aplicar migraciones: `pnpm db:migrate`                                               |
-| Error de conexión SSL o red con Supabase                      | Verifica `DATABASE_URL`; si la conexión directa requiere IPv6, usa el pooler de Supabase   |
+| Error de conexión SSL o red con Supabase                     | Verifica `DATABASE_URL`; si la conexión directa requiere IPv6, usa el pooler de Supabase   |
 | `Cannot find module '@veto/shared'`                          | Falta compilar el paquete: `pnpm build:shared`                                             |
 | Quieres empezar con la base limpia                           | `pnpm db:reset` (borra todos los datos locales)                                            |

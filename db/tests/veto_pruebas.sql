@@ -41,6 +41,7 @@ DECLARE
     a_clinica uuid; a_clinica2 uuid; a_tienda uuid; a_fund uuid; a_fund_pend uuid;
     sede1 uuid; sede2 uuid; vet1 uuid; vet2 uuid; srv uuid; masc uuid; masc_gato uuid;
     cita1 uuid; cita2 uuid; cons uuid; prod uuid; ped uuid; ped2 uuid; mad uuid;
+    dia smallint;
 BEGIN
     -- ---------- Usuarios ----------
     INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Tutor Uno','3001112233','tutor@mail.com','h') RETURNING id INTO u_tutor;
@@ -106,13 +107,17 @@ BEGIN
     PERFORM pg_temp.debe_pasar('mascota sin peso cae en el precio base (60000)', fn_precio_servicio(srv, masc_gato) = 60000);
 
     -- ---------- Horarios ----------
-    INSERT INTO horario (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin) VALUES (a_clinica, vet1, 1, '08:00', '12:00');
+    INSERT INTO horario (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin) VALUES (a_clinica, vet1, 1, '00:00', '24:00');
     PERFORM pg_temp.debe_fallar('horarios solapados del mismo veterinario',
         format($q$INSERT INTO horario (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin) VALUES (%L,%L,1,'11:00','14:00')$q$, a_clinica, vet1), '23P01');
     PERFORM pg_temp.debe_fallar('hora de fin antes del inicio',
         format($q$INSERT INTO horario (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin) VALUES (%L,%L,2,'12:00','08:00')$q$, a_clinica, vet1), '22000');
     PERFORM pg_temp.debe_fallar('horario de un veterinario que es de otro aliado',
         format($q$INSERT INTO horario (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin) VALUES (%L,%L,3,'08:00','12:00')$q$, a_clinica, vet2), '23503');
+    FOR dia IN 2..7 LOOP
+        INSERT INTO horario (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin)
+        VALUES (a_clinica, vet1, dia, '00:00', '24:00');
+    END LOOP;
 
     -- ---------- Citas ----------
     PERFORM set_config('app.usuario_id', u_tutor::text, true);
