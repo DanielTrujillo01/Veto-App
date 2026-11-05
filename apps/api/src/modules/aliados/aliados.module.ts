@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 import { IdentidadModule } from '../identidad/identidad.module';
+import { MascotasModule } from '../mascotas/mascotas.module';
+import { AliadoEspeciesController } from './aliado-especies.controller';
+import { AliadoEspeciesService } from './aliado-especies.service';
 import { AliadosService } from './aliados.service';
 import { VeterinarioPerfilController } from './veterinario-perfil.controller';
 import { VeterinarioGuard } from './veterinario.guard';
@@ -16,9 +19,9 @@ import { VeterinariosService } from './veterinarios.service';
  * lo pide a través de un servicio exportado por este módulo, nunca con SQL directo.
  */
 @Module({
-  imports: [IdentidadModule],
-  controllers: [VeterinariosController, VeterinarioPerfilController],
-  providers: [VeterinariosService, AliadosService, VeterinarioGuard],
-  exports: [VeterinariosService, AliadosService, VeterinarioGuard],
+  imports: [IdentidadModule, MascotasModule],
+  controllers: [VeterinariosController, VeterinarioPerfilController, AliadoEspeciesController],
+  providers: [VeterinariosService, AliadosService, AliadoEspeciesService, VeterinarioGuard],
+  exports: [VeterinariosService, AliadosService, AliadoEspeciesService, VeterinarioGuard],
 })
 export class AliadosModule {}

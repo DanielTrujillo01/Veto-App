@@ -48,3 +48,9 @@ consultaId)`: lanza 404 si no es suya.
 - **Servicios exportados entre módulos:** `CitasService` (cancelar citas futuras de un tutor, saber si
   un servicio tiene citas), `AliadosService` (verificar administrador, sede activa, aliado activo),
   `MascotasService.perteneceAlTutor`. Reciben el `client` de la transacción de `withUser`.
+- **Especies que atiende un aliado (HU-021):** `PUT /api/aliados/:aliadoId/especies` guarda y
+  actualiza la selección completa; `GET` (público) es la ficha del aliado. Toda búsqueda o filtro
+  por especie (HU-025, 026) debe usar la misma regla: `AliadoEspeciesService.atiendeEspecie(db,
+aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con ninguna). La base
+  la aplica también al reservar: una cita exige que el aliado atienda la especie de la mascota.
+  Ejemplo ya implementado: `GET /api/aliados/:aliadoId/servicios?especieId=N`.
