@@ -1,5 +1,12 @@
 import { randomBytes, scryptSync } from 'node:crypto';
-import { hashContrasena, verificarContrasena } from '../src/modules/identidad/seguridad';
+import {
+  generarCodigoTotp,
+  generarSecretoTotp,
+  hashContrasena,
+  uriTotp,
+  verificarCodigoTotp,
+  verificarContrasena,
+} from '../src/modules/identidad/seguridad';
 
 describe('seguridad de contraseñas', () => {
   it('una contraseña hasheada se verifica con el mismo formato que usa el login', async () => {
@@ -20,5 +27,19 @@ describe('seguridad de contraseñas', () => {
 
     await expect(verificarContrasena('test1234', hashAnterior)).resolves.toBe(true);
     await expect(verificarContrasena('otra-clave', hashAnterior)).resolves.toBe(false);
+  });
+
+  it('genera códigos TOTP compatibles con Google Authenticator', () => {
+    const secreto = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+    expect(generarCodigoTotp(secreto, 59_000)).toBe('287082');
+    expect(verificarCodigoTotp(secreto, '287082', 59_000)).toBe(true);
+    expect(verificarCodigoTotp(secreto, '000000', 59_000)).toBe(false);
+  });
+
+  it('genera un secreto Base32 y una URI de configuración', () => {
+    const secreto = generarSecretoTotp();
+    expect(secreto).toMatch(/^[A-Z2-7]{32}$/);
+    expect(uriTotp(secreto, 'ana@mail.com')).toContain(`secret=${secreto}`);
+    expect(uriTotp(secreto, 'ana@mail.com')).toContain('issuer=Veto');
   });
 });

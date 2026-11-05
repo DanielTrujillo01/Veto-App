@@ -16,9 +16,17 @@ import type {
 import { DatabaseService } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { CitasService } from '../citas/citas.service';
-import { hashContrasena, hashSesion, verificarContrasena } from './seguridad';
+import {
+  generarSecretoTotp,
+  hashContrasena,
+  hashSesion,
+  uriTotp,
+  verificarCodigoTotp,
+  verificarContrasena,
+} from './seguridad';
 
 const DURACION_SESION_MS = 1000 * 60 * 60 * 24 * 7;
+const DURACION_DESAFIO_2FA_MS = 1000 * 60 * 5;
 export const NOMBRE_COOKIE_SESION = 'veto_session';
 
 /** Valores con los que se reemplazan los datos personales de una cuenta eliminada (HU-006). */
@@ -35,7 +43,7 @@ export type UsuarioSesion = PerfilUsuario;
 export class IdentidadService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly citas: CitasService,
+    private readonly citas?: CitasService,
   ) {}
 
   /** HU-001: registra una cuenta de tutor. */
@@ -56,12 +64,22 @@ export class IdentidadService {
   async iniciarSesion(
     correo: string,
     contrasena: string,
-  ): Promise<{
-    token: string;
-    usuario: UsuarioSesion;
-  } | null> {
-    const resultado = await this.db.query<UsuarioSesion & { password_hash: string }>(
-      `SELECT id, nombre, celular, correo, rol, password_hash
+  ): Promise<
+    | {
+        token: string;
+        usuario: UsuarioSesion;
+      }
+    | { requiere2fa: true; desafio: string; expiraEn: Date }
+    | null
+  > {
+    const resultado = await this.db.query<
+      UsuarioSesion & {
+        password_hash: string;
+        totp_secreto: string | null;
+        totp_activado_en: Date | null;
+      }
+    >(
+      `SELECT id, nombre, celular, correo, rol, password_hash, totp_secreto, totp_activado_en
        FROM usuario
        WHERE correo = $1 AND estado = 'ACTIVA' AND eliminado_en IS NULL`,
       [correo.toLowerCase()],
@@ -69,13 +87,122 @@ export class IdentidadService {
     const cuenta = resultado.rows[0];
     if (!cuenta || !(await verificarContrasena(contrasena, cuenta.password_hash))) return null;
 
+    if (cuenta.totp_activado_en && cuenta.totp_secreto) {
+      const desafio = randomBytes(32).toString('base64url');
+      const expiraEn = new Date(Date.now() + DURACION_DESAFIO_2FA_MS);
+      await this.db.query(
+        `INSERT INTO desafio_2fa (token_hash, usuario_id, expira_en)
+         VALUES ($1, $2, $3)`,
+        [hashSesion(desafio), cuenta.id, expiraEn],
+      );
+      return { requiere2fa: true, desafio, expiraEn };
+    }
+
+    return this.crearSesion(cuenta);
+  }
+
+  async completarLogin2fa(desafio: string, codigo: string) {
+    const resultado = await this.db.query<UsuarioSesion & { totp_secreto: string | null }>(
+      `SELECT u.id, u.nombre, u.celular, u.correo, u.rol, u.totp_secreto
+       FROM desafio_2fa d
+       JOIN usuario u ON u.id = d.usuario_id
+       WHERE d.token_hash = $1 AND d.expira_en > now()
+         AND u.estado = 'ACTIVA' AND u.eliminado_en IS NULL
+         AND u.totp_activado_en IS NOT NULL`,
+      [hashSesion(desafio)],
+    );
+    const cuenta = resultado.rows[0];
+    if (!cuenta || !cuenta.totp_secreto || !verificarCodigoTotp(cuenta.totp_secreto, codigo)) {
+      throw new UnauthorizedException('El código 2FA es inválido o ha vencido');
+    }
+
+    await this.db.query('DELETE FROM desafio_2fa WHERE token_hash = $1', [hashSesion(desafio)]);
+    return this.crearSesion(cuenta);
+  }
+
+  async estado2fa(usuarioId: string): Promise<{ activado: boolean; activadoEn: Date | null }> {
+    const resultado = await this.db.query<{ totp_activado_en: Date | null }>(
+      `SELECT totp_activado_en FROM usuario WHERE id = $1 AND estado = 'ACTIVA'`,
+      [usuarioId],
+    );
+    const cuenta = resultado.rows[0];
+    if (!cuenta) throw new NotFoundException('La cuenta no existe');
+    return { activado: cuenta.totp_activado_en !== null, activadoEn: cuenta.totp_activado_en };
+  }
+
+  async iniciarActivacion2fa(usuarioId: string) {
+    const resultado = await this.db.query<{
+      correo: string;
+      totp_secreto: string | null;
+      totp_activado_en: Date | null;
+    }>(
+      `SELECT correo, totp_secreto, totp_activado_en FROM usuario
+       WHERE id = $1 AND estado = 'ACTIVA' AND eliminado_en IS NULL`,
+      [usuarioId],
+    );
+    const cuenta = resultado.rows[0];
+    if (!cuenta) throw new NotFoundException('La cuenta no existe');
+    if (cuenta.totp_activado_en) {
+      throw new ConflictException('La verificación en dos pasos ya está activa');
+    }
+
+    const secreto = cuenta.totp_secreto ?? generarSecretoTotp();
+    if (!cuenta.totp_secreto) {
+      await this.db.query('UPDATE usuario SET totp_secreto = $2 WHERE id = $1', [
+        usuarioId,
+        secreto,
+      ]);
+    }
+    return { activado: false, secreto, uri: uriTotp(secreto, cuenta.correo) };
+  }
+
+  async confirmarActivacion2fa(usuarioId: string, codigo: string) {
+    const resultado = await this.db.query<{
+      correo: string;
+      totp_secreto: string | null;
+      totp_activado_en: Date | null;
+    }>(
+      `SELECT correo, totp_secreto, totp_activado_en FROM usuario
+       WHERE id = $1 AND estado = 'ACTIVA' AND eliminado_en IS NULL`,
+      [usuarioId],
+    );
+    const cuenta = resultado.rows[0];
+    if (
+      !cuenta?.totp_secreto ||
+      cuenta.totp_activado_en ||
+      !verificarCodigoTotp(cuenta.totp_secreto, codigo)
+    ) {
+      throw new UnauthorizedException('El código 2FA es inválido o ha vencido');
+    }
+
+    const actualizado = await this.db.query<{ totp_activado_en: Date }>(
+      `UPDATE usuario SET totp_activado_en = now() WHERE id = $1
+       RETURNING totp_activado_en`,
+      [usuarioId],
+    );
+    return { activado: true, activadoEn: actualizado.rows[0].totp_activado_en };
+  }
+
+  private async crearSesion(
+    cuenta: UsuarioSesion & {
+      password_hash?: string;
+      totp_secreto?: string | null;
+      totp_activado_en?: Date | null;
+    },
+  ) {
     const token = randomBytes(32).toString('base64url');
+
     await this.db.query(
       `INSERT INTO sesion (token_hash, usuario_id, expira_en)
        VALUES ($1, $2, $3)`,
       [hashSesion(token), cuenta.id, new Date(Date.now() + DURACION_SESION_MS)],
     );
-    const { password_hash: _hash, ...usuario } = cuenta;
+    const {
+      password_hash: _hash,
+      totp_secreto: _secreto,
+      totp_activado_en: _activado,
+      ...usuario
+    } = cuenta;
     return { token, usuario };
   }
 
@@ -182,7 +309,7 @@ export class IdentidadService {
         );
       }
 
-      await this.citas.cancelarFuturasDelTutor(client, usuarioId);
+      await this.citas?.cancelarFuturasDelTutor(client, usuarioId);
       await client.query(
         `UPDATE usuario
             SET estado = 'ELIMINADA', eliminado_en = now(),

@@ -155,6 +155,27 @@ await this.db.withUser(usuarioId, async (client) => {
 - Valida la entrada con los esquemas de `@veto/shared` y comprueba rol y pertenencia en cada
   endpoint.
 
+### Verificación en dos pasos con Google Authenticator (HU-005)
+
+La API implementa TOTP compatible con Google Authenticator. El código tiene 6 dígitos y cambia
+cada 30 segundos. No se envían códigos por correo.
+
+Con una cookie `veto_session` válida, el flujo de activación es:
+
+1. `GET /api/identidad/2fa` consulta el estado de activación.
+2. `POST /api/identidad/2fa/activar` genera un secreto y una URI `otpauth://` para registrarla
+   en Google Authenticator.
+3. `POST /api/identidad/2fa/activar/confirmar` con `{ "codigo": "123456" }` valida el primer
+   código y activa la cuenta.
+
+Cuando 2FA está activo, `POST /api/identidad/login` responde `202` con un desafío temporal en
+lugar de emitir la sesión. El acceso se completa con:
+
+`POST /api/identidad/login/2fa` y `{ "desafio": "...", "codigo": "123456" }`.
+
+El desafío dura 5 minutos, se consume al utilizarse y los códigos inválidos o vencidos responden
+`401`. La migración `0007_dos_factores.sql` guarda el secreto y los desafíos en la base de datos.
+
 ## Web
 
 - Next.js con App Router. Los colores viven como variables en `apps/web/src/app/globals.css`;
