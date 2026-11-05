@@ -5,9 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import type { GuardarServicio, Servicio, TipoAliado } from '@veto/shared';
+import type { FiltrarServicios, GuardarServicio, Servicio, TipoAliado } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
+import { AliadoEspeciesService } from '../aliados/aliado-especies.service';
 import { AliadosService } from '../aliados/aliados.service';
 import { CitasService } from '../citas/citas.service';
 import { ServiciosRepository } from './servicios.repository';
@@ -29,6 +30,7 @@ export class ServiciosService {
     private readonly db: DatabaseService,
     private readonly repo: ServiciosRepository,
     private readonly aliados: AliadosService,
+    private readonly especies: AliadoEspeciesService,
     private readonly citas: CitasService,
   ) {}
 
@@ -100,10 +102,20 @@ export class ServiciosService {
     });
   }
 
-  /** Público: solo los servicios disponibles para nuevas reservas de un aliado activo. */
-  async listarDisponibles(aliadoId: string): Promise<Servicio[]> {
+  /**
+   * Público: solo los servicios disponibles para nuevas reservas de un aliado activo.
+   * HU-021: con `especieId`, solo cuenta si el aliado atiende esa especie; si no, no hay
+   * servicios compatibles (lista vacía, no error).
+   */
+  async listarDisponibles(aliadoId: string, filtros: FiltrarServicios = {}): Promise<Servicio[]> {
     if (!(await this.aliados.estaActivo(this.db, aliadoId))) {
       throw new NotFoundException('El aliado no existe');
+    }
+    if (
+      filtros.especieId !== undefined &&
+      !(await this.especies.atiendeEspecie(this.db, aliadoId, filtros.especieId))
+    ) {
+      return [];
     }
     return this.repo.listar(this.db, aliadoId, true);
   }

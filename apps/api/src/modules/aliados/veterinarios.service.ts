@@ -7,13 +7,28 @@ import {
 } from '@nestjs/common';
 import type { QueryResultRow } from 'pg';
 import {
-  actualizarPerfilVeterinarioSchema,
-  crearVeterinarioSchema,
+  type actualizarPerfilVeterinarioSchema,
   type ActualizarPerfilVeterinario,
   type CrearVeterinario,
+  crearVeterinarioSchema,
+  type CrearVeterinario,
+  type EstadoAliado,
+  type TipoAliado,
 } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { hashContrasena } from '../identidad/seguridad';
+
+/** Perfil de veterinario de la cuenta autenticada, con el estado de su aliado (HU-014). */
+export interface VeterinarioSesion {
+  id: string;
+  aliadoId: string;
+  aliadoNombre: string;
+  aliadoTipo: TipoAliado;
+  estadoAliado: EstadoAliado;
+  fotoUrl: string | null;
+  descripcion: string | null;
+  activo: boolean;
+}
 
 interface VeterinarioRow extends QueryResultRow {
   id: string;
@@ -170,6 +185,42 @@ export class VeterinariosService {
         throw error;
       }
     });
+  }
+
+  /**
+   * HU-014: perfil de veterinario de una cuenta, o null si la cuenta no tiene uno.
+   * Se busca por la cuenta autenticada (nunca por un id que mande el cliente).
+   */
+  async sesionDe(usuarioId: string): Promise<VeterinarioSesion | null> {
+    const r = await this.db.query<{
+      id: string;
+      aliado_id: string;
+      aliado_nombre: string;
+      aliado_tipo: TipoAliado;
+      estado_aliado: EstadoAliado;
+      foto_url: string | null;
+      descripcion: string | null;
+      activo: boolean;
+    }>(
+      `SELECT v.id, v.aliado_id, a.nombre AS aliado_nombre, a.tipo AS aliado_tipo,
+              a.estado AS estado_aliado, v.foto_url, v.descripcion, v.activo
+         FROM veterinario v
+         JOIN aliado a ON a.id = v.aliado_id
+        WHERE v.usuario_id = $1`,
+      [usuarioId],
+    );
+    const fila = r.rows[0];
+    if (!fila) return null;
+    return {
+      id: fila.id,
+      aliadoId: fila.aliado_id,
+      aliadoNombre: fila.aliado_nombre,
+      aliadoTipo: fila.aliado_tipo,
+      estadoAliado: fila.estado_aliado,
+      fotoUrl: fila.foto_url,
+      descripcion: fila.descripcion,
+      activo: fila.activo,
+    };
   }
 
   private isUniqueViolation(error: unknown): error is { code: string } {
