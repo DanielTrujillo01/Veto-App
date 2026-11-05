@@ -94,7 +94,7 @@ export class MascotasRepository {
 
   async listarDelTutor(client: Consultor, tutorId: string): Promise<Mascota[]> {
     const r = await client.query<MascotaRow>(
-      `${SELECT_MASCOTA} WHERE m.tutor_id = $1 ORDER BY m.creado_en, m.nombre`,
+      `${SELECT_MASCOTA} WHERE m.tutor_id = $1 ORDER BY m.creado_en, m.nombre, m.id`,
       [tutorId],
     );
     return r.rows.map(aMascota);
