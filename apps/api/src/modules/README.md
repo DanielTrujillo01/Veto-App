@@ -93,3 +93,18 @@ aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con 
 - Una sede inactiva no se incluye en el catálogo público ni en los servicios disponibles para
   reservar. La migración `0003_sede_activa_citas.sql` también rechaza nuevas citas para servicios
   presenciales en esa sede; las citas ya existentes no se modifican.
+
+## HU-020 · Reglas de precio
+
+- `GET /api/aliados/:aliadoId/servicios/:servicioId/reglas-precio` consulta las reglas del servicio
+  al aliado autenticado que lo administra.
+- `PUT` sobre la misma ruta reemplaza la configuración completa con `{ "reglas": [...] }`; una
+  lista vacía quita todas las reglas. Cada regla puede combinar especie, rango de peso y rango de
+  edad. Un campo omitido o `null` significa que no restringe por esa dimensión.
+- Los límites de peso y edad son inclusivos. Los rangos invertidos, valores fuera de los límites
+  numéricos de la base y precios negativos o con más de dos decimales se rechazan.
+- `GET /api/servicios/:servicioId/cotizacion?mascotaId=...` requiere un tutor autenticado y una
+  mascota propia. Usa `fn_precio_servicio`: prevalece la mayor prioridad, a igual prioridad el
+  precio mayor; datos necesarios faltantes o ausencia de regla aplicable devuelven el precio base.
+- Las reglas pertenecen al módulo `servicios`; el precio de una cita existente es una instantánea
+  y no se modifica al cambiar las reglas.
