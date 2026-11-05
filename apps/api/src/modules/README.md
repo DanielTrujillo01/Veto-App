@@ -10,7 +10,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 | `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                   | HU-008–011                               |
 | `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, tipo_servicio          | HU-016, 018–022, 024–028                 |
 | `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                           | HU-029, 031, 032, 034                    |
-| `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                     | HU-017, 037, 042, 043                    |
+| `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                     | HU-014, 017, 037, 042, 043               |
 | `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto | HU-044–050                               |
 | `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, solicitud_adopcion                             | HU-080, 082, 083, 086, 087, 090, 092–094 |
 | `admin`          | Moderación y estado de cuentas del Equipo Veto                                     | accion_admin                                                     | HU-065, 066, 067                         |
@@ -34,6 +34,13 @@ modelo de datos (`docs/modelo-de-datos.md`).
 - **Autenticación:** `@UseGuards(AuthGuard)` (cookie `veto_session`); el usuario queda en
   `(request as RequestAutenticada).usuario`. Nunca tomes el actor de un header o del body.
 - **Roles:** `@UseGuards(AuthGuard, RolesGuard)` + `@Roles('TUTOR')`. Rol incorrecto → 403.
+- **Veterinario (HU-014):** `@UseGuards(AuthGuard, VeterinarioGuard)` deja pasar solo a quien tiene
+  un perfil de veterinario **activo** en un aliado **activo** (no depende de `usuario.rol`: el
+  veterinario independiente es un `ALIADO` con perfil de veterinario). El perfil queda en
+  `request.veterinario`; usa siempre ese id, nunca uno de la URL o del cuerpo. Rutas propias:
+  `GET /api/veterinarios/me`, `GET /api/veterinarios/me/consultas` y `.../:id`. Para escribir sobre
+  una consulta (HU-037, 042) llama primero a `ConsultasService.exigirPropia(client, veterinarioId,
+consultaId)`: lanza 404 si no es suya.
 - **Pertenencia:** filtra por el dueño en el SQL (`WHERE id = $1 AND tutor_id = $2`); si no es suyo
   responde 404 para no revelar que existe.
 - **Validación:** `validar(esquema, body)` de `src/common/validacion.ts` responde 400 con

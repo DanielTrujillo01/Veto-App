@@ -182,6 +182,13 @@ BEGIN
     PERFORM pg_temp.debe_pasar('el historial de estados guardó quién finalizó',
         (SELECT count(*) FROM historial_estado WHERE entidad='cita' AND entidad_id=cita1
             AND estado_nuevo='FINALIZADA' AND cambiado_por=u_vet) = 1);
+    -- HU-014: vista de consultas del veterinario
+    PERFORM pg_temp.debe_pasar('v_consulta_detalle: el veterinario ve su consulta con cita, servicio y mascota',
+        (SELECT count(*) FROM v_consulta_detalle
+          WHERE veterinario_id = vet1 AND id = cons AND servicio = 'Consulta general'
+            AND mascota_nombre = 'Firulais' AND especie = 'Perro') = 1);
+    PERFORM pg_temp.debe_pasar('v_consulta_detalle: otro veterinario no tiene esa consulta',
+        (SELECT count(*) FROM v_consulta_detalle WHERE veterinario_id = vet2) = 0);
     PERFORM pg_temp.debe_fallar('el historial de estados no se puede alterar',
         $q$UPDATE historial_estado SET estado_nuevo='X'$q$, '55000');
 

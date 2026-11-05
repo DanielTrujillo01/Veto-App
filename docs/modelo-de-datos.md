@@ -63,7 +63,7 @@ Solo uso `jsonb` en las respuestas del formulario de adopción (HU-090), para po
 | **Mascotas**                        | `mascota`, `mascota_foto` + vista `v_historial_mascota`                | 008–011                               |
 | **Servicios y horarios**            | `servicio`, `servicio_regla_precio`, `horario`                         | 016, 018–022                          |
 | **Citas**                           | `cita`, `historial_estado`                                             | 029, 031, 032, 034                    |
-| **Registro de consulta**            | `consulta`, `consulta_anotacion`                                       | 017, 037, 042, 043                    |
+| **Registro de consulta**            | `consulta`, `consulta_anotacion` + vista `v_consulta_detalle` (0003)   | 014, 017, 037, 042, 043               |
 | **Productos y pedidos**             | `producto`, `producto_foto`, `pedido`, `pedido_item`                   | 044–050                               |
 | **Adopción**                        | `mascota_adopcion`, `solicitud_adopcion` + vista `v_catalogo_adopcion` | 078, 080, 082, 083, 087, 090, 092–094 |
 | **Notificaciones y administración** | `notificacion`, `accion_admin`                                         | 048, 052, 054, 065–067                |

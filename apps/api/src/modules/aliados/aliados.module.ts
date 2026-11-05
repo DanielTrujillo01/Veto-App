@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { IdentidadModule } from '../identidad/identidad.module';
 import { AliadosService } from './aliados.service';
+import { VeterinarioPerfilController } from './veterinario-perfil.controller';
+import { VeterinarioGuard } from './veterinario.guard';
 import { VeterinariosController } from './veterinarios.controller';
 import { VeterinariosService } from './veterinarios.service';
 
@@ -15,8 +17,8 @@ import { VeterinariosService } from './veterinarios.service';
  */
 @Module({
   imports: [IdentidadModule],
-  controllers: [VeterinariosController],
-  providers: [VeterinariosService, AliadosService],
-  exports: [VeterinariosService, AliadosService],
+  controllers: [VeterinariosController, VeterinarioPerfilController],
+  providers: [VeterinariosService, AliadosService, VeterinarioGuard],
+  exports: [VeterinariosService, AliadosService, VeterinarioGuard],
 })
 export class AliadosModule {}
