@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
+import { registroAliadoSchema } from '@veto/shared';
 import { AlertBox, VetoButton } from '@/components/ui/veto-components';
 import { api, ApiError } from '@/lib/api';
+import { erroresPorCampo } from '@/lib/errores';
 
 type TipoAliado = 'CLINICA' | 'VET_INDEPENDIENTE' | 'TIENDA';
 type RespuestaRegistro = {
@@ -46,7 +48,17 @@ export default function RegistroAliado() {
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
+  const [errores, setErrores] = useState<Record<string, string>>({});
   const [registroCompletado, setRegistroCompletado] = useState(false);
+
+  function cambiarDato(campo: keyof typeof datos, valor: string) {
+    setDatos((actuales) => ({ ...actuales, [campo]: valor }));
+    setErrores((actuales) => {
+      const nuevos = { ...actuales };
+      delete nuevos[campo];
+      return nuevos;
+    });
+  }
 
   async function enviar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,16 +68,25 @@ export default function RegistroAliado() {
     }
 
     setError('');
+    const validacion = registroAliadoSchema.safeParse({
+      ...datos,
+      tipo,
+      nombreAliado: datos.nombreAliado || undefined,
+      descripcion: datos.descripcion || undefined,
+      contacto: datos.contacto || undefined,
+    });
+    if (!validacion.success) {
+      setErrores(erroresPorCampo(validacion.error));
+      setError('Revisa los campos marcados antes de continuar.');
+      return;
+    }
+
+    setErrores({});
     setCargando(true);
     try {
       const resultado = await api<RespuestaRegistro>('/aliados', {
         method: 'POST',
-        body: JSON.stringify({
-          ...datos,
-          tipo,
-          descripcion: datos.descripcion || undefined,
-          contacto: datos.contacto || undefined,
-        }),
+        body: JSON.stringify(validacion.data),
       });
       if (!resultado.aliado?.id) {
         throw new Error('La API no confirmó el identificador de tu aliado. Inténtalo de nuevo.');
@@ -73,15 +94,22 @@ export default function RegistroAliado() {
       window.localStorage.setItem('veto-aliado-id', resultado.aliado.id);
       setRegistroCompletado(true);
     } catch (causa) {
-      setError(
-        causa instanceof ApiError
-          ? causa.status === 404
+      if (causa instanceof ApiError) {
+        setErrores(causa.fieldErrors);
+        setError(
+          causa.status === 404
             ? 'La API conectada todavía no expone el registro de aliados (HU-007). Actualiza el backend o habilita la ruta en develop e inténtalo de nuevo.'
-            : causa.message
-          : causa instanceof Error
+            : Object.keys(causa.fieldErrors).length
+              ? 'Revisa los campos marcados antes de continuar.'
+              : causa.message,
+        );
+      } else {
+        setError(
+          causa instanceof Error
             ? causa.message
             : 'No pudimos registrar tu aliado. Revisa que la API esté disponible e inténtalo de nuevo.',
-      );
+        );
+      }
     } finally {
       setCargando(false);
     }
@@ -149,62 +177,73 @@ export default function RegistroAliado() {
             <label className="field">
               <span>Nombre de quien administra *</span>
               <input
+                aria-invalid={Boolean(errores.nombre)}
                 autoComplete="name"
-                className="control"
+                className={`control${errores.nombre ? ' control--error' : ''}`}
                 maxLength={120}
-                onChange={(event) => setDatos({ ...datos, nombre: event.target.value })}
+                onChange={(event) => cambiarDato('nombre', event.target.value)}
                 required
                 value={datos.nombre}
               />
+              {errores.nombre && <small className="field-error">{errores.nombre}</small>}
             </label>
             <label className="field">
               <span>Nombre de la organización *</span>
               <input
-                className="control"
+                aria-invalid={Boolean(errores.nombreAliado)}
+                className={`control${errores.nombreAliado ? ' control--error' : ''}`}
                 maxLength={160}
-                onChange={(event) => setDatos({ ...datos, nombreAliado: event.target.value })}
+                onChange={(event) => cambiarDato('nombreAliado', event.target.value)}
                 required
                 value={datos.nombreAliado}
               />
+              {errores.nombreAliado && (
+                <small className="field-error">{errores.nombreAliado}</small>
+              )}
             </label>
             <label className="field">
               <span>Celular de contacto *</span>
               <span className="phone-control">
                 <span className="phone-prefix">+57</span>
                 <input
+                  aria-invalid={Boolean(errores.celular)}
                   autoComplete="tel-national"
-                  className="control"
+                  className={`control${errores.celular ? ' control--error' : ''}`}
                   inputMode="numeric"
                   maxLength={10}
                   onChange={(event) =>
-                    setDatos({ ...datos, celular: event.target.value.replace(/\D/g, '') })
+                    cambiarDato('celular', event.target.value.replace(/\D/g, '').slice(0, 10))
                   }
                   placeholder="300 123 4567"
                   required
                   value={datos.celular}
                 />
               </span>
+              {errores.celular && <small className="field-error">{errores.celular}</small>}
             </label>
             <label className="field">
               <span>Correo electrónico *</span>
               <input
+                aria-invalid={Boolean(errores.correo)}
                 autoComplete="email"
-                className="control"
-                onChange={(event) => setDatos({ ...datos, correo: event.target.value })}
+                className={`control${errores.correo ? ' control--error' : ''}`}
+                onChange={(event) => cambiarDato('correo', event.target.value)}
                 required
                 type="email"
                 value={datos.correo}
               />
+              {errores.correo && <small className="field-error">{errores.correo}</small>}
             </label>
             <label className="field">
               <span>Contraseña *</span>
               <span className="password-control">
                 <input
+                  aria-invalid={Boolean(errores.contrasena)}
                   autoComplete="new-password"
-                  className="control"
+                  className={`control${errores.contrasena ? ' control--error' : ''}`}
                   maxLength={128}
                   minLength={8}
-                  onChange={(event) => setDatos({ ...datos, contrasena: event.target.value })}
+                  onChange={(event) => cambiarDato('contrasena', event.target.value)}
                   required
                   type={mostrarContrasena ? 'text' : 'password'}
                   value={datos.contrasena}
@@ -219,25 +258,30 @@ export default function RegistroAliado() {
                 </button>
               </span>
               <small className="field__hint">Usa al menos 8 caracteres.</small>
+              {errores.contrasena && <small className="field-error">{errores.contrasena}</small>}
             </label>
             <label className="field">
               <span>Contacto adicional (opcional)</span>
               <input
-                className="control"
+                aria-invalid={Boolean(errores.contacto)}
+                className={`control${errores.contacto ? ' control--error' : ''}`}
                 maxLength={160}
-                onChange={(event) => setDatos({ ...datos, contacto: event.target.value })}
+                onChange={(event) => cambiarDato('contacto', event.target.value)}
                 value={datos.contacto}
               />
+              {errores.contacto && <small className="field-error">{errores.contacto}</small>}
             </label>
             <label className="field">
               <span>Descripción (opcional)</span>
               <textarea
-                className="control textarea"
+                aria-invalid={Boolean(errores.descripcion)}
+                className={`control textarea${errores.descripcion ? ' control--error' : ''}`}
                 maxLength={2000}
-                onChange={(event) => setDatos({ ...datos, descripcion: event.target.value })}
+                onChange={(event) => cambiarDato('descripcion', event.target.value)}
                 value={datos.descripcion}
               />
               <small className="character-count">{datos.descripcion.length}/2.000</small>
+              {errores.descripcion && <small className="field-error">{errores.descripcion}</small>}
             </label>
             <VetoButton className="auth-submit" loading={cargando} type="submit">
               Crear cuenta de aliado
