@@ -6,6 +6,7 @@ import {
   sedeInputSchema,
 } from '@veto/shared';
 import { IdentidadService } from '../src/modules/identidad/identidad.service';
+import { verificarContrasena } from '../src/modules/identidad/seguridad';
 import { AliadosService } from '../src/modules/aliados/aliados.service';
 import { ServiciosService } from '../src/modules/servicios/servicios.service';
 
@@ -88,6 +89,7 @@ describe('HU-001, HU-007, HU-015 y HU-019: validación y persistencia', () => {
     );
     expect(client.query.mock.calls[0][0]).toContain('INSERT INTO usuario');
     expect(client.query.mock.calls[0][1][3]).toMatch(/^scrypt\$/);
+    expect(await verificarContrasena('password123', client.query.mock.calls[0][1][3])).toBe(true);
     expect(result).not.toHaveProperty('password_hash');
   });
 

@@ -5,8 +5,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
-import { promisify } from 'node:util';
+import { randomBytes } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import type {
   ActualizarPerfil,
@@ -17,10 +16,9 @@ import type {
 import { DatabaseService } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { CitasService } from '../citas/citas.service';
-import { hashSesion, verificarContrasena } from './seguridad';
+import { hashContrasena, hashSesion, verificarContrasena } from './seguridad';
 
 const DURACION_SESION_MS = 1000 * 60 * 60 * 24 * 7;
-const scrypt = promisify(scryptCallback);
 export const NOMBRE_COOKIE_SESION = 'veto_session';
 
 /** Valores con los que se reemplazan los datos personales de una cuenta eliminada (HU-006). */
@@ -69,7 +67,7 @@ export class IdentidadService {
       `SELECT id, nombre, celular, correo, rol, password_hash
        FROM usuario
        WHERE correo = $1 AND estado = 'ACTIVA' AND eliminado_en IS NULL`,
-      [correo],
+      [correo.toLowerCase()],
     );
     const cuenta = resultado.rows[0];
     if (!cuenta || !(await verificarContrasena(contrasena, cuenta.password_hash))) return null;
@@ -213,8 +211,6 @@ export class IdentidadService {
   }
 
   async hashPassword(password: string): Promise<string> {
-    const salt = randomBytes(16);
-    const key = (await scrypt(password, salt, 64)) as Buffer;
-    return `scrypt$${salt.toString('hex')}$${key.toString('hex')}`;
+    return hashContrasena(password);
   }
 }
