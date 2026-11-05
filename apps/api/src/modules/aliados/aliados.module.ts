@@ -25,8 +25,28 @@ import { SedesService } from './sedes.service';
  */
 @Module({
   imports: [IdentidadModule, MascotasModule],
-  controllers: [VeterinariosController, VeterinarioPerfilController, AliadoEspeciesController, AliadoConfirmacionController, ClinicasController, SedesController],
-  providers: [VeterinariosService, SedesService, AliadosService, AliadoEspeciesService, AliadoConfirmacionService, VeterinarioGuard],
-  exports: [VeterinariosService, SedesService, AliadosService, AliadoEspeciesService, VeterinarioGuard],
+  controllers: [
+    VeterinariosController,
+    VeterinarioPerfilController,
+    AliadoEspeciesController,
+    AliadoConfirmacionController,
+    ClinicasController,
+    SedesController,
+  ],
+  providers: [
+    VeterinariosService,
+    SedesService,
+    AliadosService,
+    AliadoEspeciesService,
+    AliadoConfirmacionService,
+    VeterinarioGuard,
+  ],
+  exports: [
+    VeterinariosService,
+    SedesService,
+    AliadosService,
+    AliadoEspeciesService,
+    VeterinarioGuard,
+  ],
 })
 export class AliadosModule {}

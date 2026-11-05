@@ -60,7 +60,7 @@ aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con 
   en manual) y devuelve el estado real con `RETURNING estado`; muéstrale ese al tutor. Una cita `PENDIENTE`
   también ocupa el espacio. Aceptarla es `UPDATE cita SET estado = 'AGENDADA'` y rechazarla,
   `'CANCELADA'` (solo el aliado acepta); cualquier consulta de "citas vigentes" debe incluir ambos estados.
-  
+
   ## HU-015 · Sedes de clínicas
 
 - `GET /api/aliados/:aliadoId/sedes` expone únicamente las sedes activas de una clínica activa.
@@ -74,4 +74,3 @@ aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con 
 - Una sede inactiva no se incluye en el catálogo público ni en los servicios disponibles para
   reservar. La migración `0003_sede_activa_citas.sql` también rechaza nuevas citas para servicios
   presenciales en esa sede; las citas ya existentes no se modifican.
-
