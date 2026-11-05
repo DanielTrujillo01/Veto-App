@@ -48,6 +48,12 @@ consultaId)`: lanza 404 si no es suya.
 - **Servicios exportados entre módulos:** `CitasService` (cancelar citas futuras de un tutor, saber si
   un servicio tiene citas), `AliadosService` (verificar administrador, sede activa, aliado activo),
   `MascotasService.perteneceAlTutor`. Reciben el `client` de la transacción de `withUser`.
+- **Mascotas (HU-008–010):** un tutor tiene las mascotas que quiera; cada una es un registro aparte
+  y toda lectura o escritura filtra por `id` **y** `tutor_id`, así editar una nunca toca a las demás.
+- **Ficha de la clínica (HU-013):** `GET /api/aliados/:clinicaId/veterinarios` (pública) muestra la
+  foto y la descripción de los veterinarios activos con cuenta activa; el administrador las cambia con
+  `PUT .../veterinarios/:veterinarioId/perfil` (`null` o `""` las quita). La web la muestra en
+  `/clinicas/[clinicaId]` sin caché, con la inicial del nombre si no hay foto o no carga.
 - **Especies que atiende un aliado (HU-021):** `PUT /api/aliados/:aliadoId/especies` guarda y
   actualiza la selección completa; `GET` (público) es la ficha del aliado. Toda búsqueda o filtro
   por especie (HU-025, 026) debe usar la misma regla: `AliadoEspeciesService.atiendeEspecie(db,
