@@ -12,8 +12,15 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { actualizarPerfilSchema, eliminarCuentaSchema, loginSchema } from '@veto/shared';
+import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  actualizarPerfilSchema,
+  codigo2faSchema,
+  desafio2faSchema,
+  eliminarCuentaSchema,
+  loginSchema,
+  registroUsuarioSchema,
+} from '@veto/shared';
 import type { Response } from 'express';
 import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from './auth.guard';
@@ -36,8 +43,44 @@ export class IdentidadController {
     const resultado = await this.identidad.iniciarSesion(datos.correo, datos.contrasena);
     if (!resultado) throw new UnauthorizedException('El correo o la contraseña no son correctos');
 
+    if ('requiere2fa' in resultado) {
+      response.status(HttpStatus.ACCEPTED);
+      return resultado;
+    }
+
     response.setHeader('Set-Cookie', cookieSesion(resultado.token, 604800));
     return { usuario: resultado.usuario };
+  }
+
+  @Post('login/2fa')
+  @ApiOperation({ summary: 'Completar el login con el código de Google Authenticator' })
+  async completarLogin2fa(@Body() body: unknown, @Res({ passthrough: true }) response: Response) {
+    const datos = validar(desafio2faSchema, body);
+    const resultado = await this.identidad.completarLogin2fa(datos.desafio, datos.codigo);
+    response.setHeader('Set-Cookie', cookieSesion(resultado.token, 604800));
+    return { usuario: resultado.usuario };
+  }
+
+  @Get('2fa')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Consultar el estado de la verificación en dos pasos' })
+  estado2fa(@Req() request: RequestAutenticada) {
+    return this.identidad.estado2fa(request.usuario.id);
+  }
+
+  @Post('2fa/activar')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Generar un secreto para Google Authenticator' })
+  iniciarActivacion2fa(@Req() request: RequestAutenticada) {
+    return this.identidad.iniciarActivacion2fa(request.usuario.id);
+  }
+
+  @Post('2fa/activar/confirmar')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Confirmar la activación con un código de Google Authenticator' })
+  confirmarActivacion2fa(@Req() request: RequestAutenticada, @Body() body: unknown) {
+    const datos = validar(codigo2faSchema, body);
+    return this.identidad.confirmarActivacion2fa(request.usuario.id, datos.codigo);
   }
 
   @Get('me')
@@ -73,5 +116,24 @@ export class IdentidadController {
     await this.identidad.eliminarCuenta(request.usuario.id, datos);
     response.setHeader('Set-Cookie', cookieSesion('', 0));
     return { mensaje: 'Tu cuenta fue eliminada. Ya no podrás iniciar sesión con ella.' };
+  }
+}
+
+@ApiTags('identidad')
+@Controller('usuarios')
+export class RegistroUsuariosController {
+  constructor(private readonly identidad: IdentidadService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Registrar tutor (HU-001)',
+    description: 'Body { nombre, celular, correo, contrasena }. Correo repetido → 409.',
+  })
+  @ApiCreatedResponse({
+    description: 'Cuenta creada: { usuario }. La contraseña nunca se devuelve.',
+  })
+  async register(@Body() body: unknown) {
+    return { usuario: await this.identidad.createTutor(validar(registroUsuarioSchema, body)) };
   }
 }

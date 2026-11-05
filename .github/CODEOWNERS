@@ -4,7 +4,7 @@
 # Cambios en la base de datos: los revisa el Backend Lead.
 # /db/            @usuario-david
 # Cambios en la web y en el kit de componentes: los revisa el UX/UI Lead.
-# /apps/web/      @usuario-johan
+# /frontend/      @usuario-johan
 # CI y despliegue: los revisa QA/DevOps.
 # /.github/       @usuario-jhonier
 # /docker-compose.yml @usuario-jhonier

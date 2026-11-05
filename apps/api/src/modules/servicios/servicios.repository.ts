@@ -84,6 +84,21 @@ export class ServiciosRepository {
     return r.rows[0] ? aServicio(r.rows[0]) : null;
   }
 
+  /** Servicio públicamente disponible, independientemente del aliado al que pertenece. */
+  async buscarDisponible(client: Consultor, id: string): Promise<Servicio | null> {
+    const r = await client.query<ServicioRow>(
+      `${SELECT_SERVICIO}
+       JOIN aliado a ON a.id = s.aliado_id
+       WHERE s.id = $1 AND a.estado = 'ACTIVO' AND s.activo AND s.moderacion = 'PUBLICADO'
+         AND (s.modalidad <> 'EN_SEDE' OR EXISTS (
+           SELECT 1 FROM sede se
+            WHERE se.id = s.sede_id AND se.aliado_id = s.aliado_id AND se.activa
+         ))`,
+      [id],
+    );
+    return r.rows[0] ? aServicio(r.rows[0]) : null;
+  }
+
   /** Todos los servicios del aliado (gestión) o solo los disponibles para reservar. */
   async listar(client: Consultor, aliadoId: string, soloDisponibles: boolean): Promise<Servicio[]> {
     const filtro = soloDisponibles

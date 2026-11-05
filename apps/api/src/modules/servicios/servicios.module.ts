@@ -4,7 +4,11 @@ import { CitasModule } from '../citas/citas.module';
 import { IdentidadModule } from '../identidad/identidad.module';
 import { HorariosController } from './horarios.controller';
 import { HorariosService } from './horarios.service';
-import { ServiciosController, TiposServicioController } from './servicios.controller';
+import {
+  PublicServiciosController,
+  ServiciosController,
+  TiposServicioController,
+} from './servicios.controller';
 import { ServiciosRepository } from './servicios.repository';
 import { ServiciosService } from './servicios.service';
 
@@ -19,7 +23,12 @@ import { ServiciosService } from './servicios.service';
  */
 @Module({
   imports: [IdentidadModule, AliadosModule, CitasModule],
-  controllers: [HorariosController, TiposServicioController, ServiciosController],
+  controllers: [
+    HorariosController,
+    TiposServicioController,
+    PublicServiciosController,
+    ServiciosController,
+  ],
   providers: [HorariosService, ServiciosService, ServiciosRepository],
   exports: [ServiciosService],
 })

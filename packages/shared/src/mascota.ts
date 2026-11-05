@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SEXOS_ANIMAL } from './enums';
+import { urlImagenSchema } from './imagen';
 
 export const MAX_FOTOS_MASCOTA = 5;
 
@@ -25,7 +26,7 @@ export const crearMascotaSchema = z
       .regex(/^[A-Za-z0-9-]{1,40}$/, 'El chip solo admite letras, números y guiones')
       .optional(),
     fotos: z
-      .array(z.url('La foto debe ser una URL válida').max(2_048))
+      .array(urlImagenSchema)
       .max(MAX_FOTOS_MASCOTA, `Máximo ${MAX_FOTOS_MASCOTA} fotos`)
       .optional(),
   })

@@ -63,6 +63,18 @@ export class ServiciosController {
     return this.servicios.listarGestion(request.usuario.id, aliadoId);
   }
 
+  @Get(':servicioId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({ summary: 'Consultar un servicio del aliado para gestión' })
+  obtener(
+    @Req() request: RequestAutenticada,
+    @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    return this.servicios.obtenerGestion(request.usuario.id, aliadoId, servicioId);
+  }
+
   @Post()
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('ALIADO')
@@ -120,5 +132,17 @@ export class ServiciosController {
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
     return this.servicios.cambiarActivo(request.usuario.id, aliadoId, servicioId, true);
+  }
+}
+
+@ApiTags('servicios')
+@Controller('servicios')
+export class PublicServiciosController {
+  constructor(private readonly servicios: ServiciosService) {}
+
+  @Get(':servicioId')
+  @ApiOperation({ summary: 'Consultar detalle público de un servicio disponible' })
+  obtener(@Param('servicioId', new ParseUUIDPipe()) servicioId: string) {
+    return this.servicios.obtenerDisponible(servicioId);
   }
 }

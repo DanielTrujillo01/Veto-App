@@ -1,12 +1,11 @@
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
-import { guardarHorariosSchema, type GuardarHorarios } from '@veto/shared';
+import type { GuardarHorarios } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 
 interface HorarioRow extends QueryResultRow {
@@ -23,20 +22,13 @@ interface HorarioRow extends QueryResultRow {
 export class HorariosService {
   constructor(private readonly db: DatabaseService) {}
 
+  /** HU-016: reemplaza el horario del veterinario (entrada ya validada por el controller). */
   async guardar(
     administradorId: string,
     clinicaId: string,
     veterinarioId: string,
     entrada: GuardarHorarios,
   ) {
-    const resultado = guardarHorariosSchema.safeParse(entrada);
-    if (!resultado.success) {
-      throw new BadRequestException({
-        message: 'Los horarios no son válidos',
-        errors: resultado.error.flatten().fieldErrors,
-      });
-    }
-
     return this.db.withUser(administradorId, async (client) => {
       await this.verificarAcceso(client, administradorId, clinicaId, veterinarioId);
       try {
@@ -44,7 +36,7 @@ export class HorariosService {
           clinicaId,
           veterinarioId,
         ]);
-        for (const horario of resultado.data.horarios) {
+        for (const horario of entrada.horarios) {
           await client.query(
             `INSERT INTO horario
                (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin, vigente_desde, vigente_hasta)
