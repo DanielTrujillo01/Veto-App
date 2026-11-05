@@ -11,7 +11,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { type GuardarHorarios } from '@veto/shared';
+import { guardarHorariosSchema } from '@veto/shared';
+import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from '../identidad/auth.guard';
 import { HorariosService } from './horarios.service';
 
@@ -28,9 +29,14 @@ export class HorariosController {
     @Param('clinicaId', new ParseUUIDPipe()) clinicaId: string,
     @Param('veterinarioId', new ParseUUIDPipe()) veterinarioId: string,
     @Req() request: RequestAutenticada,
-    @Body() entrada: GuardarHorarios,
+    @Body() body: unknown,
   ) {
-    return this.horarios.guardar(request.usuario.id, clinicaId, veterinarioId, entrada);
+    return this.horarios.guardar(
+      request.usuario.id,
+      clinicaId,
+      veterinarioId,
+      validar(guardarHorariosSchema, body),
+    );
   }
 
   @Get()

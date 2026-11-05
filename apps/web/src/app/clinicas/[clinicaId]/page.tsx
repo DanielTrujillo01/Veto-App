@@ -18,6 +18,7 @@ export default async function FichaClinica({ params }: { params: Promise<{ clini
   const { clinicaId } = await params;
   let ficha: FichaClinica;
   try {
+    // Sin caché: los cambios de foto o descripción se ven apenas se guardan (HU-013).
     ficha = await api<FichaClinica>(`/aliados/${clinicaId}/veterinarios`, { cache: 'no-store' });
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) notFound();
@@ -25,7 +26,7 @@ export default async function FichaClinica({ params }: { params: Promise<{ clini
   }
 
   return (
-    <main className="space-y-6">
+    <div className="space-y-6">
       <header className="space-y-2">
         <h1 className="text-3xl font-bold">{ficha.nombre}</h1>
         {ficha.descripcion && <p className="max-w-3xl text-suave">{ficha.descripcion}</p>}
@@ -44,6 +45,6 @@ export default async function FichaClinica({ params }: { params: Promise<{ clini
           <p className="text-suave">Esta clínica aún no ha registrado veterinarios.</p>
         )}
       </section>
-    </main>
+    </div>
   );
 }

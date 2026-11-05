@@ -1,20 +1,19 @@
 import {
   ConflictException,
-  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import type { QueryResultRow } from 'pg';
-import {
-  actualizarPerfilVeterinarioSchema,
-  type ActualizarPerfilVeterinario,
-  type CrearVeterinario,
-  crearVeterinarioSchema,
-  type EstadoAliado,
-  type TipoAliado,
+import type {
+  ActualizarPerfilVeterinario,
+  CrearVeterinario,
+  EstadoAliado,
+  TipoAliado,
 } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
+import { esErrorPg, PG } from '../../common/validacion';
+import { IdentidadService } from '../identidad/identidad.service';
 import { hashContrasena } from '../identidad/seguridad';
 
 /** Perfil de veterinario de la cuenta autenticada, con el estado de su aliado (HU-014). */
@@ -39,7 +38,10 @@ interface VeterinarioRow extends QueryResultRow {
 
 @Injectable()
 export class VeterinariosService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly identidad: IdentidadService,
+  ) {}
 
   async listarClinicas() {
     const resultado = await this.db.query<{
@@ -53,6 +55,10 @@ export class VeterinariosService {
     return resultado.rows;
   }
 
+  /**
+   * HU-013: ficha pública de la clínica con la foto y descripción de cada veterinario.
+   * Solo muestra veterinarios activos con cuenta activa (no los eliminados ni suspendidos).
+   */
   async listarPublicos(clinicaId: string) {
     const clinica = await this.db.query<{ id: string; nombre: string; descripcion: string | null }>(
       `SELECT id, nombre, descripcion FROM aliado
@@ -63,7 +69,8 @@ export class VeterinariosService {
     const veterinarios = await this.db.query<VeterinarioRow & { nombre: string }>(
       `SELECT v.id, v.usuario_id, v.aliado_id, v.foto_url, v.descripcion, u.nombre
          FROM veterinario v JOIN usuario u ON u.id = v.usuario_id
-        WHERE v.aliado_id = $1 AND v.activo ORDER BY u.nombre`,
+        WHERE v.aliado_id = $1 AND v.activo AND u.estado = 'ACTIVA'
+        ORDER BY u.nombre, v.id`,
       [clinicaId],
     );
     return {
@@ -79,19 +86,13 @@ export class VeterinariosService {
     };
   }
 
+  /** HU-013: el administrador de la clínica cambia la foto o la descripción (ya validadas). */
   async actualizarPerfil(
     actorId: string,
     clinicaId: string,
     veterinarioId: string,
     entrada: ActualizarPerfilVeterinario,
   ) {
-    const resultado = actualizarPerfilVeterinarioSchema.safeParse(entrada);
-    if (!resultado.success) {
-      throw new BadRequestException({
-        message: 'Los datos del perfil no son válidos',
-        errors: resultado.error.flatten().fieldErrors,
-      });
-    }
     return this.db.withUser(actorId, async (client) => {
       const admin = await client.query<{ ok: boolean }>(
         `SELECT EXISTS (
@@ -102,7 +103,7 @@ export class VeterinariosService {
         [clinicaId, actorId],
       );
       if (!admin.rows[0]?.ok) throw new ForbiddenException('No puedes gestionar esta clínica');
-      const cambios = resultado.data;
+      const cambios = entrada;
       const campos = Object.keys(cambios);
       const valores: unknown[] = [veterinarioId, clinicaId];
       const asignaciones = campos.map((campo) => {
@@ -121,14 +122,7 @@ export class VeterinariosService {
   }
 
   async crear(actorId: string, aliadoId: string, entrada: CrearVeterinario) {
-    const resultado = crearVeterinarioSchema.safeParse(entrada);
-    if (!resultado.success) {
-      throw new BadRequestException({
-        message: 'Los datos del veterinario no son válidos',
-        errors: resultado.error.flatten().fieldErrors,
-      });
-    }
-    const datos = resultado.data;
+    const datos = entrada;
     const passwordHash = await hashContrasena(datos.contrasena);
 
     return this.db.withUser(actorId, async (client) => {
@@ -163,22 +157,17 @@ export class VeterinariosService {
       }
 
       try {
-        const usuario = await client.query<{ id: string }>(
-          `INSERT INTO usuario (nombre, celular, correo, password_hash, rol)
-           VALUES ($1, $2, $3, $4, 'VETERINARIO')
-           RETURNING id`,
-          [datos.nombre, datos.celular, datos.correo, passwordHash],
-        );
+        const usuario = await this.identidad.insertUser(client, datos, passwordHash, 'VETERINARIO');
         const veterinario = await client.query<VeterinarioRow>(
           `INSERT INTO veterinario
              (aliado_id, usuario_id, foto_url, descripcion)
            VALUES ($1, $2, $3, $4)
            RETURNING id, usuario_id, aliado_id, foto_url, descripcion`,
-          [aliadoId, usuario.rows[0].id, datos.fotoUrl ?? null, datos.descripcion ?? null],
+          [aliadoId, usuario.id, datos.fotoUrl ?? null, datos.descripcion ?? null],
         );
         return this.toResponse(veterinario.rows[0]);
       } catch (error) {
-        if (this.isUniqueViolation(error)) {
+        if (esErrorPg(error, PG.UNICO)) {
           throw new ConflictException('Ya existe un usuario con ese correo');
         }
         throw error;
@@ -220,10 +209,6 @@ export class VeterinariosService {
       descripcion: fila.descripcion,
       activo: fila.activo,
     };
-  }
-
-  private isUniqueViolation(error: unknown): error is { code: string } {
-    return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
   }
 
   private toResponse(row: VeterinarioRow) {

@@ -29,6 +29,19 @@ modelo de datos (`docs/modelo-de-datos.md`).
 5. **Permisos:** cada endpoint debe comprobar rol y pertenencia (por ejemplo, un tutor solo ve sus
    mascotas).
 
+## Contrato común de la API
+
+- **Respuestas en camelCase**, sin envoltorio `{ data }`. Las de identidad envuelven al usuario:
+  `{ usuario }` (login, `/me`, registro de tutor); el registro de aliado devuelve `{ usuario, aliado }`.
+- **Errores de validación (400):** `{ message: 'Revisa los datos ingresados', errores: { campo: mensaje } }`,
+  generados por `validar()`. Los demás errores usan las excepciones de Nest (`{ message, error, statusCode }`).
+- **Registro:** `POST /api/usuarios` (tutor, HU-001) y `POST /api/aliados` (clínica, veterinario
+  independiente o tienda, HU-007) reciben `contrasena` (no `password`). El aliado queda `PENDIENTE`
+  hasta que el Equipo Veto lo active, y mientras tanto no puede gestionar sedes, servicios ni
+  veterinarios. Un correo ya registrado responde 409.
+- **Cuentas:** solo `identidad` escribe en `usuario`; los demás módulos crean cuentas con
+  `IdentidadService.insertUser(client, ...)` dentro de su propia transacción.
+
 ## Piezas comunes
 
 - **Autenticación:** `@UseGuards(AuthGuard)` (cookie `veto_session`); el usuario queda en
@@ -48,6 +61,12 @@ consultaId)`: lanza 404 si no es suya.
 - **Servicios exportados entre módulos:** `CitasService` (cancelar citas futuras de un tutor, saber si
   un servicio tiene citas), `AliadosService` (verificar administrador, sede activa, aliado activo),
   `MascotasService.perteneceAlTutor`. Reciben el `client` de la transacción de `withUser`.
+- **Mascotas (HU-008–010):** un tutor tiene las mascotas que quiera; cada una es un registro aparte
+  y toda lectura o escritura filtra por `id` **y** `tutor_id`, así editar una nunca toca a las demás.
+- **Ficha de la clínica (HU-013):** `GET /api/aliados/:clinicaId/veterinarios` (pública) muestra la
+  foto y la descripción de los veterinarios activos con cuenta activa; el administrador las cambia con
+  `PUT .../veterinarios/:veterinarioId/perfil` (`null` o `""` las quita). La web la muestra en
+  `/clinicas/[clinicaId]` sin caché, con la inicial del nombre si no hay foto o no carga.
 - **Especies que atiende un aliado (HU-021):** `PUT /api/aliados/:aliadoId/especies` guarda y
   actualiza la selección completa; `GET` (público) es la ficha del aliado. Toda búsqueda o filtro
   por especie (HU-025, 026) debe usar la misma regla: `AliadoEspeciesService.atiendeEspecie(db,

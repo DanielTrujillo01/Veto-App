@@ -51,7 +51,7 @@ Las historias esenciales describen relaciones fuertes y reglas que deben cumplir
 - El stock debe descontarse y devolverse de forma consistente (HU-046, 049).
 - Los dashboards y reportes por fecha, servicio, aliado, especie y estado son consultas SQL (HU-070, 073, 074).
 
-Solo uso `jsonb` en las respuestas del formulario de adopción (HU-090), para poder cambiar el formulario sin migrar. Las fotos viven en almacenamiento externo; la base guarda la URL.
+Solo uso `jsonb` en las respuestas del formulario de adopción (HU-090), para poder cambiar el formulario sin migrar. Las fotos viven en almacenamiento externo; la base guarda la URL, y la API solo acepta URLs `http`/`https` (`urlImagenSchema` en `@veto/shared`).
 
 ---
 

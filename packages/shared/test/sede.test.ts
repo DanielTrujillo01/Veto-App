@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { guardarSedeSchema } from './sede';
+import { guardarSedeSchema } from '../src';
 
 describe('HU-015 · validar sede', () => {
   it('acepta los datos obligatorios y elimina espacios exteriores', () => {
