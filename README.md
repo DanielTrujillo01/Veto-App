@@ -4,15 +4,15 @@ Plataforma web que conecta a tutores de mascotas con clínicas veterinarias, vet
 independientes, tiendas y fundaciones: búsqueda y agendamiento de servicios, compra de productos,
 registro de consulta clínica, adopción y administración por el Equipo Veto.
 
-> **Estado:** esqueleto del proyecto. Ya funcionan: el monorepo, la base de datos con sus reglas,
-> la API con conexión a la base (`/api/health`, documentación OpenAPI), la web con la pantalla de
-> inicio y el CI. Las historias de usuario se implementan sobre esta base, sprint a sprint.
+> **Estado:** monorepo funcional con API, aplicación Next.js, prototipo Figma Make y guía de
+> componentes. Las historias de usuario se implementan sprint a sprint.
 
 ## Tecnologías
 
 | Parte         | Tecnología                                                          |
 | ------------- | ------------------------------------------------------------------- |
 | Web           | Next.js 16 (React 19), TypeScript, Tailwind CSS 4                   |
+| Prototipo UI  | React 19, Vite 8, TypeScript, Tailwind CSS 4 (Figma Make)           |
 | API           | NestJS 11, TypeScript, documentación OpenAPI (Swagger)              |
 | Base de datos | PostgreSQL 17, migraciones en SQL                                   |
 | Compartido    | Esquemas de validación con Zod (`@veto/shared`)                     |
@@ -45,7 +45,7 @@ pnpm install
 # 3. Crea automáticamente el esquema, tipos, tablas, índices y reglas en Supabase
 pnpm db:migrate
 
-# 4. Todo en modo desarrollo (shared + API + web)
+# 4. Todo en modo desarrollo (shared + API + web + prototipo Figma)
 pnpm dev
 ```
 
@@ -54,6 +54,7 @@ Cuando termine de arrancar:
 | Servicio                          | URL                                                  |
 | --------------------------------- | ---------------------------------------------------- |
 | Web                               | http://localhost:3000                                |
+| Prototipo Figma Make              | http://localhost:8443                                |
 | API                               | http://localhost:3001/api/health                     |
 | Documentación de la API (OpenAPI) | http://localhost:3001/api/docs                       |
 | PostgreSQL                        | Tu proyecto Supabase (configurado en `DATABASE_URL`) |
@@ -63,7 +64,7 @@ Cuando termine de arrancar:
 > limitación de IPv6, usa la cadena de conexión del pooler que ofrece Supabase para tu proyecto.
 > La contraseña se mantiene en `.env`, que está excluido de Git.
 
-Si tu API no corre en el puerto 3001, copia `apps/web/.env.example` a `apps/web/.env.local` y
+Si tu API no corre en el puerto 3001, copia `frontend/web/.env.example` a `frontend/web/.env.local` y
 ajusta `NEXT_PUBLIC_API_URL`.
 
 ## Comandos
@@ -72,8 +73,8 @@ Se ejecutan desde la raíz del repositorio.
 
 | Comando                             | Qué hace                                                          |
 | ----------------------------------- | ----------------------------------------------------------------- |
-| `pnpm dev`                          | Arranca shared (en vigilancia), API y web con recarga en caliente |
-| `pnpm build`                        | Compila shared, API y web                                         |
+| `pnpm dev`                          | Arranca shared (en vigilancia), API, web y prototipo Figma        |
+| `pnpm build`                        | Compila shared, API, web y prototipo Figma                        |
 | `pnpm test`                         | Corre todas las pruebas (shared, API y web)                       |
 | `pnpm lint`                         | ESLint sobre todo el repositorio                                  |
 | `pnpm typecheck`                    | Revisa los tipos de todos los paquetes                            |
@@ -83,25 +84,31 @@ Se ejecutan desde la raíz del repositorio.
 | `pnpm db:test`                      | Corre las pruebas de las reglas de la base de datos               |
 | `pnpm db:reset`                     | **Borra** la base de datos local de Docker y la recrea desde cero |
 
-Para un solo paquete: `pnpm --filter @veto/api test`, `pnpm --filter @veto/web dev`, etc.
+Para un solo paquete: `pnpm --filter @veto/api test`, `pnpm --filter @veto/web dev`,
+`pnpm --filter @veto/figma dev`, etc.
 
 ## Estructura del repositorio
 
 ```
 veto/
 ├─ apps/
-│  ├─ api/                 API (NestJS)
-│  │  ├─ src/
-│  │  │  ├─ modules/       un módulo por dominio (ver su README)
-│  │  │  ├─ database/      conexión a PostgreSQL y withUser()
-│  │  │  ├─ config/        variables de entorno validadas
-│  │  │  └─ health/        GET /api/health
-│  │  └─ test/
-│  └─ web/                 Web (Next.js)
-│     └─ src/
-│        ├─ app/           páginas (App Router)
-│        ├─ components/
-│        └─ lib/           cliente de la API, utilidades
+│  └─ api/                 API (NestJS)
+│     ├─ src/
+│     │  ├─ modules/       un módulo por dominio (ver su README)
+│     │  ├─ database/      conexión a PostgreSQL y withUser()
+│     │  ├─ config/        variables de entorno validadas
+│     │  └─ health/        GET /api/health
+│     └─ test/
+├─ frontend/
+│  ├─ web/                 Aplicación web (Next.js)
+│  │  └─ src/
+│  │     ├─ app/           páginas (App Router)
+│  │     ├─ components/
+│  │     └─ lib/           cliente de la API, utilidades
+│  └─ figma/               Prototipo visual (React + Vite)
+│     ├─ src/              Inicio, layouts y guía de componentes
+│     ├─ public/
+│     └─ index.html
 ├─ packages/
 │  └─ shared/              esquemas Zod y tipos compartidos (sin lógica de negocio)
 ├─ db/
@@ -157,9 +164,9 @@ await this.db.withUser(usuarioId, async (client) => {
 
 ## Web
 
-- Next.js con App Router. Los colores viven como variables en `apps/web/src/app/globals.css`;
+- Next.js con App Router. Los colores viven como variables en `frontend/web/src/app/globals.css`;
   cambiar la identidad visual es editar ese bloque.
-- Toda llamada al backend pasa por `apps/web/src/lib/api.ts`.
+- Toda llamada al backend pasa por `frontend/web/src/lib/api.ts`.
 
 ## Paquete compartido (`@veto/shared`)
 

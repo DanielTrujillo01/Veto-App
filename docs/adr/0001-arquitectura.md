@@ -13,7 +13,7 @@ La base de datos ya está modelada en PostgreSQL con reglas en triggers y restri
 1. **Monolito modular**, no microservicios. Un solo despliegue de API; los módulos de dominio
    (`apps/api/src/modules/*`) se separan por tablas propias y no se tocan entre sí. Si un módulo
    necesita escalar aparte, se extrae después.
-2. **Monorepo** con pnpm workspaces: `apps/web`, `apps/api`, `packages/shared`, más `db/` y `docs/`.
+2. **Monorepo** con pnpm workspaces: `frontend/web`, `frontend/figma`, `apps/api`, `packages/shared`, más `db/` y `docs/`.
    Un cambio que toca base de datos, API y pantalla va en un solo pull request.
 3. **TypeScript en todo el stack.** Web: Next.js (React) + Tailwind. API: NestJS.
    Validaciones y tipos compartidos en `@veto/shared` (Zod).

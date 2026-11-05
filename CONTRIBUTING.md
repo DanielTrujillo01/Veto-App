@@ -48,8 +48,8 @@ Tipos: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `ci`.
 5. Anótalo con los decoradores de `@nestjs/swagger` para que aparezca en `/api/docs`.
 6. Pruebas en `apps/api/test/`.
 
-**Una pantalla nueva:** carpeta en `apps/web/src/app/<ruta>/page.tsx`; las llamadas a la API van por
-`apps/web/src/lib/api.ts` y los formularios validan con los mismos esquemas de `@veto/shared`.
+**Una pantalla nueva:** carpeta en `frontend/web/src/app/<ruta>/page.tsx`; las llamadas a la API van por
+`frontend/web/src/lib/api.ts` y los formularios validan con los mismos esquemas de `@veto/shared`.
 
 **Un cambio en la base de datos:** una migración nueva en `db/migrations/` (ver el README).
 
