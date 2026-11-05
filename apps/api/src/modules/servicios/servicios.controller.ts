@@ -9,11 +9,12 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { guardarServicioSchema } from '@veto/shared';
+import { filtrarServiciosSchema, guardarServicioSchema } from '@veto/shared';
 import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from '../identidad/auth.guard';
 import { Roles, RolesGuard } from '../identidad/roles.guard';
@@ -41,9 +42,14 @@ export class ServiciosController {
   constructor(private readonly servicios: ServiciosService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Servicios disponibles para reservar de un aliado (público)' })
-  disponibles(@Param('aliadoId', new ParseUUIDPipe()) aliadoId: string) {
-    return this.servicios.listarDisponibles(aliadoId);
+  @ApiOperation({
+    summary: 'Servicios disponibles para reservar de un aliado (público)',
+    description:
+      'Filtro opcional ?especieId=N (HU-021): si el aliado no atiende esa especie, la lista ' +
+      'llega vacía.',
+  })
+  disponibles(@Param('aliadoId', new ParseUUIDPipe()) aliadoId: string, @Query() query: unknown) {
+    return this.servicios.listarDisponibles(aliadoId, validar(filtrarServiciosSchema, query));
   }
 
   @Get('gestion')

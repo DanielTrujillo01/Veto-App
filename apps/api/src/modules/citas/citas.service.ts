@@ -7,11 +7,11 @@ import type { PoolClient } from 'pg';
  */
 @Injectable()
 export class CitasService {
-  /** HU-006: al eliminar la cuenta se cancelan sus citas futuras (el trigger registra el historial). */
+  /** HU-006: al eliminar la cuenta se cancelan sus citas futuras, confirmadas o pendientes (el trigger registra el historial). */
   async cancelarFuturasDelTutor(client: PoolClient, tutorId: string): Promise<number> {
     const resultado = await client.query(
       `UPDATE cita SET estado = 'CANCELADA'
-        WHERE tutor_id = $1 AND estado = 'AGENDADA' AND inicio > now()`,
+        WHERE tutor_id = $1 AND estado IN ('PENDIENTE', 'AGENDADA') AND inicio > now()`,
       [tutorId],
     );
     return resultado.rowCount ?? 0;
