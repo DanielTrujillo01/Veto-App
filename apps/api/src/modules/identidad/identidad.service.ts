@@ -43,7 +43,7 @@ export type UsuarioSesion = PerfilUsuario;
 export class IdentidadService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly citas: CitasService,
+    private readonly citas?: CitasService,
   ) {}
 
   /** HU-001: registra una cuenta de tutor. */
@@ -309,7 +309,7 @@ export class IdentidadService {
         );
       }
 
-      await this.citas.cancelarFuturasDelTutor(client, usuarioId);
+      await this.citas?.cancelarFuturasDelTutor(client, usuarioId);
       await client.query(
         `UPDATE usuario
             SET estado = 'ELIMINADA', eliminado_en = now(),
