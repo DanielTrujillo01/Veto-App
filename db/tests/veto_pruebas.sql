@@ -467,6 +467,124 @@ BEGIN
             (SELECT estado FROM cita WHERE id = c_auto) = 'AGENDADA');
     END;
 
+    -- ---------- HU-022 · Horario de atención y calendario de disponibilidad ----------
+    DECLARE
+        u_iv uuid; a_iv uuid; v_iv uuid; s_iv uuid;
+        dia_cita timestamptz := date_trunc('day', now()) + interval '40 days';   -- 00:00 de ese día, en la zona de la sesión
+        dow smallint := extract(isodow FROM date_trunc('day', now()) + interval '40 days')::smallint;
+        c_iv uuid; c_nueva uuid; c_pend2 uuid; b1 uuid;
+    BEGIN
+        -- Un veterinario independiente: aliado + perfil de veterinario con la misma cuenta
+        INSERT INTO usuario (nombre, celular, correo, password_hash, rol) VALUES ('Vet Independiente','3007778899','iv@mail.com','h','ALIADO') RETURNING id INTO u_iv;
+        INSERT INTO aliado (usuario_id, tipo, nombre, estado) VALUES (u_iv,'VET_INDEPENDIENTE','Dra. Independiente','ACTIVO') RETURNING id INTO a_iv;
+        INSERT INTO veterinario (aliado_id, usuario_id) VALUES (a_iv, u_iv) RETURNING id INTO v_iv;
+        INSERT INTO aliado_especie VALUES (a_iv, perro);
+        INSERT INTO servicio (aliado_id, tipo_servicio_id, nombre, modalidad, precio_base)
+            VALUES (a_iv, t_cons, 'Consulta a domicilio', 'A_DOMICILIO', 80000) RETURNING id INTO s_iv;
+        -- Atiende ese día de 08:00 a 12:00
+        INSERT INTO horario (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin) VALUES (a_iv, v_iv, dow, '08:00', '12:00');
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+
+        -- Reservas dentro y fuera del horario
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '10 hours', dia_cita + interval '10 hours 30 minutes', 80000) RETURNING id INTO c_iv;
+        PERFORM pg_temp.debe_fallar('no se reserva fuera del horario de atención',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+                      VALUES (%L,%L,%L,%L,%L,%L,%L,1)$q$, u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '13 hours', dia_cita + interval '13 hours 30 minutes'), '23514');
+
+        -- No se puede recortar el horario por debajo de una cita vigente
+        EXECUTE 'SET CONSTRAINTS trg_horario_cubre_citas IMMEDIATE';
+        PERFORM pg_temp.debe_fallar('no se recorta el horario dejando una cita vigente fuera',
+            format($q$UPDATE horario SET hora_fin = '10:15' WHERE veterinario_id = %L$q$, v_iv), '23514');
+        PERFORM pg_temp.debe_fallar('no se borra el horario que cubre una cita vigente',
+            format($q$DELETE FROM horario WHERE veterinario_id = %L$q$, v_iv), '23514');
+        PERFORM pg_temp.debe_fallar('no se mueve el horario a otro día dejando la cita sin cubrir',
+            format($q$UPDATE horario SET dia_semana = %s WHERE veterinario_id = %L$q$, (dow % 7) + 1, v_iv), '23514');
+        UPDATE horario SET hora_inicio = '09:00', hora_fin = '11:00' WHERE veterinario_id = v_iv;
+        PERFORM pg_temp.debe_pasar('se puede recortar el horario si la cita sigue cubierta',
+            (SELECT hora_fin FROM horario WHERE veterinario_id = v_iv) = '11:00');
+        -- Una cita ya cancelada no frena los cambios de horario
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+        UPDATE cita SET estado = 'CANCELADA' WHERE id = c_iv;
+        UPDATE horario SET hora_inicio = '14:00', hora_fin = '16:00' WHERE veterinario_id = v_iv;
+        PERFORM pg_temp.debe_pasar('con la cita cancelada el horario se puede cambiar libremente',
+            (SELECT hora_inicio FROM horario WHERE veterinario_id = v_iv) = '14:00');
+        EXECUTE 'SET CONSTRAINTS trg_horario_cubre_citas DEFERRED';
+        UPDATE horario SET hora_inicio = '08:00', hora_fin = '12:00' WHERE veterinario_id = v_iv;
+
+        -- Bloqueos del calendario
+        INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin, motivo)
+            VALUES (a_iv, v_iv, dia_cita + interval '9 hours', dia_cita + interval '11 hours', 'Congreso') RETURNING id INTO b1;
+        PERFORM pg_temp.debe_fallar('bloqueo con el fin antes del inicio',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '15 hours', dia_cita + interval '14 hours'), '23514');
+        PERFORM pg_temp.debe_fallar('bloqueo vacío (inicio = fin)',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '15 hours', dia_cita + interval '15 hours'), '23514');
+        PERFORM pg_temp.debe_fallar('bloqueos solapados del mismo veterinario',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '10 hours', dia_cita + interval '12 hours'), '23P01');
+        INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin)
+            VALUES (a_iv, v_iv, dia_cita + interval '11 hours', dia_cita + interval '12 hours');   -- contiguo: sí se permite
+        PERFORM pg_temp.debe_pasar('bloqueos contiguos no se consideran solapados',
+            (SELECT count(*) FROM bloqueo_agenda WHERE veterinario_id = v_iv) = 2);
+        PERFORM pg_temp.debe_fallar('no se bloquea un intervalo que ya terminó',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,now() - interval '3 days', now() - interval '2 days')$q$,
+                   a_iv, v_iv), '23514');
+        PERFORM pg_temp.debe_fallar('bloqueo de un veterinario que es de otro aliado',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_clinica, v_iv, dia_cita + interval '1 day 9 hours', dia_cita + interval '1 day 10 hours'), '23503');
+        PERFORM pg_temp.debe_fallar('motivo de más de 200 caracteres',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin, motivo) VALUES (%L,%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '2 days', dia_cita + interval '2 days 1 hour', repeat('x', 201)), '23514');
+
+        -- Una cita no cae en un bloqueo, aunque esté dentro del horario
+        PERFORM pg_temp.debe_fallar('no se reserva dentro de un bloqueo',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+                      VALUES (%L,%L,%L,%L,%L,%L,%L,1)$q$, u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '10 hours 30 minutes', dia_cita + interval '11 hours'), '23514');
+        PERFORM pg_temp.debe_fallar('no se reserva si la cita solo roza el bloqueo',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+                      VALUES (%L,%L,%L,%L,%L,%L,%L,1)$q$, u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '8 hours 45 minutes', dia_cita + interval '9 hours 15 minutes'), '23514');
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '8 hours 30 minutes', dia_cita + interval '9 hours', 80000) RETURNING id INTO c_nueva;
+        PERFORM pg_temp.debe_pasar('una cita que termina justo cuando empieza el bloqueo sí se reserva',
+            (SELECT estado FROM cita WHERE id = c_nueva) = 'AGENDADA');
+        PERFORM pg_temp.debe_fallar('no se reprograma una cita dentro de un bloqueo',
+            format($q$UPDATE cita SET inicio = %L, fin = %L WHERE id = %L$q$, dia_cita + interval '10 hours', dia_cita + interval '10 hours 30 minutes', c_nueva), '23514');
+
+        -- No se bloquea un intervalo con citas vigentes
+        PERFORM pg_temp.debe_fallar('no se bloquea un intervalo con una cita vigente',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '8 hours', dia_cita + interval '8 hours 45 minutes'), '23514');
+        UPDATE cita SET estado = 'CANCELADA' WHERE id = c_nueva;
+        INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin)
+            VALUES (a_iv, v_iv, dia_cita + interval '8 hours', dia_cita + interval '8 hours 45 minutes');
+        PERFORM pg_temp.debe_pasar('con la cita cancelada ya se puede bloquear ese intervalo',
+            EXISTS (SELECT 1 FROM bloqueo_agenda WHERE veterinario_id = v_iv AND inicio = dia_cita + interval '8 hours'));
+
+        -- Quitar el bloqueo vuelve a abrir el espacio
+        DELETE FROM bloqueo_agenda WHERE id = b1;
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '9 hours 30 minutes', dia_cita + interval '10 hours', 80000);
+        PERFORM pg_temp.debe_pasar('al quitar el bloqueo se puede volver a reservar ese espacio',
+            EXISTS (SELECT 1 FROM cita WHERE veterinario_id = v_iv AND estado = 'AGENDADA' AND inicio = dia_cita + interval '9 hours 30 minutes'));
+
+        -- Una cita pendiente de aceptación también protege su espacio
+        UPDATE aliado SET modo_confirmacion = 'MANUAL' WHERE id = a_iv;
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '10 hours', dia_cita + interval '10 hours 30 minutes', 80000) RETURNING id INTO c_pend2;
+        PERFORM pg_temp.debe_pasar('la reserva en modo manual queda PENDIENTE',
+            (SELECT estado FROM cita WHERE id = c_pend2) = 'PENDIENTE');
+        PERFORM pg_temp.debe_fallar('no se bloquea un intervalo con una cita pendiente',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '10 hours', dia_cita + interval '10 hours 30 minutes'), '23514');
+        EXECUTE 'SET CONSTRAINTS trg_horario_cubre_citas IMMEDIATE';
+        PERFORM pg_temp.debe_fallar('no se recorta el horario dejando una cita pendiente fuera',
+            format($q$UPDATE horario SET hora_fin = '10:15' WHERE veterinario_id = %L$q$, v_iv), '23514');
+        EXECUTE 'SET CONSTRAINTS trg_horario_cubre_citas DEFERRED';
+        UPDATE aliado SET modo_confirmacion = 'AUTOMATICA' WHERE id = a_iv;
+    END;
+
     RAISE NOTICE '=== TODAS LAS PRUEBAS PASARON ===';
 END $$;
 ROLLBACK;

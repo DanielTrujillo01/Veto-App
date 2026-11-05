@@ -11,7 +11,7 @@ import type {
   EstadoAliado,
   TipoAliado,
 } from '@veto/shared';
-import { DatabaseService } from '../../database/database.service';
+import { DatabaseService, type Consultor } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { IdentidadService } from '../identidad/identidad.service';
 import { hashContrasena } from '../identidad/seguridad';
@@ -209,6 +209,31 @@ export class VeterinariosService {
       descripcion: fila.descripcion,
       activo: fila.activo,
     };
+  }
+
+  /** HU-022: true si el veterinario existe y pertenece a ese aliado. */
+  async perteneceAlAliado(client: Consultor, aliadoId: string, veterinarioId: string) {
+    const r = await client.query<{ ok: boolean }>(
+      'SELECT EXISTS (SELECT 1 FROM veterinario WHERE id = $1 AND aliado_id = $2) AS ok',
+      [veterinarioId, aliadoId],
+    );
+    return Boolean(r.rows[0]?.ok);
+  }
+
+  /**
+   * HU-022: veterinarios del aliado que pueden recibir reservas (perfil activo y cuenta activa).
+   * Con `veterinarioId` devuelve solo ese, si cumple.
+   */
+  async paraReservar(client: Consultor, aliadoId: string, veterinarioId?: string) {
+    const r = await client.query<{ id: string; nombre: string }>(
+      `SELECT v.id, u.nombre
+         FROM veterinario v JOIN usuario u ON u.id = v.usuario_id
+        WHERE v.aliado_id = $1 AND v.activo AND u.estado = 'ACTIVA'
+          AND ($2::uuid IS NULL OR v.id = $2)
+        ORDER BY u.nombre, v.id`,
+      [aliadoId, veterinarioId ?? null],
+    );
+    return r.rows;
   }
 
   private toResponse(row: VeterinarioRow) {

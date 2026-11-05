@@ -3,19 +3,19 @@
 Cada carpeta es un módulo de dominio (monolito modular). Los módulos reflejan la división del
 modelo de datos (`docs/modelo-de-datos.md`).
 
-| Módulo           | Qué hace                                                                           | Tablas propias                                                   | Historias                                |
-| ---------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
-| `identidad`      | Cuentas, registro e inicio de sesión                                               | usuario                                                          | HU-001, 002, 006                         |
-| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                        | HU-007, 012–016, 021, 023, 078           |
-| `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                   | HU-008–011                               |
-| `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, tipo_servicio          | HU-016, 018–022, 024–028                 |
-| `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                           | HU-029, 031, 032, 034                    |
-| `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                     | HU-014, 017, 037, 042, 043               |
-| `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto | HU-044–050                               |
-| `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, solicitud_adopcion                             | HU-080, 082, 083, 086, 087, 090, 092–094 |
-| `admin`          | Moderación y estado de cuentas del Equipo Veto                                     | accion_admin                                                     | HU-065, 066, 067                         |
-| `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                              | v_citas_reporte, v_ventas_productos                              | HU-070, 073, 074                         |
-| `notificaciones` | Notificaciones internas de la aplicación                                           | notificacion                                                     | HU-048, 052, 054                         |
+| Módulo           | Qué hace                                                                           | Tablas propias                                                          | Historias                                |
+| ---------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
+| `identidad`      | Cuentas, registro e inicio de sesión                                               | usuario                                                                 | HU-001, 002, 006                         |
+| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                               | HU-007, 012–016, 021, 023, 078           |
+| `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                          | HU-008–011                               |
+| `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, bloqueo_agenda, tipo_servicio | HU-016, 018–022, 024–028                 |
+| `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                                  | HU-029, 031, 032, 034                    |
+| `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                            | HU-014, 017, 037, 042, 043               |
+| `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto        | HU-044–050                               |
+| `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, solicitud_adopcion                                    | HU-080, 082, 083, 086, 087, 090, 092–094 |
+| `admin`          | Moderación y estado de cuentas del Equipo Veto                                     | accion_admin                                                            | HU-065, 066, 067                         |
+| `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                              | v_citas_reporte, v_ventas_productos                                     | HU-070, 073, 074                         |
+| `notificaciones` | Notificaciones internas de la aplicación                                           | notificacion                                                            | HU-048, 052, 054                         |
 
 ## Reglas
 
@@ -93,3 +93,13 @@ aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con 
 - Una sede inactiva no se incluye en el catálogo público ni en los servicios disponibles para
   reservar. La migración `0003_sede_activa_citas.sql` también rechaza nuevas citas para servicios
   presenciales en esa sede; las citas ya existentes no se modifican.
+- **Calendario de disponibilidad (HU-022):** el horario semanal se guarda con
+  `PUT /api/aliados/:aliadoId/veterinarios/:veterinarioId/horarios` (clínica o veterinario independiente; el
+  independiente obtiene su `veterinarioId` en `GET /api/veterinarios/me`). Los días libres y vacaciones son
+  bloqueos: `POST | GET /api/aliados/:aliadoId/veterinarios/:veterinarioId/bloqueos` y `DELETE .../:bloqueoId`.
+  El tutor consulta `GET /api/aliados/:aliadoId/disponibilidad?servicioId=&desde=&hasta=[&veterinarioId=]`
+  (público, máximo 31 días): devuelve los espacios en que el servicio cabe completo, cada uno con su
+  `veterinarioId`. **HU-029 debe reservar uno de esos espacios con su `veterinarioId`** y mostrar el `estado`
+  que devuelve el `INSERT`. Un cambio de horario o un bloqueo responde 409 si deja citas vigentes sin
+  cubrir; la respuesta del bloqueo lista esas citas (`citas`). Lee las citas ocupadas solo a través de
+  `CitasService.ocupadosEntre` y `vigentesEnIntervalo`.
