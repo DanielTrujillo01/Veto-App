@@ -17,3 +17,7 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.log
+
+# Generados por Next.js en cada `next dev` / `next build` (se regeneran solos)
+apps/web/next-env.d.ts
+apps/web/AGENTS.md
