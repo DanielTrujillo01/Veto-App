@@ -14,8 +14,11 @@ export async function verificarContrasena(contrasena: string, hash: string): Pro
   if (algoritmo !== 'scrypt' || !saltCodificado || !claveCodificada) return false;
 
   try {
-    const salt = Buffer.from(saltCodificado, 'base64url');
-    const claveEsperada = Buffer.from(claveCodificada, 'base64url');
+    const formatoHexadecimal =
+      /^[0-9a-f]+$/i.test(saltCodificado) && /^[0-9a-f]+$/i.test(claveCodificada);
+    const codificacion = formatoHexadecimal ? 'hex' : 'base64url';
+    const salt = Buffer.from(saltCodificado, codificacion);
+    const claveEsperada = Buffer.from(claveCodificada, codificacion);
     const clave = (await scrypt(contrasena, salt, claveEsperada.length)) as Buffer;
     return clave.length === claveEsperada.length && timingSafeEqual(clave, claveEsperada);
   } catch {

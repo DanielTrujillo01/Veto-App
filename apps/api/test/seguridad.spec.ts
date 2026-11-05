@@ -1,3 +1,4 @@
+import { randomBytes, scryptSync } from 'node:crypto';
 import { hashContrasena, verificarContrasena } from '../src/modules/identidad/seguridad';
 
 describe('seguridad de contraseñas', () => {
@@ -10,5 +11,14 @@ describe('seguridad de contraseñas', () => {
 
   it('un hash con otro formato nunca verifica', async () => {
     await expect(verificarContrasena('x', 'ELIMINADA')).resolves.toBe(false);
+  });
+
+  it('mantiene acceso a cuentas creadas con el formato hexadecimal anterior', async () => {
+    const salt = randomBytes(16);
+    const clave = scryptSync('test1234', salt, 64);
+    const hashAnterior = `scrypt$${salt.toString('hex')}$${clave.toString('hex')}`;
+
+    await expect(verificarContrasena('test1234', hashAnterior)).resolves.toBe(true);
+    await expect(verificarContrasena('otra-clave', hashAnterior)).resolves.toBe(false);
   });
 });
