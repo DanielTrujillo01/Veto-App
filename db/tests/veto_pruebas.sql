@@ -40,6 +40,7 @@ DECLARE
     u_tienda uuid; u_fund uuid; u_fund2 uuid; u_admin uuid;
     a_clinica uuid; a_clinica2 uuid; a_tienda uuid; a_fund uuid; a_fund_pend uuid;
     sede1 uuid; sede2 uuid; vet1 uuid; vet2 uuid; srv uuid; masc uuid; masc_gato uuid;
+    masc_limite uuid;
     cita1 uuid; cita2 uuid; cons uuid; prod uuid; ped uuid; ped2 uuid; mad uuid;
     dia smallint;
 BEGIN
@@ -100,11 +101,32 @@ BEGIN
 
     INSERT INTO mascota (tutor_id, nombre, especie_id, sexo, peso_kg, edad_meses) VALUES (u_tutor,'Firulais',perro,'MACHO',28,60) RETURNING id INTO masc;
     INSERT INTO mascota (tutor_id, nombre, especie_id, sexo) VALUES (u_tutor,'Misu',gato,'HEMBRA') RETURNING id INTO masc_gato;
+    INSERT INTO mascota (tutor_id, nombre, especie_id, sexo, peso_kg, edad_meses)
+        VALUES (u_tutor,'Borde',perro,'MACHO',20,60) RETURNING id INTO masc_limite;
     PERFORM pg_temp.debe_fallar('mascota sin sexo',
         format($q$INSERT INTO mascota (tutor_id, nombre, especie_id) VALUES (%L,'X',%L)$q$, u_tutor, perro), '23502');
     INSERT INTO servicio_regla_precio (servicio_id, peso_min_kg, precio, prioridad) VALUES (srv, 20, 90000, 1);
     PERFORM pg_temp.debe_pasar('perro de 28 kg paga la tarifa por peso (90000)', fn_precio_servicio(srv, masc) = 90000);
+    PERFORM pg_temp.debe_pasar('el límite inferior de peso es inclusivo', fn_precio_servicio(srv, masc_limite) = 90000);
     PERFORM pg_temp.debe_pasar('mascota sin peso cae en el precio base (60000)', fn_precio_servicio(srv, masc_gato) = 60000);
+    INSERT INTO servicio_regla_precio (servicio_id, especie_id, precio, prioridad)
+        VALUES (srv, perro, 100000, 2);
+    PERFORM pg_temp.debe_pasar('la regla de especie aplica a la especie exacta', fn_precio_servicio(srv, masc) = 100000);
+    INSERT INTO servicio_regla_precio
+        (servicio_id, edad_min_meses, edad_max_meses, precio, prioridad)
+        VALUES (srv, 60, 60, 110000, 3);
+    PERFORM pg_temp.debe_pasar('los límites de edad son inclusivos y la prioridad mayor gana', fn_precio_servicio(srv, masc) = 110000);
+    INSERT INTO servicio_regla_precio
+        (servicio_id, edad_min_meses, edad_max_meses, precio, prioridad)
+        VALUES (srv, 60, 60, 120000, 3);
+    PERFORM pg_temp.debe_pasar('a igual prioridad gana el precio más alto', fn_precio_servicio(srv, masc) = 120000);
+    DELETE FROM servicio_regla_precio WHERE servicio_id = srv;
+    INSERT INTO servicio_regla_precio
+        (servicio_id, edad_min_meses, edad_max_meses, precio, prioridad)
+        VALUES (srv, 0, 12, 50000, 1);
+    PERFORM pg_temp.debe_pasar('si falta la edad necesaria no aplica la regla', fn_precio_servicio(srv, masc_gato) = 60000);
+    DELETE FROM servicio_regla_precio WHERE servicio_id = srv;
+    PERFORM pg_temp.debe_pasar('sin reglas aplicables se usa el precio base', fn_precio_servicio(srv, masc) = 60000);
 
     -- ---------- Horarios ----------
     INSERT INTO horario (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin) VALUES (a_clinica, vet1, 1, '00:00', '24:00');
@@ -245,6 +267,19 @@ BEGIN
     PERFORM pg_temp.debe_fallar('fundación PENDIENTE no puede publicar mascotas',
         format($q$INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
                   VALUES (%L,'Rocky',%L,12,'MACHO','MEDIANO','Suba')$q$, a_fund_pend, perro), '23514');
+    UPDATE aliado SET estado = 'ACTIVO' WHERE id = a_fund_pend;
+    INSERT INTO accion_admin (admin_id, objetivo_tipo, objetivo_id, accion)
+        VALUES (u_admin, 'aliado', a_fund_pend, 'APROBAR_FUNDACION');
+    INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
+        VALUES (a_fund_pend, 'Nube', perro, 10, 'HEMBRA', 'PEQUENO', 'Suba');
+    PERFORM pg_temp.debe_pasar('una fundación aprobada puede publicar mascotas',
+        EXISTS (SELECT 1 FROM mascota_adopcion WHERE fundacion_id = a_fund_pend AND nombre = 'Nube'));
+    UPDATE aliado SET estado = 'RECHAZADO' WHERE id = a_fund_pend;
+    INSERT INTO accion_admin (admin_id, objetivo_tipo, objetivo_id, accion)
+        VALUES (u_admin, 'aliado', a_fund_pend, 'RECHAZAR_FUNDACION');
+    PERFORM pg_temp.debe_fallar('una fundación rechazada no puede publicar mascotas',
+        format($q$INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
+                  VALUES (%L,'Luna',%L,8,'HEMBRA','PEQUENO','Suba')$q$, a_fund_pend, perro), '23514');
     PERFORM pg_temp.debe_fallar('una clínica no publica mascotas en adopción',
         format($q$INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
                   VALUES (%L,'Rocky',%L,12,'MACHO','MEDIANO','Suba')$q$, a_clinica, perro), '23514');
