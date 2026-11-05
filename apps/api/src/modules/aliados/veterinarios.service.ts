@@ -7,11 +7,10 @@ import {
 } from '@nestjs/common';
 import type { QueryResultRow } from 'pg';
 import {
-  type actualizarPerfilVeterinarioSchema,
+  actualizarPerfilVeterinarioSchema,
   type ActualizarPerfilVeterinario,
   type CrearVeterinario,
   crearVeterinarioSchema,
-  type CrearVeterinario,
   type EstadoAliado,
   type TipoAliado,
 } from '@veto/shared';
