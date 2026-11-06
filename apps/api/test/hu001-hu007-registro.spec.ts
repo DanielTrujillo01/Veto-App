@@ -18,8 +18,9 @@ function registroEnBd(repetido = false): Manejador {
       return { rows: [{ id: USUARIO_ID, nombre, celular, correo, rol }] };
     }
     if (sql.includes('INSERT INTO aliado')) {
-      const [, tipo, nombre, descripcion, contacto, , ciudad, ubicacion] =
-      valores as (string | null)[];
+      const [, tipo, nombre, descripcion, contacto, , ciudad, ubicacion] = valores as (
+        string | null
+      )[];
       return {
         rows: [
           {
@@ -107,12 +108,12 @@ describe('HU-001 · registro de tutor (POST /api/usuarios)', () => {
 
 describe('HU-007 · registro de aliado (POST /api/aliados)', () => {
   const clinica = {
-  ...tutor,
-  nombreAliado: 'Clínica Daniel',
-  tipo: 'CLINICA',
-  ciudad: 'Cali',
-  ubicacion: 'Carrera 100 # 15-20',
-};
+    ...tutor,
+    nombreAliado: 'Clínica Daniel',
+    tipo: 'CLINICA',
+    ciudad: 'Cali',
+    ubicacion: 'Carrera 100 # 15-20',
+  };
 
   it('crea cuenta y aliado en una transacción y responde en camelCase', async () => {
     const { db, consultas } = crearBdFalsa(registroEnBd(), null);
