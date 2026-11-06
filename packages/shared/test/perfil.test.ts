@@ -34,3 +34,16 @@ describe('eliminarCuentaSchema (HU-006)', () => {
     ).toBe(true);
   });
 });
+
+describe('eliminarCuentaSchema · cuentas que entran con Google (HU-003)', () => {
+  it('la contraseña es opcional: quien entra solo con Google confirma volviendo a Google', () => {
+    expect(eliminarCuentaSchema.safeParse({ confirmacion: 'ELIMINAR' }).success).toBe(true);
+  });
+
+  it('una contraseña vacía sigue siendo inválida y la confirmación sigue siendo obligatoria', () => {
+    expect(
+      eliminarCuentaSchema.safeParse({ contrasena: '', confirmacion: 'ELIMINAR' }).success,
+    ).toBe(false);
+    expect(eliminarCuentaSchema.safeParse({}).success).toBe(false);
+  });
+});

@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import { celularSchema, correoSchema, contrasenaSchema } from './usuario';
 
-export const tipoAliadoRegistroSchema = z.enum(['CLINICA', 'VET_INDEPENDIENTE', 'TIENDA']);
+/** Tipos de aliado que se registran solos (HU-007). Las fundaciones tienen su propio flujo: `registroFundacionSchema` (HU-078). */
+export const tipoAliadoRegistroSchema = z.enum(['CLINICA', 'VET_INDEPENDIENTE', 'TIENDA'], {
+  error: 'El tipo debe ser CLINICA, VET_INDEPENDIENTE o TIENDA',
+});
+
 export const registroAliadoSchema = z
   .object({
     nombre: z.string(),

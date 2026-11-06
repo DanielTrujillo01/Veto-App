@@ -502,6 +502,263 @@ BEGIN
             (SELECT estado FROM cita WHERE id = c_auto) = 'AGENDADA');
     END;
 
+    -- ---------- HU-022 · Horario de atención y calendario de disponibilidad ----------
+    DECLARE
+        u_iv uuid; a_iv uuid; v_iv uuid; s_iv uuid;
+        dia_cita timestamptz := date_trunc('day', now()) + interval '40 days';   -- 00:00 de ese día, en la zona de la sesión
+        dow smallint := extract(isodow FROM date_trunc('day', now()) + interval '40 days')::smallint;
+        c_iv uuid; c_nueva uuid; c_pend2 uuid; b1 uuid;
+    BEGIN
+        -- Un veterinario independiente: aliado + perfil de veterinario con la misma cuenta
+        INSERT INTO usuario (nombre, celular, correo, password_hash, rol) VALUES ('Vet Independiente','3007778899','iv@mail.com','h','ALIADO') RETURNING id INTO u_iv;
+        INSERT INTO aliado (usuario_id, tipo, nombre, estado) VALUES (u_iv,'VET_INDEPENDIENTE','Dra. Independiente','ACTIVO') RETURNING id INTO a_iv;
+        INSERT INTO veterinario (aliado_id, usuario_id) VALUES (a_iv, u_iv) RETURNING id INTO v_iv;
+        INSERT INTO aliado_especie VALUES (a_iv, perro);
+        INSERT INTO servicio (aliado_id, tipo_servicio_id, nombre, modalidad, precio_base)
+            VALUES (a_iv, t_cons, 'Consulta a domicilio', 'A_DOMICILIO', 80000) RETURNING id INTO s_iv;
+        -- Atiende ese día de 08:00 a 12:00
+        INSERT INTO horario (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin) VALUES (a_iv, v_iv, dow, '08:00', '12:00');
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+
+        -- Reservas dentro y fuera del horario
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '10 hours', dia_cita + interval '10 hours 30 minutes', 80000) RETURNING id INTO c_iv;
+        PERFORM pg_temp.debe_fallar('no se reserva fuera del horario de atención',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+                      VALUES (%L,%L,%L,%L,%L,%L,%L,1)$q$, u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '13 hours', dia_cita + interval '13 hours 30 minutes'), '23514');
+
+        -- No se puede recortar el horario por debajo de una cita vigente
+        EXECUTE 'SET CONSTRAINTS trg_horario_cubre_citas IMMEDIATE';
+        PERFORM pg_temp.debe_fallar('no se recorta el horario dejando una cita vigente fuera',
+            format($q$UPDATE horario SET hora_fin = '10:15' WHERE veterinario_id = %L$q$, v_iv), '23514');
+        PERFORM pg_temp.debe_fallar('no se borra el horario que cubre una cita vigente',
+            format($q$DELETE FROM horario WHERE veterinario_id = %L$q$, v_iv), '23514');
+        PERFORM pg_temp.debe_fallar('no se mueve el horario a otro día dejando la cita sin cubrir',
+            format($q$UPDATE horario SET dia_semana = %s WHERE veterinario_id = %L$q$, (dow % 7) + 1, v_iv), '23514');
+        UPDATE horario SET hora_inicio = '09:00', hora_fin = '11:00' WHERE veterinario_id = v_iv;
+        PERFORM pg_temp.debe_pasar('se puede recortar el horario si la cita sigue cubierta',
+            (SELECT hora_fin FROM horario WHERE veterinario_id = v_iv) = '11:00');
+        -- Una cita ya cancelada no frena los cambios de horario
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+        UPDATE cita SET estado = 'CANCELADA' WHERE id = c_iv;
+        UPDATE horario SET hora_inicio = '14:00', hora_fin = '16:00' WHERE veterinario_id = v_iv;
+        PERFORM pg_temp.debe_pasar('con la cita cancelada el horario se puede cambiar libremente',
+            (SELECT hora_inicio FROM horario WHERE veterinario_id = v_iv) = '14:00');
+        EXECUTE 'SET CONSTRAINTS trg_horario_cubre_citas DEFERRED';
+        UPDATE horario SET hora_inicio = '08:00', hora_fin = '12:00' WHERE veterinario_id = v_iv;
+
+        -- Bloqueos del calendario
+        INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin, motivo)
+            VALUES (a_iv, v_iv, dia_cita + interval '9 hours', dia_cita + interval '11 hours', 'Congreso') RETURNING id INTO b1;
+        PERFORM pg_temp.debe_fallar('bloqueo con el fin antes del inicio',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '15 hours', dia_cita + interval '14 hours'), '23514');
+        PERFORM pg_temp.debe_fallar('bloqueo vacío (inicio = fin)',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '15 hours', dia_cita + interval '15 hours'), '23514');
+        PERFORM pg_temp.debe_fallar('bloqueos solapados del mismo veterinario',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '10 hours', dia_cita + interval '12 hours'), '23P01');
+        INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin)
+            VALUES (a_iv, v_iv, dia_cita + interval '11 hours', dia_cita + interval '12 hours');   -- contiguo: sí se permite
+        PERFORM pg_temp.debe_pasar('bloqueos contiguos no se consideran solapados',
+            (SELECT count(*) FROM bloqueo_agenda WHERE veterinario_id = v_iv) = 2);
+        PERFORM pg_temp.debe_fallar('no se bloquea un intervalo que ya terminó',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,now() - interval '3 days', now() - interval '2 days')$q$,
+                   a_iv, v_iv), '23514');
+        PERFORM pg_temp.debe_fallar('bloqueo de un veterinario que es de otro aliado',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_clinica, v_iv, dia_cita + interval '1 day 9 hours', dia_cita + interval '1 day 10 hours'), '23503');
+        PERFORM pg_temp.debe_fallar('motivo de más de 200 caracteres',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin, motivo) VALUES (%L,%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '2 days', dia_cita + interval '2 days 1 hour', repeat('x', 201)), '23514');
+
+        -- Una cita no cae en un bloqueo, aunque esté dentro del horario
+        PERFORM pg_temp.debe_fallar('no se reserva dentro de un bloqueo',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+                      VALUES (%L,%L,%L,%L,%L,%L,%L,1)$q$, u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '10 hours 30 minutes', dia_cita + interval '11 hours'), '23514');
+        PERFORM pg_temp.debe_fallar('no se reserva si la cita solo roza el bloqueo',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+                      VALUES (%L,%L,%L,%L,%L,%L,%L,1)$q$, u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '8 hours 45 minutes', dia_cita + interval '9 hours 15 minutes'), '23514');
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '8 hours 30 minutes', dia_cita + interval '9 hours', 80000) RETURNING id INTO c_nueva;
+        PERFORM pg_temp.debe_pasar('una cita que termina justo cuando empieza el bloqueo sí se reserva',
+            (SELECT estado FROM cita WHERE id = c_nueva) = 'AGENDADA');
+        PERFORM pg_temp.debe_fallar('no se reprograma una cita dentro de un bloqueo',
+            format($q$UPDATE cita SET inicio = %L, fin = %L WHERE id = %L$q$, dia_cita + interval '10 hours', dia_cita + interval '10 hours 30 minutes', c_nueva), '23514');
+
+        -- No se bloquea un intervalo con citas vigentes
+        PERFORM pg_temp.debe_fallar('no se bloquea un intervalo con una cita vigente',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '8 hours', dia_cita + interval '8 hours 45 minutes'), '23514');
+        UPDATE cita SET estado = 'CANCELADA' WHERE id = c_nueva;
+        INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin)
+            VALUES (a_iv, v_iv, dia_cita + interval '8 hours', dia_cita + interval '8 hours 45 minutes');
+        PERFORM pg_temp.debe_pasar('con la cita cancelada ya se puede bloquear ese intervalo',
+            EXISTS (SELECT 1 FROM bloqueo_agenda WHERE veterinario_id = v_iv AND inicio = dia_cita + interval '8 hours'));
+
+        -- Quitar el bloqueo vuelve a abrir el espacio
+        DELETE FROM bloqueo_agenda WHERE id = b1;
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '9 hours 30 minutes', dia_cita + interval '10 hours', 80000);
+        PERFORM pg_temp.debe_pasar('al quitar el bloqueo se puede volver a reservar ese espacio',
+            EXISTS (SELECT 1 FROM cita WHERE veterinario_id = v_iv AND estado = 'AGENDADA' AND inicio = dia_cita + interval '9 hours 30 minutes'));
+
+        -- Una cita pendiente de aceptación también protege su espacio
+        UPDATE aliado SET modo_confirmacion = 'MANUAL' WHERE id = a_iv;
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_iv, s_iv, v_iv, dia_cita + interval '10 hours', dia_cita + interval '10 hours 30 minutes', 80000) RETURNING id INTO c_pend2;
+        PERFORM pg_temp.debe_pasar('la reserva en modo manual queda PENDIENTE',
+            (SELECT estado FROM cita WHERE id = c_pend2) = 'PENDIENTE');
+        PERFORM pg_temp.debe_fallar('no se bloquea un intervalo con una cita pendiente',
+            format($q$INSERT INTO bloqueo_agenda (aliado_id, veterinario_id, inicio, fin) VALUES (%L,%L,%L,%L)$q$,
+                   a_iv, v_iv, dia_cita + interval '10 hours', dia_cita + interval '10 hours 30 minutes'), '23514');
+        EXECUTE 'SET CONSTRAINTS trg_horario_cubre_citas IMMEDIATE';
+        PERFORM pg_temp.debe_fallar('no se recorta el horario dejando una cita pendiente fuera',
+            format($q$UPDATE horario SET hora_fin = '10:15' WHERE veterinario_id = %L$q$, v_iv), '23514');
+        EXECUTE 'SET CONSTRAINTS trg_horario_cubre_citas DEFERRED';
+        UPDATE aliado SET modo_confirmacion = 'AUTOMATICA' WHERE id = a_iv;
+    END;
+
+    -- ---------- HU-078: registro de fundaciones ----------
+    DECLARE
+        u_f uuid; a_f uuid;
+        anio_actual int := EXTRACT(YEAR FROM (now() AT TIME ZONE 'UTC'))::int;
+    BEGIN
+        INSERT INTO usuario (nombre, celular, correo, password_hash, rol)
+            VALUES ('Fundación Tres','3005556699','fund3@mail.com','h','ALIADO') RETURNING id INTO u_f;
+
+        -- Cada dato obligatorio en blanco se rechaza (antes solo se exigía que no fuera NULL)
+        PERFORM pg_temp.debe_fallar('fundación con el nombre en blanco',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','   ','d','c','Cali','u',2015)$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('fundación con la ciudad en blanco',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F','d','c','  ','u',2015)$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('fundación con la ubicación en blanco',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F','d','c','Cali','','2015')$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('fundación con el contacto en blanco',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F','d',' ','Cali','u',2015)$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('fundación con la descripción en blanco',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F',' ','c','Cali','u',2015)$q$, u_f), '23514');
+
+        -- Año de fundación: ni anterior a 1900 ni posterior al año actual
+        PERFORM pg_temp.debe_fallar('fundación fundada antes de 1900',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F','d','c','Cali','u',1899)$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('fundación fundada en el futuro',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F','d','c','Cali','u',%s)$q$, u_f, anio_actual + 1), '23514');
+
+        -- El logo es opcional, pero si viene debe ser una URL http(s)
+        PERFORM pg_temp.debe_fallar('logo que no es una URL web',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion, logo_url)
+                      VALUES (%L,'FUNDACION','F','d','c','Cali','u',2015,'javascript:alert(1)')$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('logo sin esquema',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion, logo_url)
+                      VALUES (%L,'FUNDACION','F','d','c','Cali','u',2015,'logo.png')$q$, u_f), '23514');
+
+        -- Registro correcto: sin logo, nace PENDIENTE
+        INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+            VALUES (u_f, 'FUNDACION', 'Fundación Tres', 'Rescate', 'tres@mail.com', 'Cali', 'Calle 5', anio_actual)
+            RETURNING id INTO a_f;
+        PERFORM pg_temp.debe_pasar('una fundación sin logo se registra como PENDIENTE',
+            (SELECT estado = 'PENDIENTE' AND logo_url IS NULL AND tipo = 'FUNDACION' FROM aliado WHERE id = a_f));
+        UPDATE aliado SET logo_url = 'https://cdn.veto.co/tres.png' WHERE id = a_f;
+        PERFORM pg_temp.debe_pasar('el logo http(s) se acepta',
+            (SELECT logo_url FROM aliado WHERE id = a_f) = 'https://cdn.veto.co/tres.png');
+        PERFORM pg_temp.debe_fallar('no se puede editar el año hacia el futuro',
+            format($q$UPDATE aliado SET anio_fundacion = %s WHERE id = %L$q$, anio_actual + 1, a_f), '23514');
+        PERFORM pg_temp.debe_fallar('no se puede dejar la ciudad en blanco al editar',
+            format($q$UPDATE aliado SET ciudad = ' ' WHERE id = %L$q$, a_f), '23514');
+
+        -- Las reglas de texto solo aplican a fundaciones; el logo, a todos los aliados
+        PERFORM pg_temp.debe_fallar('una clínica tampoco acepta un logo que no es URL web',
+            format($q$UPDATE aliado SET logo_url = 'ftp://x.co/a.png' WHERE id = %L$q$, a_clinica), '23514');
+    END;
+
+    -- ---------- HU-003: inicio de sesión con Google ----------
+    DECLARE
+        u_g1 uuid; u_g2 uuid; u_g3 uuid;
+    BEGIN
+        INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Google Uno','3007770001','g1@mail.com','GOOGLE') RETURNING id INTO u_g1;
+        INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Google Dos','3007770002','g2@mail.com','h') RETURNING id INTO u_g2;
+        INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Google Tres','3007770003','g3@mail.com','h') RETURNING id INTO u_g3;
+
+        INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('sub-1', u_g1, 'g1@mail.com');
+        PERFORM pg_temp.debe_pasar('una cuenta de Google se vincula a una cuenta de Veto',
+            EXISTS (SELECT 1 FROM cuenta_google WHERE google_sub = 'sub-1' AND usuario_id = u_g1));
+        PERFORM pg_temp.debe_fallar('la misma cuenta de Google no se vincula a dos usuarios',
+            format($q$INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('sub-1',%L,'g2@mail.com')$q$, u_g2), '23505');
+        PERFORM pg_temp.debe_fallar('un usuario no tiene dos cuentas de Google',
+            format($q$INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('sub-2',%L,'g1@mail.com')$q$, u_g1), '23505');
+        PERFORM pg_temp.debe_fallar('el identificador de Google no puede estar vacío',
+            format($q$INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('',%L,'g2@mail.com')$q$, u_g2), '23514');
+        PERFORM pg_temp.debe_fallar('no se vincula a un usuario que no existe',
+            $q$INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('sub-3', gen_random_uuid(), 'x@mail.com')$q$, '23503');
+
+        -- Solicitudes pendientes: vincular exige cuenta de Veto; registrar no puede tenerla
+        INSERT INTO google_pendiente (token_hash, tipo, google_sub, correo, nombre, usuario_id, expira_en)
+            VALUES ('p1', 'VINCULAR', 'sub-2', 'g2@mail.com', 'Google Dos', u_g2, now() + interval '10 minutes');
+        INSERT INTO google_pendiente (token_hash, tipo, google_sub, correo, nombre, expira_en)
+            VALUES ('p2', 'REGISTRO', 'sub-9', 'nuevo@mail.com', 'Nuevo', now() + interval '10 minutes');
+        PERFORM pg_temp.debe_pasar('se guardan las solicitudes de vincular y de registro',
+            (SELECT count(*) FROM google_pendiente WHERE token_hash IN ('p1','p2')) = 2);
+        PERFORM pg_temp.debe_fallar('vincular sin cuenta de Veto',
+            $q$INSERT INTO google_pendiente (token_hash, tipo, google_sub, correo, nombre, expira_en)
+               VALUES ('p3','VINCULAR','sub-4','a@mail.com','A', now() + interval '10 minutes')$q$, '23514');
+        PERFORM pg_temp.debe_fallar('registro con una cuenta de Veto asignada',
+            format($q$INSERT INTO google_pendiente (token_hash, tipo, google_sub, correo, nombre, usuario_id, expira_en)
+                      VALUES ('p4','REGISTRO','sub-5','a@mail.com','A',%L, now() + interval '10 minutes')$q$, u_g3), '23514');
+        PERFORM pg_temp.debe_fallar('tipo de solicitud desconocido',
+            $q$INSERT INTO google_pendiente (token_hash, tipo, google_sub, correo, nombre, expira_en)
+               VALUES ('p5','OTRO','sub-6','a@mail.com','A', now() + interval '10 minutes')$q$, '23514');
+
+        -- Intentos de OAuth: el state es único
+        INSERT INTO google_estado_oauth (state_hash, nonce, code_verifier, expira_en)
+            VALUES ('s1', 'n', 'v', now() + interval '10 minutes');
+        PERFORM pg_temp.debe_fallar('un state no se puede repetir',
+            $q$INSERT INTO google_estado_oauth (state_hash, nonce, code_verifier, expira_en)
+               VALUES ('s1','n2','v2', now() + interval '10 minutes')$q$, '23505');
+
+        -- Suspender no suelta la cuenta de Google; eliminar la cuenta sí (y limpia lo pendiente)
+        UPDATE usuario SET estado = 'SUSPENDIDA' WHERE id = u_g1;
+        PERFORM pg_temp.debe_pasar('suspender la cuenta conserva el vínculo con Google',
+            EXISTS (SELECT 1 FROM cuenta_google WHERE usuario_id = u_g1));
+        UPDATE usuario SET estado = 'ACTIVA' WHERE id = u_g1;
+        UPDATE usuario SET estado = 'ELIMINADA', eliminado_en = now() WHERE id = u_g1;
+        PERFORM pg_temp.debe_pasar('al eliminar la cuenta se suelta la cuenta de Google',
+            NOT EXISTS (SELECT 1 FROM cuenta_google WHERE usuario_id = u_g1));
+        INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('sub-1', u_g3, 'g1@mail.com');
+        PERFORM pg_temp.debe_pasar('esa cuenta de Google puede vincularse a una cuenta nueva',
+            EXISTS (SELECT 1 FROM cuenta_google WHERE google_sub = 'sub-1' AND usuario_id = u_g3));
+        UPDATE usuario SET estado = 'ELIMINADA', eliminado_en = now() WHERE id = u_g2;
+        PERFORM pg_temp.debe_pasar('al eliminar la cuenta se descartan sus solicitudes pendientes',
+            NOT EXISTS (SELECT 1 FROM google_pendiente WHERE usuario_id = u_g2));
+        PERFORM pg_temp.debe_pasar('las solicitudes de otras cuentas no se tocan',
+            EXISTS (SELECT 1 FROM google_pendiente WHERE token_hash = 'p2'));
+
+        -- Reautenticación con Google (acciones delicadas de quien no tiene contraseña)
+        INSERT INTO google_estado_oauth (state_hash, nonce, code_verifier, usuario_id, expira_en)
+            VALUES ('s2', 'n', 'v', u_g3, now() + interval '10 minutes');
+        PERFORM pg_temp.debe_fallar('un intento de reautenticación necesita un usuario real',
+            $q$INSERT INTO google_estado_oauth (state_hash, nonce, code_verifier, usuario_id, expira_en)
+               VALUES ('s3','n','v', gen_random_uuid(), now() + interval '10 minutes')$q$, '23503');
+        INSERT INTO google_reautenticacion (token_hash, usuario_id, expira_en)
+            VALUES ('r1', u_g3, now() + interval '5 minutes');
+        PERFORM pg_temp.debe_pasar('se guarda la constancia de reautenticación',
+            EXISTS (SELECT 1 FROM google_reautenticacion WHERE token_hash = 'r1' AND usuario_id = u_g3));
+        PERFORM pg_temp.debe_fallar('una constancia no se puede repetir',
+            format($q$INSERT INTO google_reautenticacion (token_hash, usuario_id, expira_en)
+                      VALUES ('r1',%L, now() + interval '5 minutes')$q$, u_g3), '23505');
+        PERFORM pg_temp.debe_fallar('una constancia necesita un usuario real',
+            $q$INSERT INTO google_reautenticacion (token_hash, usuario_id, expira_en)
+               VALUES ('r2', gen_random_uuid(), now() + interval '5 minutes')$q$, '23503');
+    END;
+
     RAISE NOTICE '=== TODAS LAS PRUEBAS PASARON ===';
 END $$;
 ROLLBACK;
