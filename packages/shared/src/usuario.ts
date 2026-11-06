@@ -55,9 +55,12 @@ export type ActualizarPerfil = z.infer<typeof actualizarPerfilSchema>;
 /** Texto que el usuario debe escribir para confirmar que quiere eliminar su cuenta. */
 export const CONFIRMACION_ELIMINAR_CUENTA = 'ELIMINAR';
 
-/** HU-006: eliminar la cuenta requiere la contraseña y una confirmación explícita. */
+/**
+ * HU-006: eliminar la cuenta requiere una confirmación explícita y comprobar la identidad: con la
+ * contraseña o, si la cuenta entra solo con Google (HU-003), volviendo a pasar por Google.
+ */
 export const eliminarCuentaSchema = z.object({
-  contrasena: z.string().min(1, 'La contraseña es obligatoria'),
+  contrasena: z.string().min(1, 'La contraseña es obligatoria').optional(),
   confirmacion: z.literal(CONFIRMACION_ELIMINAR_CUENTA, {
     error: `Escribe ${CONFIRMACION_ELIMINAR_CUENTA} para confirmar la eliminación`,
   }),

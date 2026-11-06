@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
-import type { GuardarServicio, Servicio } from '@veto/shared';
+import type { GuardarReglasPrecio, GuardarServicio, ReglaPrecio, Servicio } from '@veto/shared';
 import type { Consultor } from '../../database/database.service';
 
 interface ServicioRow extends QueryResultRow {
@@ -16,6 +16,17 @@ interface ServicioRow extends QueryResultRow {
   precio_base: number | string;
   activo: boolean;
   creado_en: Date | string;
+}
+
+interface ReglaPrecioRow extends QueryResultRow {
+  id: string;
+  especie_id: number | null;
+  peso_min_kg: number | string | null;
+  peso_max_kg: number | string | null;
+  edad_min_meses: number | null;
+  edad_max_meses: number | null;
+  precio: number | string;
+  prioridad: number;
 }
 
 const SELECT_SERVICIO = `
@@ -41,6 +52,56 @@ function columnas(datos: GuardarServicio): unknown[] {
 /** SQL de las tablas del módulo servicios (servicio, tipo_servicio). */
 @Injectable()
 export class ServiciosRepository {
+  async listarReglasPrecio(client: Consultor, servicioId: string): Promise<ReglaPrecio[]> {
+    const resultado = await client.query<ReglaPrecioRow>(
+      `SELECT id, especie_id, peso_min_kg, peso_max_kg, edad_min_meses, edad_max_meses,
+              precio::float8 AS precio, prioridad
+         FROM servicio_regla_precio
+        WHERE servicio_id = $1
+        ORDER BY prioridad DESC, precio DESC, id`,
+      [servicioId],
+    );
+    return resultado.rows.map(aReglaPrecio);
+  }
+
+  async reemplazarReglasPrecio(
+    client: PoolClient,
+    servicioId: string,
+    datos: GuardarReglasPrecio,
+  ): Promise<void> {
+    await client.query('DELETE FROM servicio_regla_precio WHERE servicio_id = $1', [servicioId]);
+    for (const regla of datos.reglas) {
+      await client.query(
+        `INSERT INTO servicio_regla_precio
+           (servicio_id, especie_id, peso_min_kg, peso_max_kg, edad_min_meses,
+            edad_max_meses, precio, prioridad)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          servicioId,
+          regla.especieId ?? null,
+          regla.pesoMinKg ?? null,
+          regla.pesoMaxKg ?? null,
+          regla.edadMinMeses ?? null,
+          regla.edadMaxMeses ?? null,
+          regla.precio,
+          regla.prioridad,
+        ],
+      );
+    }
+  }
+
+  async precioParaMascota(
+    client: Consultor,
+    servicioId: string,
+    mascotaId: string,
+  ): Promise<number> {
+    const resultado = await client.query<{ precio: number | string }>(
+      'SELECT fn_precio_servicio($1, $2)::float8 AS precio',
+      [servicioId, mascotaId],
+    );
+    return Number(resultado.rows[0].precio);
+  }
+
   async insertar(client: PoolClient, aliadoId: string, datos: GuardarServicio): Promise<string> {
     const r = await client.query<{ id: string }>(
       `INSERT INTO servicio
@@ -121,6 +182,19 @@ export class ServiciosRepository {
     );
     return r.rows;
   }
+}
+
+function aReglaPrecio(row: ReglaPrecioRow): ReglaPrecio {
+  return {
+    id: row.id,
+    especieId: row.especie_id,
+    pesoMinKg: row.peso_min_kg === null ? null : Number(row.peso_min_kg),
+    pesoMaxKg: row.peso_max_kg === null ? null : Number(row.peso_max_kg),
+    edadMinMeses: row.edad_min_meses,
+    edadMaxMeses: row.edad_max_meses,
+    precio: Number(row.precio),
+    prioridad: row.prioridad,
+  };
 }
 
 function aServicio(row: ServicioRow): Servicio {
