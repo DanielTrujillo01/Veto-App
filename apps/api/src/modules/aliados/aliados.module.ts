@@ -34,6 +34,7 @@ import { SedesService } from './sedes.service';
     AliadoConfirmacionController,
     ClinicasController,
     SedesController,
+    AliadosController,
   ],
   providers: [
     VeterinariosService,
