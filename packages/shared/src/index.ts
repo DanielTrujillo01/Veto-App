@@ -1,4 +1,5 @@
 export * from './enums';
+export * from './imagen';
 export * from './usuario';
 export * from './mascota';
 export * from './veterinario';
@@ -9,3 +10,4 @@ export * from './sede';
 export * from './consulta';
 export * from './especie';
 export * from './confirmacion';
+export * from './dos-factores';

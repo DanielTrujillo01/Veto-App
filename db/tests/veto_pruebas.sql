@@ -40,6 +40,7 @@ DECLARE
     u_tienda uuid; u_fund uuid; u_fund2 uuid; u_admin uuid;
     a_clinica uuid; a_clinica2 uuid; a_tienda uuid; a_fund uuid; a_fund_pend uuid;
     sede1 uuid; sede2 uuid; vet1 uuid; vet2 uuid; srv uuid; masc uuid; masc_gato uuid;
+    masc_limite uuid;
     cita1 uuid; cita2 uuid; cons uuid; prod uuid; ped uuid; ped2 uuid; mad uuid;
     dia smallint;
 BEGIN
@@ -100,11 +101,32 @@ BEGIN
 
     INSERT INTO mascota (tutor_id, nombre, especie_id, sexo, peso_kg, edad_meses) VALUES (u_tutor,'Firulais',perro,'MACHO',28,60) RETURNING id INTO masc;
     INSERT INTO mascota (tutor_id, nombre, especie_id, sexo) VALUES (u_tutor,'Misu',gato,'HEMBRA') RETURNING id INTO masc_gato;
+    INSERT INTO mascota (tutor_id, nombre, especie_id, sexo, peso_kg, edad_meses)
+        VALUES (u_tutor,'Borde',perro,'MACHO',20,60) RETURNING id INTO masc_limite;
     PERFORM pg_temp.debe_fallar('mascota sin sexo',
         format($q$INSERT INTO mascota (tutor_id, nombre, especie_id) VALUES (%L,'X',%L)$q$, u_tutor, perro), '23502');
     INSERT INTO servicio_regla_precio (servicio_id, peso_min_kg, precio, prioridad) VALUES (srv, 20, 90000, 1);
     PERFORM pg_temp.debe_pasar('perro de 28 kg paga la tarifa por peso (90000)', fn_precio_servicio(srv, masc) = 90000);
+    PERFORM pg_temp.debe_pasar('el límite inferior de peso es inclusivo', fn_precio_servicio(srv, masc_limite) = 90000);
     PERFORM pg_temp.debe_pasar('mascota sin peso cae en el precio base (60000)', fn_precio_servicio(srv, masc_gato) = 60000);
+    INSERT INTO servicio_regla_precio (servicio_id, especie_id, precio, prioridad)
+        VALUES (srv, perro, 100000, 2);
+    PERFORM pg_temp.debe_pasar('la regla de especie aplica a la especie exacta', fn_precio_servicio(srv, masc) = 100000);
+    INSERT INTO servicio_regla_precio
+        (servicio_id, edad_min_meses, edad_max_meses, precio, prioridad)
+        VALUES (srv, 60, 60, 110000, 3);
+    PERFORM pg_temp.debe_pasar('los límites de edad son inclusivos y la prioridad mayor gana', fn_precio_servicio(srv, masc) = 110000);
+    INSERT INTO servicio_regla_precio
+        (servicio_id, edad_min_meses, edad_max_meses, precio, prioridad)
+        VALUES (srv, 60, 60, 120000, 3);
+    PERFORM pg_temp.debe_pasar('a igual prioridad gana el precio más alto', fn_precio_servicio(srv, masc) = 120000);
+    DELETE FROM servicio_regla_precio WHERE servicio_id = srv;
+    INSERT INTO servicio_regla_precio
+        (servicio_id, edad_min_meses, edad_max_meses, precio, prioridad)
+        VALUES (srv, 0, 12, 50000, 1);
+    PERFORM pg_temp.debe_pasar('si falta la edad necesaria no aplica la regla', fn_precio_servicio(srv, masc_gato) = 60000);
+    DELETE FROM servicio_regla_precio WHERE servicio_id = srv;
+    PERFORM pg_temp.debe_pasar('sin reglas aplicables se usa el precio base', fn_precio_servicio(srv, masc) = 60000);
 
     -- ---------- Horarios ----------
     INSERT INTO horario (aliado_id, veterinario_id, dia_semana, hora_inicio, hora_fin) VALUES (a_clinica, vet1, 1, '00:00', '24:00');
@@ -245,6 +267,19 @@ BEGIN
     PERFORM pg_temp.debe_fallar('fundación PENDIENTE no puede publicar mascotas',
         format($q$INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
                   VALUES (%L,'Rocky',%L,12,'MACHO','MEDIANO','Suba')$q$, a_fund_pend, perro), '23514');
+    UPDATE aliado SET estado = 'ACTIVO' WHERE id = a_fund_pend;
+    INSERT INTO accion_admin (admin_id, objetivo_tipo, objetivo_id, accion)
+        VALUES (u_admin, 'aliado', a_fund_pend, 'APROBAR_FUNDACION');
+    INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
+        VALUES (a_fund_pend, 'Nube', perro, 10, 'HEMBRA', 'PEQUENO', 'Suba');
+    PERFORM pg_temp.debe_pasar('una fundación aprobada puede publicar mascotas',
+        EXISTS (SELECT 1 FROM mascota_adopcion WHERE fundacion_id = a_fund_pend AND nombre = 'Nube'));
+    UPDATE aliado SET estado = 'RECHAZADO' WHERE id = a_fund_pend;
+    INSERT INTO accion_admin (admin_id, objetivo_tipo, objetivo_id, accion)
+        VALUES (u_admin, 'aliado', a_fund_pend, 'RECHAZAR_FUNDACION');
+    PERFORM pg_temp.debe_fallar('una fundación rechazada no puede publicar mascotas',
+        format($q$INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
+                  VALUES (%L,'Luna',%L,8,'HEMBRA','PEQUENO','Suba')$q$, a_fund_pend, perro), '23514');
     PERFORM pg_temp.debe_fallar('una clínica no publica mascotas en adopción',
         format($q$INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)
                   VALUES (%L,'Rocky',%L,12,'MACHO','MEDIANO','Suba')$q$, a_clinica, perro), '23514');
@@ -291,6 +326,28 @@ BEGIN
         (SELECT count(*) FROM v_citas_reporte WHERE aliado_id = a_clinica AND especie = 'Perro' AND estado = 'FINALIZADA') = 1);
     PERFORM pg_temp.debe_pasar('v_ventas_productos suma los pedidos',
         (SELECT sum(subtotal) FROM v_ventas_productos WHERE aliado_id = a_tienda AND estado = 'DESPACHADO') = 300000);
+
+    -- ---------- HU-009 · Un tutor registra varias mascotas independientes ----------
+    DECLARE
+        m1 uuid; m2 uuid; antes record;
+    BEGIN
+        INSERT INTO mascota (tutor_id, nombre, especie_id, sexo, color) VALUES (u_tutor2,'Rocky',perro,'MACHO','Negro') RETURNING id INTO m1;
+        INSERT INTO mascota (tutor_id, nombre, especie_id, sexo, color) VALUES (u_tutor2,'Rocky',gato,'HEMBRA','Blanco') RETURNING id INTO m2;
+        INSERT INTO mascota_foto (mascota_id, url) VALUES (m1,'https://fotos.veto.co/1.jpg'), (m2,'https://fotos.veto.co/2.jpg');
+        PERFORM pg_temp.debe_pasar('un tutor puede tener varias mascotas, incluso con el mismo nombre',
+            (SELECT count(*) FROM mascota WHERE tutor_id = u_tutor2) = 2);
+        SELECT nombre, especie_id, sexo, color INTO antes FROM mascota WHERE id = m2;
+        -- Lo mismo que hace MascotasRepository al editar m1
+        UPDATE mascota SET nombre = 'Rocky Jr', color = 'Café' WHERE id = m1 AND tutor_id = u_tutor2;
+        DELETE FROM mascota_foto WHERE mascota_id = m1;
+        INSERT INTO mascota_foto (mascota_id, url) VALUES (m1,'https://fotos.veto.co/1b.jpg');
+        PERFORM pg_temp.debe_pasar('editar una mascota no cambia los datos de las demás',
+            (SELECT (nombre, especie_id, sexo, color) = (antes.nombre, antes.especie_id, antes.sexo, antes.color) FROM mascota WHERE id = m2));
+        PERFORM pg_temp.debe_pasar('editar las fotos de una mascota no toca las de las demás',
+            (SELECT array_agg(url) FROM mascota_foto WHERE mascota_id = m2) = ARRAY['https://fotos.veto.co/2.jpg']);
+        PERFORM pg_temp.debe_pasar('una mascota de otro tutor no se edita con el filtro por tutor',
+            NOT EXISTS (SELECT 1 FROM mascota WHERE id = masc AND tutor_id = u_tutor2));
+    END;
 
     -- ---------- HU-006 · Eliminar cuenta: anonimizar y conservar ----------
     DECLARE

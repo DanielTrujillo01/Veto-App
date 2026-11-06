@@ -172,6 +172,16 @@ describe('HU-014 · el veterinario ingresa con su propia cuenta', () => {
     await app.close();
   });
 
+  it('inicia sesión aunque el correo use mayúsculas', async () => {
+    const { db } = crearBdFalsa(manejador, null);
+    const app = await crearApp([IdentidadModule], db);
+    await request(app.getHttpServer())
+      .post('/api/identidad/login')
+      .send({ correo: VET1_USUARIO.correo.toUpperCase(), contrasena: 'clave-segura-1' })
+      .expect(201);
+    await app.close();
+  });
+
   it('con una contraseña incorrecta no se crea sesión', async () => {
     const { db, consultas } = crearBdFalsa(manejador, null);
     const app = await crearApp([IdentidadModule], db);

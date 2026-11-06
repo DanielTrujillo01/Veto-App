@@ -14,7 +14,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { filtrarServiciosSchema, guardarServicioSchema } from '@veto/shared';
+import {
+  cotizarServicioSchema,
+  filtrarServiciosSchema,
+  guardarReglasPrecioSchema,
+  guardarServicioSchema,
+} from '@veto/shared';
 import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from '../identidad/auth.guard';
 import { Roles, RolesGuard } from '../identidad/roles.guard';
@@ -106,6 +111,41 @@ export class ServiciosController {
     );
   }
 
+  @Get(':servicioId/reglas-precio')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({ summary: 'Consultar las reglas de precio de un servicio (HU-020)' })
+  reglasPrecio(
+    @Req() request: RequestAutenticada,
+    @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+  ) {
+    return this.servicios.listarReglasPrecio(request.usuario.id, aliadoId, servicioId);
+  }
+
+  @Put(':servicioId/reglas-precio')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({
+    summary: 'Reemplazar las reglas de precio de un servicio (HU-020)',
+    description:
+      'Envía { reglas: [...] }. Una lista vacía quita todas las reglas. Las dimensiones de rango ' +
+      'se combinan y sus límites son inclusivos; valores nulos u omitidos significan cualquiera.',
+  })
+  guardarReglasPrecio(
+    @Req() request: RequestAutenticada,
+    @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+    @Body() body: unknown,
+  ) {
+    return this.servicios.guardarReglasPrecio(
+      request.usuario.id,
+      aliadoId,
+      servicioId,
+      validar(guardarReglasPrecioSchema, body),
+    );
+  }
+
   @Patch(':servicioId/desactivar')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('ALIADO')
@@ -144,5 +184,20 @@ export class PublicServiciosController {
   @ApiOperation({ summary: 'Consultar detalle público de un servicio disponible' })
   obtener(@Param('servicioId', new ParseUUIDPipe()) servicioId: string) {
     return this.servicios.obtenerDisponible(servicioId);
+  }
+
+  @Get(':servicioId/cotizacion')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('TUTOR')
+  @ApiOperation({
+    summary: 'Cotizar un servicio con los datos de una mascota propia (HU-020)',
+  })
+  cotizar(
+    @Req() request: RequestAutenticada,
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+    @Query() query: unknown,
+  ) {
+    const datos = validar(cotizarServicioSchema, query);
+    return this.servicios.cotizarParaMascota(request.usuario.id, servicioId, datos.mascotaId);
   }
 }

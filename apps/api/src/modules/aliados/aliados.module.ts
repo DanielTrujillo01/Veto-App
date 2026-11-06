@@ -5,6 +5,7 @@ import { AliadoConfirmacionController } from './aliado-confirmacion.controller';
 import { AliadoConfirmacionService } from './aliado-confirmacion.service';
 import { AliadoEspeciesController } from './aliado-especies.controller';
 import { AliadoEspeciesService } from './aliado-especies.service';
+import { AliadosController } from './aliados.controller';
 import { AliadosService } from './aliados.service';
 import { ClinicasController } from './clinicas.controller';
 import { VeterinarioPerfilController } from './veterinario-perfil.controller';
@@ -27,6 +28,7 @@ import { AliadosController } from './aliados.controller';
 @Module({
   imports: [IdentidadModule, MascotasModule],
   controllers: [
+    AliadosController,
     VeterinariosController,
     VeterinarioPerfilController,
     AliadoEspeciesController,

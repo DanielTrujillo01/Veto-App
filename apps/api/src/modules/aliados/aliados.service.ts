@@ -4,21 +4,38 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DatabaseService } from '../../database/database.service';
-import { IdentidadService } from '../identidad/identidad.service';
-import type { RegistroAliado, SedeInput } from '@veto/shared';
 import type { PoolClient } from 'pg';
-import type { TipoAliado } from '@veto/shared';
-import type { Consultor } from '../../database/database.service';
+import type { EstadoAliado, PerfilUsuario, RegistroAliado, TipoAliado } from '@veto/shared';
+import { DatabaseService, type Consultor } from '../../database/database.service';
+import { esErrorPg, PG } from '../../common/validacion';
+import { IdentidadService } from '../identidad/identidad.service';
+import { hashContrasena } from '../identidad/seguridad';
 
-type UserRegistration = { nombre: string; celular: string; correo: string; contrasena: string };
-type Branch = {
+/** Aliado recién registrado (HU-007), en camelCase como el resto de la API. */
+export type AliadoRegistrado = {
   id: string;
-  aliado_id: string;
+  tipo: TipoAliado;
   nombre: string;
-  direccion: string;
-  ciudad: string;
-  activa: boolean;
+  descripcion: string | null;
+  contacto: string | null;
+  estado: EstadoAliado;
+  creadoEn: string;
+};
+
+export type FundacionRevision = {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  logoUrl: string | null;
+  contacto: string | null;
+  ciudad: string | null;
+  ubicacion: string | null;
+  anioFundacion: number | null;
+  estado: EstadoAliado;
+  creadoEn: string;
+  representante: string;
+  correo: string;
+  celular: string;
 };
 
 @Injectable()
@@ -28,14 +45,15 @@ export class AliadosService {
     private readonly identidad: IdentidadService,
   ) {}
 
-  async register(input: RegistroAliado) {
-    const userInput: UserRegistration = {
-      nombre: input.nombre,
-      celular: input.celular,
-      correo: input.correo,
-      contrasena: input.contrasena,
-    };
-    const passwordHash = await this.identidad.hashPassword(userInput.contrasena);
+  /**
+   * HU-007: registra la cuenta y el aliado en una sola transacción. El aliado queda PENDIENTE
+   * hasta que el Equipo Veto lo active. Un veterinario independiente recibe también su perfil
+   * de veterinario, para poder tener horarios y citas.
+   */
+  async register(
+    input: RegistroAliado,
+  ): Promise<{ usuario: PerfilUsuario; aliado: AliadoRegistrado }> {
+    const passwordHash = await hashContrasena(input.contrasena);
     try {
       return await this.database.withUser(null, async (client) => {
         const user = await this.identidad.insertUser(client, userInput, passwordHash, 'ALIADO');
@@ -63,7 +81,7 @@ export class AliadosService {
               ubicacion,
               creado_en`,
           [
-            user.id,
+            usuario.id,
             input.tipo,
             input.nombreAliado ?? input.nombre,
             input.descripcion ?? null,
@@ -73,132 +91,29 @@ export class AliadosService {
             input.ubicacion ?? null,
           ],
         );
-        const ally = result.rows[0];
+        const fila = r.rows[0];
         if (input.tipo === 'VET_INDEPENDIENTE') {
-          await client.query('INSERT INTO veterinario (aliado_id,usuario_id) VALUES ($1,$2)', [
-            ally.id,
-            user.id,
+          await client.query('INSERT INTO veterinario (aliado_id, usuario_id) VALUES ($1, $2)', [
+            fila.id,
+            usuario.id,
           ]);
         }
-        return { usuario: user, aliado: ally };
+        const aliado: AliadoRegistrado = {
+          id: fila.id,
+          tipo: fila.tipo,
+          nombre: fila.nombre,
+          descripcion: fila.descripcion,
+          contacto: fila.contacto,
+          estado: fila.estado,
+          creadoEn: new Date(fila.creado_en).toISOString(),
+        };
+        return { usuario, aliado };
       });
     } catch (error) {
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        error.code === '23505'
-      ) {
-        throw new ConflictException({
-          code: 'ACCOUNT_EXISTS',
-          message: 'Ya existe una cuenta con ese correo.',
-        });
+      if (esErrorPg(error, PG.UNICO)) {
+        throw new ConflictException('Ya existe una cuenta con ese correo');
       }
       throw error;
-    }
-  }
-
-  private async assertClinic(allyId: string): Promise<void> {
-    const result = await this.database.query<{ tipo: string }>(
-      'SELECT tipo FROM aliado WHERE id=$1',
-      [allyId],
-    );
-    if (!result.rowCount)
-      throw new NotFoundException({ code: 'ALLY_NOT_FOUND', message: 'No se encontró el aliado.' });
-    if (result.rows[0].tipo !== 'CLINICA')
-      throw new ForbiddenException({
-        code: 'FORBIDDEN',
-        message: 'Solo una clínica puede gestionar sedes.',
-      });
-  }
-
-  async createBranch(allyId: string, input: SedeInput): Promise<Branch> {
-    await this.assertClinic(allyId);
-    return this.database.withUser(null, async (client) => {
-      const result = await client.query<Branch>(
-        `INSERT INTO sede (aliado_id,nombre,direccion,ciudad) VALUES ($1,$2,$3,$4)
-         RETURNING id,aliado_id,nombre,direccion,ciudad,activa`,
-        [allyId, input.nombre, input.direccion, input.ciudad],
-      );
-      return result.rows[0];
-    });
-  }
-
-  async listBranches(allyId: string, includeInactive = false): Promise<Branch[]> {
-    await this.assertClinic(allyId);
-    const result = await this.database.query<Branch>(
-      `SELECT id,aliado_id,nombre,direccion,ciudad,activa FROM sede
-       WHERE aliado_id=$1 AND ($2::boolean OR activa) ORDER BY nombre`,
-      [allyId, includeInactive],
-    );
-    return result.rows;
-  }
-
-  async updateBranch(allyId: string, branchId: string, input: SedeInput): Promise<Branch> {
-    await this.assertClinic(allyId);
-    return this.branchMutation(
-      allyId,
-      branchId,
-      'UPDATE sede SET nombre=$3,direccion=$4,ciudad=$5 WHERE aliado_id=$1 AND id=$2',
-      [input.nombre, input.direccion, input.ciudad],
-    );
-  }
-
-  async deactivateBranch(allyId: string, branchId: string): Promise<Branch> {
-    await this.assertClinic(allyId);
-    return this.branchMutation(
-      allyId,
-      branchId,
-      'UPDATE sede SET activa=false WHERE aliado_id=$1 AND id=$2',
-      [],
-    );
-  }
-
-  private async branchMutation(
-    allyId: string,
-    branchId: string,
-    updateSql: string,
-    extra: unknown[],
-  ): Promise<Branch> {
-    return this.database.withUser(null, async (client) => {
-      const result = await client.query<Branch>(
-        `${updateSql} RETURNING id,aliado_id,nombre,direccion,ciudad,activa`,
-        [allyId, branchId, ...extra],
-      );
-      if (!result.rowCount)
-        throw new NotFoundException({
-          code: 'BRANCH_NOT_FOUND',
-          message: 'No se encontró la sede de esta clínica.',
-        });
-      return result.rows[0];
-    });
-  }
-
-  async assertCanOfferServices(allyId: string): Promise<void> {
-    const result = await this.database.query<{ tipo: string }>(
-      'SELECT tipo FROM aliado WHERE id=$1',
-      [allyId],
-    );
-    if (!result.rowCount)
-      throw new NotFoundException({ code: 'ALLY_NOT_FOUND', message: 'No se encontró el aliado.' });
-    if (!['CLINICA', 'VET_INDEPENDIENTE'].includes(result.rows[0].tipo)) {
-      throw new ForbiddenException({
-        code: 'FORBIDDEN',
-        message: 'Solo una clínica o veterinario independiente puede ofrecer servicios.',
-      });
-    }
-  }
-
-  async assertActiveBranch(allyId: string, branchId: string): Promise<void> {
-    const result = await this.database.query<{ activa: boolean }>(
-      'SELECT activa FROM sede WHERE id=$1 AND aliado_id=$2',
-      [branchId, allyId],
-    );
-    if (!result.rowCount || !result.rows[0].activa) {
-      throw new ConflictException({
-        code: 'INVALID_BRANCH',
-        message: 'La sede debe existir y estar activa para este aliado.',
-      });
     }
   }
 
@@ -259,5 +174,82 @@ export class AliadosService {
       [aliadoId],
     );
     return Boolean(r.rows[0]?.ok);
+  }
+
+  /** HU-079: lista las solicitudes de fundación que aún no tienen una decisión. */
+  async listarFundacionesPendientes(client: Consultor) {
+    const r = await client.query<{
+      id: string;
+      nombre: string;
+      contacto: string;
+      ciudad: string;
+      estado: EstadoAliado;
+      creadoEn: Date | string;
+      representante: string;
+      correo: string;
+      celular: string;
+    }>(
+      `SELECT a.id, a.nombre, a.contacto, a.ciudad, a.estado,
+              a.creado_en AS "creadoEn", u.nombre AS representante, u.correo, u.celular
+         FROM aliado a JOIN usuario u ON u.id = a.usuario_id
+        WHERE a.tipo = 'FUNDACION' AND a.estado = 'PENDIENTE'
+        ORDER BY a.creado_en, a.id`,
+    );
+    return r.rows.map((fila) => ({ ...fila, creadoEn: new Date(fila.creadoEn).toISOString() }));
+  }
+
+  /** HU-079: consulta los datos que la fundación envió, solo para revisión administrativa. */
+  async obtenerFundacionParaRevision(
+    client: Consultor,
+    fundacionId: string,
+  ): Promise<FundacionRevision> {
+    const r = await client.query<Omit<FundacionRevision, 'creadoEn'> & { creadoEn: Date | string }>(
+      `SELECT a.id, a.nombre, a.descripcion, a.logo_url AS "logoUrl", a.contacto, a.ciudad,
+              a.ubicacion, a.anio_fundacion AS "anioFundacion", a.estado,
+              a.creado_en AS "creadoEn", u.nombre AS representante, u.correo, u.celular
+         FROM aliado a JOIN usuario u ON u.id = a.usuario_id
+        WHERE a.id = $1 AND a.tipo = 'FUNDACION'`,
+      [fundacionId],
+    );
+    const fila = r.rows[0];
+    if (!fila) throw new NotFoundException('La fundación no existe');
+    return { ...fila, creadoEn: new Date(fila.creadoEn).toISOString() };
+  }
+
+  /** HU-079: una segunda decisión concurrente no puede sobreescribir la primera. */
+  async decidirFundacion(
+    client: Consultor,
+    fundacionId: string,
+    estado: Extract<EstadoAliado, 'ACTIVO' | 'RECHAZADO'>,
+  ): Promise<{ id: string; nombre: string; estado: EstadoAliado }> {
+    const r = await client.query<{ id: string; nombre: string; estado: EstadoAliado }>(
+      `UPDATE aliado
+          SET estado = $2
+        WHERE id = $1 AND tipo = 'FUNDACION' AND estado = 'PENDIENTE'
+        RETURNING id, nombre, estado`,
+      [fundacionId, estado],
+    );
+    const fundacion = r.rows[0];
+    if (fundacion) return fundacion;
+
+    const existente = await client.query<{ estado: EstadoAliado }>(
+      `SELECT estado FROM aliado WHERE id = $1 AND tipo = 'FUNDACION'`,
+      [fundacionId],
+    );
+    if (!existente.rows[0]) throw new NotFoundException('La fundación no existe');
+    throw new ConflictException('La solicitud ya fue resuelta o no está pendiente');
+  }
+
+  /** HU-079: la fundación consulta únicamente el estado de su propia solicitud. */
+  async estadoFundacionPropia(usuarioId: string) {
+    return this.database.withUser(usuarioId, async (client) => {
+      const r = await client.query<{ id: string; estado: EstadoAliado }>(
+        `SELECT id, estado FROM aliado WHERE usuario_id = $1 AND tipo = 'FUNDACION'`,
+        [usuarioId],
+      );
+      const fundacion = r.rows[0];
+      if (!fundacion) throw new NotFoundException('No tienes una solicitud de fundación');
+      return fundacion;
+    });
   }
 }

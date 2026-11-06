@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AliadosModule } from '../aliados/aliados.module';
 import { CitasModule } from '../citas/citas.module';
 import { IdentidadModule } from '../identidad/identidad.module';
+import { MascotasModule } from '../mascotas/mascotas.module';
 import { HorariosController } from './horarios.controller';
 import { HorariosService } from './horarios.service';
 import {
@@ -22,7 +23,7 @@ import { ServiciosService } from './servicios.service';
  * lo pide a través de un servicio exportado por este módulo, nunca con SQL directo.
  */
 @Module({
-  imports: [IdentidadModule, AliadosModule, CitasModule],
+  imports: [IdentidadModule, AliadosModule, CitasModule, MascotasModule],
   controllers: [
     HorariosController,
     TiposServicioController,
