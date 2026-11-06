@@ -18,6 +18,8 @@ export type AliadoRegistrado = {
   nombre: string;
   descripcion: string | null;
   contacto: string | null;
+  ciudad: string;
+  ubicacion: string;
   estado: EstadoAliado;
   creadoEn: string;
 };
@@ -116,6 +118,8 @@ export class AliadosService {
           nombre: fila.nombre,
           descripcion: fila.descripcion,
           contacto: fila.contacto,
+          ciudad: fila.ciudad,
+          ubicacion: fila.ubicacion,
           estado: fila.estado,
           creadoEn: new Date(fila.creado_en).toISOString(),
         };
