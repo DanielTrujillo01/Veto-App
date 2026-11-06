@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -55,6 +56,9 @@ export const ANONIMO = {
   correo: (id: string) => `eliminado+${id}@veto.invalid`,
 };
 
+/** Contraseña de las cuentas creadas con Google (HU-003): no tiene el formato scrypt, nadie la acierta. */
+export const CONTRASENA_GOOGLE = 'GOOGLE';
+
 export type UsuarioSesion = PerfilUsuario;
 
 @Injectable()
@@ -106,6 +110,19 @@ export class IdentidadService {
     const cuenta = resultado.rows[0];
     if (!cuenta || !(await verificarContrasena(contrasena, cuenta.password_hash))) return null;
 
+    return this.abrirSesionOExigir2fa(cuenta);
+  }
+
+  /**
+   * Con la identidad ya comprobada (contraseña, o Google en HU-003): si la cuenta tiene la
+   * verificación en dos pasos activa devuelve un desafío para completarla; si no, abre la sesión.
+   */
+  async abrirSesionOExigir2fa(
+    cuenta: UsuarioSesion & { totp_secreto: string | null; totp_activado_en: Date | null },
+  ): Promise<
+    | { token: string; usuario: UsuarioSesion }
+    | { requiere2fa: true; desafio: string; expiraEn: Date }
+  > {
     if (cuenta.totp_activado_en && cuenta.totp_secreto) {
       const desafio = randomBytes(32).toString('base64url');
       const expiraEn = new Date(Date.now() + DURACION_DESAFIO_2FA_MS);
@@ -441,7 +458,7 @@ export class IdentidadService {
     return { activado: true, activadoEn: actualizado.rows[0].totp_activado_en };
   }
 
-  private async crearSesion(
+  async crearSesion(
     cuenta: UsuarioSesion & {
       password_hash?: string;
       totp_secreto?: string | null;
@@ -522,6 +539,11 @@ export class IdentidadService {
       const cambiaCorreo =
         datos.correo !== undefined && datos.correo.toLowerCase() !== actual.correo.toLowerCase();
       if (cambiaCorreo) {
+        if (actual.password_hash === CONTRASENA_GOOGLE) {
+          throw new ForbiddenException(
+            'Esta cuenta entra con Google: su correo es el de esa cuenta y no se cambia aquí',
+          );
+        }
         if (
           !datos.contrasenaActual ||
           !(await verificarContrasena(datos.contrasenaActual, actual.password_hash))
@@ -555,11 +577,37 @@ export class IdentidadService {
    * cierre de todas las sesiones y cancelación de las citas futuras. Se conservan mascotas,
    * citas pasadas y consultas para la trazabilidad clínica.
    */
-  async eliminarCuenta(usuarioId: string, datos: EliminarCuenta): Promise<void> {
+  async eliminarCuenta(
+    usuarioId: string,
+    datos: EliminarCuenta,
+    reautenticacion?: string,
+  ): Promise<void> {
     await this.db.withUser(usuarioId, async (client) => {
       const cuenta = await this.cuentaActiva(client, usuarioId, true);
-      if (!(await verificarContrasena(datos.contrasena, cuenta.password_hash))) {
-        throw new UnauthorizedException('La contraseña no es correcta');
+      if (cuenta.password_hash === CONTRASENA_GOOGLE) {
+        // Entra solo con Google: no hay contraseña, se confirma volviendo a pasar por Google.
+        // La constancia es de un solo uso y se consume en esta misma transacción.
+        const vigente =
+          reautenticacion !== undefined &&
+          (await this.consumirReautenticacion(client, usuarioId, reautenticacion));
+        if (!vigente) {
+          throw new UnauthorizedException({
+            statusCode: 401,
+            error: 'Unauthorized',
+            message: 'Confirma tu identidad con Google para eliminar la cuenta',
+            requiereReautenticacion: true,
+          });
+        }
+      } else {
+        if (!datos.contrasena) {
+          throw new BadRequestException({
+            message: 'Revisa los datos ingresados',
+            errores: { contrasena: 'La contraseña es obligatoria' },
+          });
+        }
+        if (!(await verificarContrasena(datos.contrasena, cuenta.password_hash))) {
+          throw new UnauthorizedException('La contraseña no es correcta');
+        }
       }
       if (cuenta.rol !== 'TUTOR') {
         throw new ForbiddenException(
@@ -583,6 +631,17 @@ export class IdentidadService {
       );
       await client.query('DELETE FROM sesion WHERE usuario_id = $1', [usuarioId]);
     });
+  }
+
+  /** true si `token` es una constancia de reautenticación vigente de ese usuario; la gasta. */
+  private async consumirReautenticacion(client: PoolClient, usuarioId: string, token: string) {
+    const r = await client.query(
+      `DELETE FROM google_reautenticacion
+        WHERE token_hash = $1 AND usuario_id = $2 AND expira_en > now()
+        RETURNING 1`,
+      [hashSesion(token), usuarioId],
+    );
+    return r.rows.length > 0;
   }
 
   private async cuentaActiva(client: PoolClient, usuarioId: string, bloquear = false) {

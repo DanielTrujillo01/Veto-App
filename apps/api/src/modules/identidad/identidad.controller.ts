@@ -27,12 +27,8 @@ import {
 import type { Response } from 'express';
 import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from './auth.guard';
-import { IdentidadService, NOMBRE_COOKIE_SESION } from './identidad.service';
-
-function cookieSesion(valor: string, maxAge: number): string {
-  const seguro = process.env.NODE_ENV === 'production';
-  return `${NOMBRE_COOKIE_SESION}=${valor}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${seguro ? '; Secure' : ''}`;
-}
+import { COOKIE_REAUTENTICACION, cookieReautenticacion, cookieSesion, leerCookie } from './cookies';
+import { IdentidadService } from './identidad.service';
 
 @ApiTags('identidad')
 @Controller('identidad')
@@ -128,8 +124,11 @@ export class IdentidadController {
   @ApiOperation({
     summary: 'Eliminar la cuenta (HU-006)',
     description:
-      'Requiere { contrasena, confirmacion: "ELIMINAR" }. Anonimiza los datos personales, cierra ' +
-      'todas las sesiones y cancela las citas futuras; se conservan mascotas e historial clínico.',
+      'Requiere { contrasena, confirmacion: "ELIMINAR" }. Si la cuenta entra solo con Google no ' +
+      'tiene contraseña: se envía solo { confirmacion } después de GET /identidad/google/reautenticar ' +
+      '(constancia en la cookie veto_reauth); sin ella responde 401 con requiereReautenticacion. ' +
+      'Anonimiza los datos personales, cierra todas las sesiones y cancela las citas futuras; ' +
+      'se conservan mascotas e historial clínico.',
   })
   async eliminar(
     @Req() request: RequestAutenticada,
@@ -137,8 +136,12 @@ export class IdentidadController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const datos = validar(eliminarCuentaSchema, body);
-    await this.identidad.eliminarCuenta(request.usuario.id, datos);
-    response.setHeader('Set-Cookie', cookieSesion('', 0));
+    await this.identidad.eliminarCuenta(
+      request.usuario.id,
+      datos,
+      leerCookie(request.headers.cookie, COOKIE_REAUTENTICACION),
+    );
+    response.setHeader('Set-Cookie', [cookieSesion('', 0), cookieReautenticacion('', 0)]);
     return { mensaje: 'Tu cuenta fue eliminada. Ya no podrás iniciar sesión con ella.' };
   }
 }

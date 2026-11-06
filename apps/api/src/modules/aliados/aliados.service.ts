@@ -18,9 +18,13 @@ export type AliadoRegistrado = {
   nombre: string;
   descripcion: string | null;
   contacto: string | null;
+  ciudad: string;
+  ubicacion: string;
   estado: EstadoAliado;
   creadoEn: string;
 };
+
+type UserRegistration = { nombre: string; celular: string; correo: string; contrasena: string };
 
 export type FundacionRevision = {
   id: string;
@@ -53,47 +57,74 @@ export class AliadosService {
   async register(
     input: RegistroAliado,
   ): Promise<{ usuario: PerfilUsuario; aliado: AliadoRegistrado }> {
+    const userInput: UserRegistration = {
+      nombre: input.nombre,
+      celular: input.celular,
+      correo: input.correo,
+      contrasena: input.contrasena,
+    };
     const passwordHash = await hashContrasena(input.contrasena);
     try {
       return await this.database.withUser(null, async (client) => {
-        const usuario = await this.identidad.insertUser(client, input, passwordHash, 'ALIADO');
-        const r = await client.query<{
-          id: string;
-          tipo: TipoAliado;
-          nombre: string;
-          descripcion: string | null;
-          contacto: string | null;
-          estado: EstadoAliado;
-          creado_en: Date | string;
-        }>(
-          `INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING id, tipo, nombre, descripcion, contacto, estado, creado_en`,
+        const user = await this.identidad.insertUser(client, userInput, passwordHash, 'ALIADO');
+
+        const result = await client.query(
+          `INSERT INTO aliado (
+              usuario_id,
+              tipo,
+              nombre,
+              descripcion,
+              contacto,
+              estado,
+              ciudad,
+              ubicacion
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+          RETURNING
+              id,
+              usuario_id,
+              tipo,
+              nombre,
+              descripcion,
+              contacto,
+              estado,
+              ciudad,
+              ubicacion,
+              creado_en`,
           [
-            usuario.id,
+            user.id,
             input.tipo,
             input.nombreAliado ?? input.nombre,
             input.descripcion ?? null,
             input.contacto ?? null,
+            'ACTIVO',
+            input.ciudad ?? null,
+            input.ubicacion ?? null,
           ],
         );
-        const fila = r.rows[0];
+
+        const fila = result.rows[0];
+
         if (input.tipo === 'VET_INDEPENDIENTE') {
           await client.query('INSERT INTO veterinario (aliado_id, usuario_id) VALUES ($1, $2)', [
             fila.id,
-            usuario.id,
+            user.id,
           ]);
         }
+
         const aliado: AliadoRegistrado = {
           id: fila.id,
           tipo: fila.tipo,
           nombre: fila.nombre,
           descripcion: fila.descripcion,
           contacto: fila.contacto,
+          ciudad: fila.ciudad,
+          ubicacion: fila.ubicacion,
           estado: fila.estado,
           creadoEn: new Date(fila.creado_en).toISOString(),
         };
-        return { usuario, aliado };
+
+        return { usuario: user, aliado };
       });
     } catch (error) {
       if (esErrorPg(error, PG.UNICO)) {

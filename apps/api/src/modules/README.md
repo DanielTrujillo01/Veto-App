@@ -5,7 +5,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 
 | Módulo           | Qué hace                                                                           | Tablas propias                                                   | Historias                                |
 | ---------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
-| `identidad`      | Cuentas, registro, inicio de sesión y recuperación de contraseña                   | usuario, sesion, desafio_2fa                                     | HU-001, 002, 004–006                     |
+| `identidad`      | Cuentas, registro, inicio de sesión y recuperación de contraseña                   | usuario, sesion, desafio_2fa, cuenta_google, google_estado_oauth, google_pendiente                                     | HU-001, 002, 003, 004–006                     |
 | `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                        | HU-007, 012–016, 021, 023, 078–079       |
 | `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                   | HU-008–011                               |
 | `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, tipo_servicio          | HU-016, 018–022, 024–028                 |
@@ -54,6 +54,36 @@ modelo de datos (`docs/modelo-de-datos.md`).
   `http://localhost:8025`. Para pruebas reales de bajo volumen se puede configurar Gmail con una
   contraseña de aplicación; está sujeto a límites y no se garantiza como servicio gratuito para
   producción.
+- **Registro de fundación (HU-078):** `POST /api/aliados/fundaciones` (público) recibe `nombre`,
+  `ciudad`, `contacto`, `descripcion`, `ubicacion`, `anioFundacion`, `logoUrl?` (opcional), `representante?`
+  y los datos de la cuenta (`celular`, `correo`, `contrasena`). Crea cuenta y fundación en una
+  transacción y responde 201 `{ usuario, fundacion }` con la fundación `PENDIENTE`; tipo y estado no se
+  pueden enviar. Un campo faltante o inválido responde 400 con **todos** los errores a la vez
+  (`errores: { campo: mensaje }`) para que el formulario conserve lo ya escrito y marque cada campo.
+  Correo repetido → 409. La fundación consulta lo guardado, aun pendiente, con
+  `GET /api/aliados/me/fundacion/datos` (`{ fundacion }` con sus datos, estado y los de su cuenta).
+  `POST /api/aliados` sigue sin aceptar `FUNDACION`.
+- **Inicio de sesión con Google (HU-003, opcional):** con `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`
+  (y `GOOGLE_REDIRECT_URI` si no es el valor por defecto) en el entorno. Son **navegaciones**, no `fetch`:
+  `GET /api/identidad/google` redirige a Google y `GET /api/identidad/google/callback` es donde vuelve.
+  La API responde siempre con una redirección a `WEB_ORIGIN/login?google=<resultado>`:
+  `ok` (sesión abierta, cookie `veto_session`), `2fa` (la cuenta tiene verificación en dos pasos:
+  el desafío va en el fragmento `#desafio=...` y se completa con `POST /api/identidad/login/2fa`),
+  `vincular` (el correo ya tiene cuenta), `registro` (primera vez) o `error` con
+  `&motivo=cancelado|proveedor|correo_no_verificado|estado|cuenta_inactiva|cuenta_vinculada|no_disponible`.
+  Cancelar, rechazar o fallar en Google **nunca** crea una sesión. Para `vincular` y `registro` la web
+  consulta `GET /api/identidad/google/pendiente` (`{ pendiente: { tipo, correo, nombre, requiereCodigo? } }`) y termina con
+  `POST /api/identidad/google/vincular` `{ contrasena, codigo? }` (200 + sesión) o
+  `POST /api/identidad/google/completar` `{ celular }` (201 + sesión); `DELETE .../pendiente` descarta.
+  `GET /api/identidad/google/disponible` indica si el botón debe mostrarse.
+  **Cuentas que entran solo con Google** (sin contraseña): `GET /api/identidad/google/estado`
+  (con sesión) responde `{ vinculada, sinContrasena }`. Si `sinContrasena` es `true`, para eliminar la cuenta
+  la web navega a `GET /api/identidad/google/reautenticar` (Google pide las credenciales de nuevo), vuelve
+  con `?google=reauth` y una constancia de 5 minutos de un solo uso en la cookie `veto_reauth`; luego llama a
+  `DELETE /api/identidad/me` con `{ confirmacion: "ELIMINAR" }` (sin `contrasena`). Sin constancia responde
+  401 con `requiereReautenticacion: true`. Para una cuenta con contraseña, `contrasena` sigue siendo
+  obligatoria. Cambiar el correo de una cuenta de Google responde 403. Todas las cookies del flujo son
+  `HttpOnly` y solo viajan a `/api/identidad/google`.
 - **Revisión de fundaciones (HU-079):** `GET /api/admin/fundaciones/pendientes`,
   `GET /api/admin/fundaciones/:fundacionId`, `PATCH .../:fundacionId/aprobar` y
   `PATCH .../:fundacionId/rechazar` son exclusivos de `EQUIPO_VETO`. Una decisión transiciona
@@ -129,3 +159,13 @@ aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con 
   precio mayor; datos necesarios faltantes o ausencia de regla aplicable devuelven el precio base.
 - Las reglas pertenecen al módulo `servicios`; el precio de una cita existente es una instantánea
   y no se modifica al cambiar las reglas.
+- **Calendario de disponibilidad (HU-022):** el horario semanal se guarda con
+  `PUT /api/aliados/:aliadoId/veterinarios/:veterinarioId/horarios` (clínica o veterinario independiente; el
+  independiente obtiene su `veterinarioId` en `GET /api/veterinarios/me`). Los días libres y vacaciones son
+  bloqueos: `POST | GET /api/aliados/:aliadoId/veterinarios/:veterinarioId/bloqueos` y `DELETE .../:bloqueoId`.
+  El tutor consulta `GET /api/aliados/:aliadoId/disponibilidad?servicioId=&desde=&hasta=[&veterinarioId=]`
+  (público, máximo 31 días): devuelve los espacios en que el servicio cabe completo, cada uno con su
+  `veterinarioId`. **HU-029 debe reservar uno de esos espacios con su `veterinarioId`** y mostrar el `estado`
+  que devuelve el `INSERT`. Un cambio de horario o un bloqueo responde 409 si deja citas vigentes sin
+  cubrir; la respuesta del bloqueo lista esas citas (`citas`). Lee las citas ocupadas solo a través de
+  `CitasService.ocupadosEntre` y `vigentesEnIntervalo`.

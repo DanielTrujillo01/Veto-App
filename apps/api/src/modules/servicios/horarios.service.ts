@@ -7,6 +7,10 @@ import {
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { GuardarHorarios } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
+import { esErrorPg, PG } from '../../common/validacion';
+
+/** HU-016 (clínicas) y HU-022 (veterinario independiente) gestionan el horario de su veterinario. */
+const TIPOS_CON_HORARIO = ['CLINICA', 'VET_INDEPENDIENTE'];
 
 interface HorarioRow extends QueryResultRow {
   id: string;
@@ -52,10 +56,16 @@ export class HorariosService {
             ],
           );
         }
+        // HU-022: el horario nuevo no puede dejar citas vigentes fuera de la atención. La base lo
+        // comprueba al confirmar; se adelanta aquí para responder 409 con su mensaje.
+        await client.query('SET CONSTRAINTS trg_horario_cubre_citas IMMEDIATE');
         return this.listarDesdeCliente(client, clinicaId, veterinarioId);
       } catch (error) {
         if (this.isConflict(error)) {
           throw new ConflictException('Los horarios del veterinario se solapan');
+        }
+        if (esErrorPg(error, PG.CHECK)) {
+          throw new ConflictException((error as Error).message);
         }
         throw error;
       }
@@ -94,13 +104,15 @@ export class HorariosService {
     }
     const acceso = resultado.rows[0];
     if (
-      acceso.tipo !== 'CLINICA' ||
+      !TIPOS_CON_HORARIO.includes(acceso.tipo) ||
       acceso.estado !== 'ACTIVO' ||
       acceso.usuario_id !== administradorId ||
       acceso.rol !== 'ALIADO' ||
       acceso.estado_cuenta !== 'ACTIVA'
     ) {
-      throw new ForbiddenException('Solo el administrador de la clínica puede gestionar horarios');
+      throw new ForbiddenException(
+        'Solo el administrador de la clínica o del veterinario independiente puede gestionar horarios',
+      );
     }
   }
 

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient } from 'pg';
+import type { Consultor } from '../../database/database.service';
 
 /**
  * Operaciones sobre citas que otros módulos necesitan. Reciben el `client` de la transacción
@@ -15,6 +16,65 @@ export class CitasService {
       [tutorId],
     );
     return resultado.rowCount ?? 0;
+  }
+
+  /**
+   * HU-022: citas vigentes (PENDIENTE o AGENDADA) de un veterinario que se cruzan con
+   * [inicio, fin). Sirve para avisar qué hay que reprogramar antes de bloquear ese intervalo.
+   */
+  async vigentesEnIntervalo(
+    client: Consultor,
+    veterinarioId: string,
+    inicio: string,
+    fin: string,
+  ): Promise<{ id: string; inicio: string; fin: string; estado: string }[]> {
+    const r = await client.query<{
+      id: string;
+      inicio: Date | string;
+      fin: Date | string;
+      estado: string;
+    }>(
+      `SELECT id, inicio, fin, estado FROM cita
+        WHERE veterinario_id = $1 AND estado IN ('PENDIENTE', 'AGENDADA')
+          AND tstzrange(inicio, fin) && tstzrange($2::timestamptz, $3::timestamptz)
+        ORDER BY inicio`,
+      [veterinarioId, inicio, fin],
+    );
+    return r.rows.map((c) => ({
+      id: c.id,
+      inicio: new Date(c.inicio).toISOString(),
+      fin: new Date(c.fin).toISOString(),
+      estado: c.estado,
+    }));
+  }
+
+  /**
+   * HU-022: espacios ocupados (citas PENDIENTE o AGENDADA que no terminaron) de varios
+   * veterinarios entre dos fechas de calendario, ambas incluidas. El calendario del tutor
+   * descuenta estos intervalos de la atención.
+   */
+  async ocupadosEntre(
+    client: Consultor,
+    veterinarioIds: string[],
+    desde: string,
+    hasta: string,
+  ): Promise<{ veterinarioId: string; inicio: string; fin: string }[]> {
+    if (veterinarioIds.length === 0) return [];
+    const r = await client.query<{
+      veterinario_id: string;
+      inicio: Date | string;
+      fin: Date | string;
+    }>(
+      `SELECT veterinario_id, inicio, fin FROM cita
+        WHERE veterinario_id = ANY($1::uuid[]) AND estado IN ('PENDIENTE', 'AGENDADA')
+          AND fin > $2::date::timestamptz AND inicio < ($3::date + 1)::timestamptz`,
+      [veterinarioIds, desde, hasta],
+    );
+    return r.rows.map((c) => ({
+      veterinarioId: c.veterinario_id,
+      inicio: new Date(c.inicio).toISOString(),
+      fin: new Date(c.fin).toISOString(),
+    }));
   }
 
   /** HU-018: indica si un servicio ya tiene citas (de cualquier estado). */

@@ -74,18 +74,18 @@ Solo uso `jsonb` en las respuestas del formulario de adopción (HU-090), para po
 
 ## 3. Estructura
 
-| Módulo                              | Tablas                                                                 | Historias                             |
-| ----------------------------------- | ---------------------------------------------------------------------- | ------------------------------------- |
-| **Usuarios y aliados**              | `usuario`, `aliado`, `veterinario`, `sede`, `aliado_especie`           | 001, 002, 006, 007, 012–016, 021, 078 |
-| **Mascotas**                        | `mascota`, `mascota_foto` + vista `v_historial_mascota`                | 008–011                               |
-| **Servicios y horarios**            | `servicio`, `servicio_regla_precio`, `horario`                         | 016, 018–022                          |
-| **Citas**                           | `cita`, `historial_estado`                                             | 029, 031, 032, 034                    |
-| **Registro de consulta**            | `consulta`, `consulta_anotacion` + vista `v_consulta_detalle` (0003)   | 014, 017, 037, 042, 043               |
-| **Productos y pedidos**             | `producto`, `producto_foto`, `pedido`, `pedido_item`                   | 044–050                               |
-| **Adopción**                        | `mascota_adopcion`, `solicitud_adopcion` + vista `v_catalogo_adopcion` | 078, 080, 082, 083, 087, 090, 092–094 |
-| **Notificaciones y administración** | `notificacion`, `accion_admin`                                         | 048, 052, 054, 065–067                |
-| **Reportes**                        | vistas `v_citas_reporte`, `v_ventas_productos`                         | 070, 073, 074                         |
-| **Catálogos**                       | `especie`, `tipo_servicio`, `categoria_producto`                       | 018, 026, 044                         |
+| Módulo                              | Tablas                                                                  | Historias                             |
+| ----------------------------------- | ----------------------------------------------------------------------- | ------------------------------------- |
+| **Usuarios y aliados**              | `usuario`, `aliado`, `veterinario`, `sede`, `aliado_especie`            | 001, 002, 006, 007, 012–016, 021, 078 |
+| **Mascotas**                        | `mascota`, `mascota_foto` + vista `v_historial_mascota`                 | 008–011                               |
+| **Servicios y horarios**            | `servicio`, `servicio_regla_precio`, `horario`, `bloqueo_agenda` (0007) | 016, 018–022                          |
+| **Citas**                           | `cita`, `historial_estado`                                              | 029, 031, 032, 034                    |
+| **Registro de consulta**            | `consulta`, `consulta_anotacion` + vista `v_consulta_detalle` (0003)    | 014, 017, 037, 042, 043               |
+| **Productos y pedidos**             | `producto`, `producto_foto`, `pedido`, `pedido_item`                    | 044–050                               |
+| **Adopción**                        | `mascota_adopcion`, `solicitud_adopcion` + vista `v_catalogo_adopcion`  | 078, 080, 082, 083, 087, 090, 092–094 |
+| **Notificaciones y administración** | `notificacion`, `accion_admin`                                          | 048, 052, 054, 065–067                |
+| **Reportes**                        | vistas `v_citas_reporte`, `v_ventas_productos`                          | 070, 073, 074                         |
+| **Catálogos**                       | `especie`, `tipo_servicio`, `categoria_producto`                        | 018, 026, 044                         |
 
 La extensión HU-004 pertenece al módulo `identidad` y reutiliza `usuario` y `desafio_2fa`; no
 requiere una nueva entidad en el esquema.
@@ -115,10 +115,14 @@ Detalles de diseño:
 | Cita finalizada o cancelada ya no cambia                                                                             | Trigger `fn_cita_validar`                      |
 | Estado inicial de la cita según la confirmación del aliado: automática → AGENDADA, manual → PENDIENTE (HU-023)       | Trigger `fn_cita_validar`                      |
 | Una cita pendiente también ocupa el espacio; solo el aliado la acepta (→ AGENDADA) o la rechaza (→ CANCELADA)        | Trigger + `EXCLUDE` e índice                   |
+| Una cita no cae en un bloqueo del calendario; los bloqueos de un veterinario no se solapan (HU-022)                  | Trigger + `EXCLUDE`                            |
+| No se bloquea ni se recorta el horario si deja citas vigentes sin cubrir (HU-022)                                    | Triggers de bloqueo y de horario               |
 | Precio según peso, edad o especie; sin regla o sin dato → precio base (HU-020)                                       | Función `fn_precio_servicio`                   |
 | Consulta cerrada no se edita ni se borra; se corrige con anotación (HU-042)                                          | Triggers + tabla de solo inserción             |
 | Pedido: valida producto activo, descuenta stock, lo devuelve al cancelar; no se cancela tras despachar (HU-046, 049) | Triggers `fn_pedido_item` y `fn_pedido_estado` |
 | Solicitud de adopción: una activa por tutor y mascota; rechazar exige motivo (HU-090, 094)                           | Índice único parcial + `CHECK`                 |
+| Fundación: datos completos y no en blanco, año válido, logo con URL http(s) (HU-078)                                 | `CHECK` + trigger `fn_fundacion_anio_valido`   |
+| Una cuenta de Google se vincula a una sola cuenta de Veto, y al revés (HU-003)                                       | `PK` + `UNIQUE` en `cuenta_google`             |
 | Quién cambió el estado de cita, pedido, solicitud o publicación                                                      | `historial_estado` (solo inserción)            |
 
 Para que `historial_estado` y la regla "solo el aliado finaliza" funcionen, la aplicación debe ejecutar al inicio de cada transacción:
@@ -155,7 +159,58 @@ una cita pendiente ya está permitido en la base de datos; falta el endpoint, qu
 listarse como disponible; la base rechaza nuevas citas sobre él, y las citas existentes conservan su
 precio. Si un servicio ya tiene citas, la API no permite cambiar su tipo ni su modalidad.
 
-Lo que queda en la aplicación: calcular los espacios libres del calendario, los permisos por rol y el envío efectivo de notificaciones.
+**Registro de fundaciones (HU-078).** Una fundación es un `aliado` de tipo `FUNDACION` más la cuenta que la administra
+(rol `ALIADO`), creados en una sola transacción. Nace `PENDIENTE`: el Equipo Veto la aprueba o rechaza en HU-079 y solo
+una fundación `ACTIVO` publica mascotas. El tipo y el estado no los elige quien se registra. Nombre, ciudad, contacto,
+descripción, ubicación y año de fundación son obligatorios; el logo es opcional y guarda solo la URL. La base ya exigía
+que esos datos no fueran nulos; la migración 0008 agrega que no sean solo espacios, que el año no sea futuro y que el
+logo sea una URL web. Esas restricciones se crean `NOT VALID`: rigen para todo lo que se guarde desde ahora, sin
+rechazar filas que ya existían. «Contacto» es texto libre (correo, teléfono o ambos); el nombre del representante es
+opcional y, si no se indica, la cuenta usa el nombre de la fundación.
+
+**Inicio de sesión con Google (HU-003).** Es opcional: sin `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` la API lo
+informa (`GET /identidad/google/disponible`) y la web oculta el botón. Usa el flujo de código de autorización de
+OpenID Connect con PKCE. Una cuenta de Google se identifica por su `sub` (no por el correo) y se guarda en
+`cuenta_google`, con una sola cuenta de Google por cuenta de Veto y al revés. `google_estado_oauth` guarda cada intento
+(hash del `state`, `nonce` y verificador PKCE) y se consume una sola vez; `google_pendiente` guarda lo que falta antes
+de abrir sesión. Se guardan solo hashes de los tokens. Decisiones a confirmar:
+
+- **Un correo que ya tiene cuenta no se vincula solo por coincidir.** Aunque Google confirme el correo, en Veto el
+  correo no se verifica al registrarse; si alguien se hubiera registrado antes con el correo de otra persona y se
+  vinculara sin más, conservaría el acceso. Por eso quien llega con Google debe demostrar que la cuenta es suya con
+  su contraseña (y su código de Google Authenticator si tiene 2FA); cinco fallos invalidan la solicitud.
+- **Quien entra por primera vez crea la cuenta de tutor completando el celular**, porque Google no lo entrega y es
+  obligatorio (HU-001). La cuenta queda sin contraseña utilizable (`password_hash = 'GOOGLE'`), así que solo entra con
+  Google. Como no hay contraseña con la que confirmar acciones delicadas, **eliminar la cuenta se confirma volviendo a pasar por
+  Google**: la API manda a Google con `prompt=login`, y si vuelve la misma cuenta de Google vinculada (con la sesión
+  aún abierta) emite una constancia de 5 minutos y de un solo uso (`google_reautenticacion`), que se gasta dentro de la
+  misma transacción que anonimiza la cuenta. Cambiar el correo queda bloqueado en estas cuentas: su correo es el de
+  Google y el ingreso se hace por el `sub`, no por el correo.
+- **Google no salta la verificación en dos pasos**: si la cuenta la tiene activa, la API entrega el desafío y la web lo
+  completa con el endpoint de 2FA que ya existía.
+- Al eliminar la cuenta (HU-006) un trigger suelta la cuenta de Google y descarta sus solicitudes pendientes.
+- Cancelar, rechazar o un error de Google redirige a la web con `google=error&motivo=...` y nunca abre sesión.
+
+**Calendario de disponibilidad (HU-022).** La disponibilidad de un aliado Vet es la de sus veterinarios (el independiente
+tiene su propio perfil de veterinario, decisión 10). Se compone de tres cosas: el horario semanal con vigencia
+(`horario`, decisión 11), los **bloqueos** puntuales (`bloqueo_agenda`: vacaciones, permisos, un día libre) y las citas
+vigentes. Un bloqueo le gana al horario. El horario con `veterinario_id` nulo (horario general del aliado) no se usa:
+las reservas se validan contra el horario de cada veterinario. Reglas que hace cumplir la base:
+
+- Un intervalo válido tiene fin posterior al inicio; ni los horarios ni los bloqueos del mismo veterinario se solapan
+  (los contiguos sí se permiten).
+- No se reserva ni se reprograma una cita fuera del horario o dentro de un bloqueo.
+- No se puede bloquear un intervalo, ni recortar, mover o borrar el horario, si eso deja una cita vigente
+  (`PENDIENTE` o `AGENDADA`, futura) fuera de la atención: primero se reprograma o se cancela. La comprobación del horario
+  se hace al confirmar la transacción para que se pueda reemplazar el horario completo de una vez.
+- Reservar, bloquear y cambiar el horario del mismo veterinario se serializan con un candado, así que dos operaciones
+  simultáneas nunca dejan una cita dentro de un bloqueo o fuera del horario.
+
+El calendario que ve el tutor no se guarda: se calcula en cada consulta (horario menos bloqueos menos citas vigentes,
+en espacios consecutivos de la duración del servicio) y por eso refleja los cambios al instante. Las horas del horario
+son "hora de pared" y se interpretan en la zona horaria de la base, igual que la regla que valida las reservas.
+
+Lo que queda en la aplicación: los permisos por rol y el envío efectivo de notificaciones.
 
 ---
 
