@@ -26,7 +26,7 @@ Con eso salen **55 historias esenciales**. Revisé el color de las 95 historias 
 **Incluidas (55):**
 HU-001, 002, 006, 007 · 008–011 · 012–017 · 018–022 · 024, 025, 026, 028 · 029, 031, 032, 034 · 037, 042, 043 · 044–050 · 052, 054 · 065, 066, 067 · 070, 073, 074 · 078, 080, 082, 083, 086, 087, 090, 092, 093, 094
 
-**Excluidas (40), por grupos:**
+**Excluidas del alcance inicial (40), por grupos:**
 
 | Grupo                      | Historias                                                                                                                                                                                             |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -38,6 +38,23 @@ HU-001, 002, 006, 007 · 008–011 · 012–017 · 018–022 · 024, 025, 026, 0
 | Detalle de cita y consulta | 023 confirmación automática, 027 ordenar, 030 motivo de la cita, 033 recomendaciones al cerrar, 035, 036, 038 signos vitales, 039 diagnóstico y tratamiento, 040 anexos, 041 controles de seguimiento |
 | Dashboards extra           | 071, 072, 075, 076, 077                                                                                                                                                                               |
 | Adopción complementaria    | 079 aprobar fundaciones, 081, 084 varias fotos, 085, 088, 089, 091, 095                                                                                                                               |
+
+### Extensión implementada después: recuperación de contraseña (HU-004)
+
+HU-004 se incorporó después de definir el baseline de 55 historias esenciales. Para mantener
+compatibilidad con las bases existentes, no agrega tablas ni columnas: reutiliza `desafio_2fa`,
+definida en la migración de verificación en dos pasos.
+
+La tabla ya contiene `token_hash`, `usuario_id`, `expira_en` y `creado_en`, suficientes para
+persistir enlaces de verificación y tokens temporales de restablecimiento. La aplicación identifica
+los registros de recuperación mediante prefijos `hu004:` dentro de `token_hash`; los hashes reales
+de tokens siguen siendo no reversibles. Los códigos TOTP aceptados y los intentos fallidos también
+se registran como desafíos temporales, de modo que se pueden invalidar o limitar sin alterar el
+esquema. Los registros de recuperación antiguos se purgan al solicitar una nueva recuperación.
+
+No se introduce un campo `totp_ultimo_contador_recuperacion`: la prevención de reutilización del
+código TOTP se implementa con un desafío temporal en la misma tabla, que vence al terminar la
+ventana de 30 segundos del código.
 
 ---
 
@@ -69,6 +86,9 @@ Solo uso `jsonb` en las respuestas del formulario de adopción (HU-090), para po
 | **Notificaciones y administración** | `notificacion`, `accion_admin`                                          | 048, 052, 054, 065–067                |
 | **Reportes**                        | vistas `v_citas_reporte`, `v_ventas_productos`                          | 070, 073, 074                         |
 | **Catálogos**                       | `especie`, `tipo_servicio`, `categoria_producto`                        | 018, 026, 044                         |
+
+La extensión HU-004 pertenece al módulo `identidad` y reutiliza `usuario` y `desafio_2fa`; no
+requiere una nueva entidad en el esquema.
 
 Detalles de diseño:
 

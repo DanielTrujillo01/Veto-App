@@ -56,6 +56,17 @@ BEGIN
     INSERT INTO usuario (nombre, celular, correo, password_hash, rol) VALUES ('Fundación 2','3005556688','fund2@mail.com','h','ALIADO') RETURNING id INTO u_fund2;
     INSERT INTO usuario (nombre, celular, correo, password_hash, rol) VALUES ('Equipo Veto','3006667788','admin@veto.co','h','EQUIPO_VETO') RETURNING id INTO u_admin;
 
+    INSERT INTO desafio_2fa (token_hash, usuario_id, expira_en)
+        VALUES ('hu004:verificacion:hash-prueba', u_tutor, now() + interval '15 minutes');
+    PERFORM pg_temp.debe_pasar('HU-004 guarda enlaces como desafíos en la tabla existente',
+        EXISTS (SELECT 1 FROM desafio_2fa
+                 WHERE usuario_id = u_tutor
+                   AND token_hash = 'hu004:verificacion:hash-prueba'));
+    PERFORM pg_temp.debe_fallar('los tokens de recuperación conservan unicidad en desafio_2fa',
+        format($q$INSERT INTO desafio_2fa (token_hash, usuario_id, expira_en)
+                  VALUES ('hu004:verificacion:hash-prueba',%L,now()+interval '15 minutes')$q$, u_tutor),
+        '23505');
+
     PERFORM pg_temp.debe_fallar('correo duplicado (sin importar mayúsculas)',
         $q$INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('X','3001112299','TUTOR@mail.com','h')$q$, '23505');
     PERFORM pg_temp.debe_fallar('celular con menos de 10 dígitos',

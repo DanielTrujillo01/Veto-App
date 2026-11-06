@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { crearMascotaSchema, loginSchema, registroUsuarioSchema } from '../src';
+import {
+  completarRecuperacionSchema,
+  crearMascotaSchema,
+  loginSchema,
+  registroUsuarioSchema,
+  solicitarRecuperacionSchema,
+  verificarRecuperacionSchema,
+} from '../src';
 
 describe('registroUsuarioSchema (HU-001)', () => {
   const valido = {
@@ -33,6 +40,34 @@ describe('loginSchema (HU-002)', () => {
   it('exige correo y contraseña', () => {
     expect(loginSchema.safeParse({ correo: 'ana@mail.com', contrasena: '' }).success).toBe(false);
     expect(loginSchema.safeParse({ correo: 'ana@mail.com', contrasena: 'x' }).success).toBe(true);
+  });
+});
+
+describe('esquemas de recuperación de contraseña (HU-004)', () => {
+  const token = 'a'.repeat(43);
+
+  it('valida el correo de solicitud', () => {
+    expect(solicitarRecuperacionSchema.safeParse({ correo: 'ana@mail.com' }).success).toBe(true);
+    expect(solicitarRecuperacionSchema.safeParse({ correo: 'correo-invalido' }).success).toBe(
+      false,
+    );
+  });
+
+  it('exige un token y código de seis dígitos para verificar', () => {
+    expect(verificarRecuperacionSchema.safeParse({ token, codigo: '123456' }).success).toBe(true);
+    expect(
+      verificarRecuperacionSchema.safeParse({ token: 'corto', codigo: '123456' }).success,
+    ).toBe(false);
+    expect(verificarRecuperacionSchema.safeParse({ token, codigo: '12345x' }).success).toBe(false);
+  });
+
+  it('valida el token y la nueva contraseña', () => {
+    expect(
+      completarRecuperacionSchema.safeParse({ token, contrasena: 'clave-segura-1' }).success,
+    ).toBe(true);
+    expect(completarRecuperacionSchema.safeParse({ token, contrasena: 'corta' }).success).toBe(
+      false,
+    );
   });
 });
 

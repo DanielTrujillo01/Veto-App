@@ -7,12 +7,13 @@ import { GoogleOAuthClient } from './google-oauth.cliente';
 import { IdentidadController, RegistroUsuariosController } from './identidad.controller';
 import { IdentidadService } from './identidad.service';
 import { RolesGuard } from './roles.guard';
+import { CorreoRecuperacionService } from './correo-recuperacion.service';
 
 /**
  * Módulo identidad: Cuentas, registro e inicio de sesión.
  *
- * Tablas propias: usuario, cuenta_google, google_estado_oauth, google_pendiente
- * Historias:      HU-001, 002, 003, 006
+ * Tablas propias: usuario, sesion, desafio_2fa, cuenta_google, google_estado_oauth, google_pendiente
+ * Historias:      HU-001, 002, 003, 004–006
  *
  * Regla: solo este módulo escribe en sus tablas. Si otro módulo necesita un dato,
  * lo pide a través de un servicio exportado por este módulo, nunca con SQL directo.
@@ -20,7 +21,14 @@ import { RolesGuard } from './roles.guard';
 @Module({
   imports: [CitasModule],
   controllers: [IdentidadController, RegistroUsuariosController, GoogleAuthController],
-  providers: [IdentidadService, GoogleAuthService, GoogleOAuthClient, AuthGuard, RolesGuard],
+  providers: [
+    IdentidadService,
+    AuthGuard,
+    RolesGuard,
+    CorreoRecuperacionService,
+    GoogleAuthService,
+    GoogleOAuthClient,
+  ],
   exports: [IdentidadService, AuthGuard, RolesGuard],
 })
 export class IdentidadModule {}

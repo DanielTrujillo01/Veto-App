@@ -16,10 +16,13 @@ import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   actualizarPerfilSchema,
   codigo2faSchema,
+  completarRecuperacionSchema,
   desafio2faSchema,
   eliminarCuentaSchema,
   loginSchema,
   registroUsuarioSchema,
+  solicitarRecuperacionSchema,
+  verificarRecuperacionSchema,
 } from '@veto/shared';
 import type { Response } from 'express';
 import { validar } from '../../common/validacion';
@@ -55,6 +58,27 @@ export class IdentidadController {
     const resultado = await this.identidad.completarLogin2fa(datos.desafio, datos.codigo);
     response.setHeader('Set-Cookie', cookieSesion(resultado.token, 604800));
     return { usuario: resultado.usuario };
+  }
+
+  @Post('recuperar-contrasena')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Solicitar recuperación de contraseña (HU-004)' })
+  async solicitarRecuperacion(@Body() body: unknown) {
+    return this.identidad.solicitarRecuperacion(validar(solicitarRecuperacionSchema, body));
+  }
+
+  @Post('recuperar-contrasena/verificar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar el enlace y el código TOTP (HU-004)' })
+  async verificarRecuperacion(@Body() body: unknown) {
+    return this.identidad.verificarRecuperacion(validar(verificarRecuperacionSchema, body));
+  }
+
+  @Post('recuperar-contrasena/completar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Establecer una contraseña nueva (HU-004)' })
+  async completarRecuperacion(@Body() body: unknown) {
+    return this.identidad.completarRecuperacion(validar(completarRecuperacionSchema, body));
   }
 
   @Get('2fa')

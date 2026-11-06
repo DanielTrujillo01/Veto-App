@@ -19,6 +19,7 @@ pre.mermaid{background:var(--card);border:1px solid var(--line);border-radius:12
 <section id="vista_general"><h2>Vista general (entidades principales, sin columnas)</h2><pre class="mermaid">
 erDiagram
     usuario ||--o| aliado : &quot;&quot;
+    usuario ||--o{ desafio_2fa : &quot;&quot;
     aliado ||--o{ veterinario : &quot;&quot;
     usuario ||--o| veterinario : &quot;&quot;
     aliado ||--o{ sede : &quot;&quot;
@@ -93,6 +94,14 @@ erDiagram
         rol_usuario rol
         estado_cuenta estado
         timestamptz eliminado_en
+        text totp_secreto
+        timestamptz totp_activado_en
+    }
+    desafio_2fa {
+        text token_hash PK
+        uuid usuario_id FK
+        timestamptz expira_en
+        timestamptz creado_en
     }
     veterinario {
         uuid id PK
@@ -103,6 +112,7 @@ erDiagram
         bool activo
     }
     usuario ||--o| aliado : &quot;usuario_id&quot;
+    usuario ||--o{ desafio_2fa : &quot;usuario_id (incluye desafíos HU-004)&quot;
     aliado ||--o{ veterinario : &quot;aliado_id&quot;
     usuario ||--o| veterinario : &quot;usuario_id&quot;
     aliado ||--o{ sede : &quot;aliado_id&quot;

@@ -3,6 +3,7 @@
 ```mermaid
 erDiagram
     usuario ||--o| aliado : ""
+    usuario ||--o{ desafio_2fa : ""
     aliado ||--o{ veterinario : ""
     usuario ||--o| veterinario : ""
     aliado ||--o{ sede : ""
@@ -80,6 +81,14 @@ erDiagram
         rol_usuario rol
         estado_cuenta estado
         timestamptz eliminado_en
+        text totp_secreto
+        timestamptz totp_activado_en
+    }
+    desafio_2fa {
+        text token_hash PK
+        uuid usuario_id FK
+        timestamptz expira_en
+        timestamptz creado_en
     }
     veterinario {
         uuid id PK
@@ -90,6 +99,7 @@ erDiagram
         bool activo
     }
     usuario ||--o| aliado : "usuario_id"
+    usuario ||--o{ desafio_2fa : "usuario_id (incluye desafíos HU-004)"
     aliado ||--o{ veterinario : "aliado_id"
     usuario ||--o| veterinario : "usuario_id"
     aliado ||--o{ sede : "aliado_id"

@@ -4,6 +4,8 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
@@ -13,6 +15,9 @@ import type {
   EliminarCuenta,
   PerfilUsuario,
   RegistroUsuario,
+  CompletarRecuperacion,
+  SolicitarRecuperacion,
+  VerificarRecuperacion,
 } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
@@ -22,13 +27,26 @@ import {
   hashContrasena,
   hashSesion,
   uriTotp,
+  contadorCodigoTotp,
   verificarCodigoTotp,
   verificarContrasena,
 } from './seguridad';
+import { CorreoRecuperacionService } from './correo-recuperacion.service';
 
 const DURACION_SESION_MS = 1000 * 60 * 60 * 24 * 7;
 const DURACION_DESAFIO_2FA_MS = 1000 * 60 * 5;
+const DURACION_ENLACE_RECUPERACION_MS = 1000 * 60 * 15;
+const DURACION_TOKEN_RESTABLECIMIENTO_MS = 1000 * 60 * 10;
+const MAX_SOLICITUDES_RECUPERACION_POR_HORA = 3;
+const MAX_INTENTOS_CODIGO_RECUPERACION = 5;
+const PREFIJO_DESAFIO_VERIFICACION = 'hu004:verificacion:';
+const PREFIJO_DESAFIO_RESTABLECIMIENTO = 'hu004:restablecimiento:';
+const PREFIJO_DESAFIO_INTENTO = 'hu004:intento:';
+const PREFIJO_DESAFIO_TOTP = 'hu004:totp:';
 export const NOMBRE_COOKIE_SESION = 'veto_session';
+const MENSAJE_SOLICITUD_RECUPERACION =
+  'Si la cuenta permite recuperación automática, recibirás instrucciones en el correo registrado. ' +
+  'Si no activaste la verificación en dos pasos o perdiste acceso a Google Authenticator, contacta al equipo de soporte.';
 
 /** Valores con los que se reemplazan los datos personales de una cuenta eliminada (HU-006). */
 export const ANONIMO = {
@@ -48,6 +66,7 @@ export class IdentidadService {
   constructor(
     private readonly db: DatabaseService,
     private readonly citas?: CitasService,
+    @Optional() private readonly correoRecuperacion?: CorreoRecuperacionService,
   ) {}
 
   /** HU-001: registra una cuenta de tutor. */
@@ -135,6 +154,245 @@ export class IdentidadService {
 
     await this.db.query('DELETE FROM desafio_2fa WHERE token_hash = $1', [hashSesion(desafio)]);
     return this.crearSesion(cuenta);
+  }
+
+  /** HU-004: inicia recuperación solo para cuentas con TOTP; no revela si el correo existe. */
+  async solicitarRecuperacion(datos: SolicitarRecuperacion): Promise<{ mensaje: string }> {
+    const correo = this.exigirCorreoRecuperacion();
+    correo.assertConfigured();
+
+    const resultado = await this.db.query<{
+      id: string;
+      correo: string;
+      totp_secreto: string | null;
+      totp_activado_en: Date | null;
+    }>(
+      `SELECT id, correo, totp_secreto, totp_activado_en
+         FROM usuario
+        WHERE correo = $1 AND estado = 'ACTIVA' AND eliminado_en IS NULL`,
+      [datos.correo.toLowerCase()],
+    );
+    const cuenta = resultado.rows[0];
+    if (!cuenta?.totp_secreto || !cuenta.totp_activado_en) {
+      return { mensaje: MENSAJE_SOLICITUD_RECUPERACION };
+    }
+
+    const token = randomBytes(32).toString('base64url');
+    const tokenHash = `${PREFIJO_DESAFIO_VERIFICACION}${hashSesion(token)}`;
+    const creado = await this.db.withUser(cuenta.id, async (client) => {
+      await client.query('SELECT id FROM usuario WHERE id = $1 FOR UPDATE', [cuenta.id]);
+      await client.query(
+        `DELETE FROM desafio_2fa
+          WHERE usuario_id = $1 AND token_hash LIKE 'hu004:%'
+            AND creado_en < now() - interval '1 day'`,
+        [cuenta.id],
+      );
+      const limite = await client.query<{ cantidad: number }>(
+        `SELECT count(*)::int AS cantidad
+           FROM desafio_2fa
+          WHERE usuario_id = $1 AND token_hash LIKE $2
+            AND creado_en > now() - interval '1 hour'`,
+        [cuenta.id, `${PREFIJO_DESAFIO_VERIFICACION}%`],
+      );
+      if (limite.rows[0]?.cantidad >= MAX_SOLICITUDES_RECUPERACION_POR_HORA) return false;
+
+      await client.query(
+        `INSERT INTO desafio_2fa (token_hash, usuario_id, expira_en)
+         VALUES ($1, $2, $3)`,
+        [tokenHash, cuenta.id, new Date(Date.now() + DURACION_ENLACE_RECUPERACION_MS)],
+      );
+      return true;
+    });
+    if (!creado) return { mensaje: MENSAJE_SOLICITUD_RECUPERACION };
+
+    const origen = (process.env.WEB_ORIGIN ?? 'http://localhost:3000').replace(/\/+$/, '');
+    const url = `${origen}/recuperar-contrasena?token=${encodeURIComponent(token)}`;
+    try {
+      await correo.enviarEnlaceRecuperacion(cuenta.correo, url);
+    } catch (error) {
+      await this.db.withUser(cuenta.id, (client) =>
+        client.query('UPDATE desafio_2fa SET expira_en = now() WHERE token_hash = $1', [tokenHash]),
+      );
+      throw error;
+    }
+    return { mensaje: MENSAJE_SOLICITUD_RECUPERACION };
+  }
+
+  /** HU-004: consume el enlace y valida TOTP; devuelve un token de cambio de un solo uso. */
+  async verificarRecuperacion(datos: VerificarRecuperacion): Promise<{ token: string }> {
+    const tokenHash = `${PREFIJO_DESAFIO_VERIFICACION}${hashSesion(datos.token)}`;
+    const referencia = await this.db.query<{ usuario_id: string }>(
+      `SELECT usuario_id FROM desafio_2fa
+        WHERE token_hash = $1 AND token_hash LIKE 'hu004:verificacion:%'`,
+      [tokenHash],
+    );
+    const usuarioId = referencia.rows[0]?.usuario_id;
+    if (!usuarioId) throw this.errorRecuperacionInvalida();
+
+    const tokenRestablecimiento = randomBytes(32).toString('base64url');
+    const resultado = await this.db.withUser(usuarioId, async (client) => {
+      const desafio = await client.query<{
+        totp_secreto: string | null;
+      }>(
+        `SELECT u.totp_secreto
+           FROM desafio_2fa d
+           JOIN usuario u ON u.id = d.usuario_id
+          WHERE d.token_hash = $1 AND d.usuario_id = $2
+            AND d.expira_en > now()
+            AND u.estado = 'ACTIVA' AND u.eliminado_en IS NULL
+            AND u.totp_activado_en IS NOT NULL
+          FOR UPDATE OF d, u`,
+        [tokenHash, usuarioId],
+      );
+      const fila = desafio.rows[0];
+      if (!fila?.totp_secreto) return false;
+
+      const contador = contadorCodigoTotp(fila.totp_secreto, datos.codigo);
+      const prefijoIntentos = `${PREFIJO_DESAFIO_INTENTO}${hashSesion(tokenHash)}:`;
+      const intentos = await client.query<{ cantidad: number }>(
+        `SELECT count(*)::int AS cantidad
+           FROM desafio_2fa
+          WHERE usuario_id = $1 AND token_hash LIKE $2
+            AND creado_en > now() - interval '15 minutes'`,
+        [usuarioId, `${prefijoIntentos}%`],
+      );
+      const intentosPrevios = Number(intentos.rows[0]?.cantidad ?? 0);
+      const marcadorIntento = `${prefijoIntentos}${intentosPrevios + 1}`;
+      const registrarIntentoFallido = async () => {
+        await client.query(
+          `INSERT INTO desafio_2fa (token_hash, usuario_id, expira_en)
+           VALUES ($1, $2, now() + interval '15 minutes')
+           ON CONFLICT (token_hash) DO NOTHING`,
+          [marcadorIntento, usuarioId],
+        );
+        if (intentosPrevios + 1 >= MAX_INTENTOS_CODIGO_RECUPERACION) {
+          await client.query('UPDATE desafio_2fa SET expira_en = now() WHERE token_hash = $1', [
+            tokenHash,
+          ]);
+        }
+      };
+      if (contador === null) {
+        await registrarIntentoFallido();
+        return false;
+      }
+
+      const marcadorTotp = `${PREFIJO_DESAFIO_TOTP}${hashSesion(`${usuarioId}:${contador}`)}`;
+      const codigoUsado = await client.query<{ token_hash: string }>(
+        `SELECT token_hash FROM desafio_2fa
+          WHERE usuario_id = $1 AND token_hash = $2 AND expira_en > now()`,
+        [usuarioId, marcadorTotp],
+      );
+      if (codigoUsado.rows.length > 0) {
+        await registrarIntentoFallido();
+        return false;
+      }
+
+      const marcadorGuardado = await client.query<{ token_hash: string }>(
+        `INSERT INTO desafio_2fa (token_hash, usuario_id, expira_en)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (token_hash) DO NOTHING
+         RETURNING token_hash`,
+        [marcadorTotp, usuarioId, new Date((contador + 1) * 30_000)],
+      );
+      if (marcadorGuardado.rows.length !== 1) {
+        await registrarIntentoFallido();
+        return false;
+      }
+
+      await client.query(
+        `UPDATE desafio_2fa SET expira_en = now()
+          WHERE token_hash = $1 AND expira_en > now()`,
+        [tokenHash],
+      );
+      await client.query(
+        `UPDATE desafio_2fa SET expira_en = now()
+          WHERE usuario_id = $1 AND token_hash LIKE $2 AND expira_en > now()`,
+        [usuarioId, `${PREFIJO_DESAFIO_VERIFICACION}%`],
+      );
+      await client.query(
+        `INSERT INTO desafio_2fa (token_hash, usuario_id, expira_en)
+         VALUES ($1, $2, $3)`,
+        [
+          `${PREFIJO_DESAFIO_RESTABLECIMIENTO}${hashSesion(tokenRestablecimiento)}`,
+          usuarioId,
+          new Date(Date.now() + DURACION_TOKEN_RESTABLECIMIENTO_MS),
+        ],
+      );
+      return true;
+    });
+
+    if (!resultado) throw this.errorRecuperacionInvalida();
+    return { token: tokenRestablecimiento };
+  }
+
+  /** HU-004: reemplaza la contraseña y revoca credenciales anteriores atómicamente. */
+  async completarRecuperacion(datos: CompletarRecuperacion): Promise<{ mensaje: string }> {
+    const tokenHash = `${PREFIJO_DESAFIO_RESTABLECIMIENTO}${hashSesion(datos.token)}`;
+    const referencia = await this.db.query<{ usuario_id: string }>(
+      `SELECT usuario_id FROM desafio_2fa
+        WHERE token_hash = $1 AND token_hash LIKE 'hu004:restablecimiento:%'`,
+      [tokenHash],
+    );
+    const usuarioId = referencia.rows[0]?.usuario_id;
+    if (!usuarioId) throw this.errorRecuperacionInvalida();
+
+    const passwordHash = await hashContrasena(datos.contrasena);
+    const cambiado = await this.db.withUser(usuarioId, async (client) => {
+      const desafio = await client.query<{ token_hash: string }>(
+        `SELECT d.token_hash
+           FROM desafio_2fa d
+           JOIN usuario u ON u.id = d.usuario_id
+          WHERE d.token_hash = $1 AND d.usuario_id = $2
+            AND d.expira_en > now()
+            AND u.estado = 'ACTIVA' AND u.eliminado_en IS NULL
+          FOR UPDATE OF d, u`,
+        [tokenHash, usuarioId],
+      );
+      const fila = desafio.rows[0];
+      if (!fila) return false;
+
+      const actualizacion = await client.query(
+        `UPDATE usuario SET password_hash = $2
+          WHERE id = $1 AND estado = 'ACTIVA' AND eliminado_en IS NULL`,
+        [usuarioId, passwordHash],
+      );
+      if (actualizacion.rowCount !== 1) return false;
+      await client.query(
+        `UPDATE desafio_2fa SET expira_en = now()
+          WHERE token_hash = $1 AND expira_en > now()`,
+        [tokenHash],
+      );
+      await client.query(
+        `UPDATE desafio_2fa SET expira_en = now()
+          WHERE usuario_id = $1 AND (token_hash LIKE $2 OR token_hash LIKE $3)
+            AND expira_en > now()`,
+        [usuarioId, `${PREFIJO_DESAFIO_RESTABLECIMIENTO}%`, `${PREFIJO_DESAFIO_VERIFICACION}%`],
+      );
+      await client.query('DELETE FROM sesion WHERE usuario_id = $1', [usuarioId]);
+      await client.query(
+        `DELETE FROM desafio_2fa
+          WHERE usuario_id = $1 AND token_hash NOT LIKE 'hu004:%'`,
+        [usuarioId],
+      );
+      return true;
+    });
+    if (!cambiado) throw this.errorRecuperacionInvalida();
+    return { mensaje: 'La contraseña se actualizó. Ya puedes iniciar sesión con la nueva clave.' };
+  }
+
+  private exigirCorreoRecuperacion(): CorreoRecuperacionService {
+    if (!this.correoRecuperacion) {
+      throw new ServiceUnavailableException(
+        'El servicio de correo de recuperación no está disponible',
+      );
+    }
+    return this.correoRecuperacion;
+  }
+
+  private errorRecuperacionInvalida(): UnauthorizedException {
+    return new UnauthorizedException(
+      'El enlace, código o sesión de recuperación no es válido, venció o ya fue utilizado',
+    );
   }
 
   async estado2fa(usuarioId: string): Promise<{ activado: boolean; activadoEn: Date | null }> {
