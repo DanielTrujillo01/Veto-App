@@ -137,6 +137,17 @@ describe('HU-007 · registro de aliado (POST /api/aliados)', () => {
         creadoEn: '2026-11-05T00:00:00.000Z',
       },
     });
+    const insercionAliado = consultas.find((c) => c.sql.includes('INSERT INTO aliado'));
+    expect(insercionAliado?.valores).toEqual([
+      USUARIO_ID,
+      'CLINICA',
+      'Clínica Daniel',
+      null,
+      null,
+      'ACTIVO',
+      'Cali',
+      'Carrera 100 # 15-20',
+    ]);
     expect(consultas.some((c) => c.sql.includes('INSERT INTO veterinario'))).toBe(false);
     await app.close();
   });
@@ -153,14 +164,9 @@ describe('HU-007 · registro de aliado (POST /api/aliados)', () => {
     await app.close();
   });
 
-  it('rechaza tipos que no se registran solos y el alias password', async () => {
+  it('rechaza el alias password cuando falta contrasena', async () => {
     const { db } = crearBdFalsa(registroEnBd(), null);
     const app = await crearApp([AliadosModule], db);
-    const r = await request(app.getHttpServer())
-      .post('/api/aliados')
-      .send({ ...clinica, tipo: 'FUNDACION' })
-      .expect(400);
-    expect(r.body.errores).toHaveProperty('tipo');
     const { contrasena: _c, ...sinContrasena } = clinica;
     const r2 = await request(app.getHttpServer())
       .post('/api/aliados')

@@ -13,8 +13,8 @@ interface SedeRow extends QueryResultRow {
   activa: boolean;
 }
 
-const TIPOS_SEDE = ['CLINICA'] as const;
-const NO_ENCONTRADA = 'La sede no existe o no pertenece a esta clínica';
+const TIPOS_SEDE = ['CLINICA', 'TIENDA'] as const;
+const NO_ENCONTRADA = 'La sede no existe o no pertenece a este aliado';
 
 @Injectable()
 export class SedesService {
@@ -30,10 +30,10 @@ export class SedesService {
         WHERE aliado_id = $1 AND activa
           AND EXISTS (
             SELECT 1 FROM aliado
-             WHERE id = $1 AND tipo = 'CLINICA' AND estado = 'ACTIVO'
+             WHERE id = $1 AND tipo = ANY($2::tipo_aliado[]) AND estado = 'ACTIVO'
           )
         ORDER BY nombre`,
-      [aliadoId],
+      [aliadoId, [...TIPOS_SEDE]],
     );
     return r.rows.map(aSede);
   }

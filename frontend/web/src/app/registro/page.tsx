@@ -6,6 +6,7 @@ import { AlertBox, VetoButton } from '@/components/ui/veto-components';
 import { registroUsuarioSchema } from '@veto/shared';
 import { erroresPorCampo } from '@/lib/errores';
 import { api, ApiError } from '@/lib/api';
+import { GoogleAuthButton } from '@/components/GoogleAuthButton';
 
 export default function RegistroTutor() {
   const [datos, setDatos] = useState({ nombre: '', celular: '', correo: '', contrasena: '' });
@@ -175,6 +176,7 @@ export default function RegistroTutor() {
                   Crear cuenta
                 </VetoButton>
               </form>
+              <GoogleAuthButton />
             </>
           )}
           <p className="auth-footnote">

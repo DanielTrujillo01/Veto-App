@@ -36,6 +36,25 @@ export const loginSchema = z.object({
 });
 export type Login = z.infer<typeof loginSchema>;
 
+/** HU-004: solicitar un código de recuperación sin revelar si el correo está registrado. */
+export const solicitarRecuperacionSchema = z.object({
+  correo: correoSchema,
+});
+export type SolicitarRecuperacion = z.infer<typeof solicitarRecuperacionSchema>;
+
+/** HU-004: comprobar el código de seis dígitos enviado al correo. */
+export const verificarRecuperacionSchema = z.object({
+  correo: correoSchema,
+  codigo: z.string().regex(/^[0-9]{6}$/, 'El código debe tener seis dígitos'),
+});
+export type VerificarRecuperacion = z.infer<typeof verificarRecuperacionSchema>;
+
+/** HU-004: cambiar la contraseña; el token temporal viaja en una cookie HttpOnly. */
+export const restablecerContrasenaSchema = z.object({
+  contrasena: contrasenaSchema,
+});
+export type RestablecerContrasena = z.infer<typeof restablecerContrasenaSchema>;
+
 /** HU-006: editar el perfil. Cambiar el correo exige la contraseña actual. */
 export const actualizarPerfilSchema = z
   .object({

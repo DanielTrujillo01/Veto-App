@@ -11,15 +11,15 @@ import { esErrorPg, PG } from '../../common/validacion';
 import { IdentidadService } from '../identidad/identidad.service';
 import { hashContrasena } from '../identidad/seguridad';
 
-/** Aliado recién registrado (HU-007), en camelCase como el resto de la API. */
+/** Aliado recién registrado o consultado (HU-007), en camelCase como el resto de la API. */
 export type AliadoRegistrado = {
   id: string;
   tipo: TipoAliado;
   nombre: string;
   descripcion: string | null;
   contacto: string | null;
-  ciudad: string;
-  ubicacion: string;
+  ciudad: string | null;
+  ubicacion: string | null;
   estado: EstadoAliado;
   creadoEn: string;
 };
@@ -50,9 +50,8 @@ export class AliadosService {
   ) {}
 
   /**
-   * HU-007: registra la cuenta y el aliado en una sola transacción. El aliado queda PENDIENTE
-   * hasta que el Equipo Veto lo active. Un veterinario independiente recibe también su perfil
-   * de veterinario, para poder tener horarios y citas.
+   * HU-007: registra la cuenta y el aliado ACTIVO en una sola transacción. Un veterinario
+   * independiente recibe también su perfil de veterinario, para poder tener horarios y citas.
    */
   async register(
     input: RegistroAliado,
@@ -141,10 +140,12 @@ export class AliadosService {
       nombre: string;
       descripcion: string | null;
       contacto: string | null;
+      ciudad: string | null;
+      ubicacion: string | null;
       estado: EstadoAliado;
       creado_en: Date | string;
     }>(
-      `SELECT id, tipo, nombre, descripcion, contacto, estado, creado_en
+      `SELECT id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, estado, creado_en
          FROM aliado
         WHERE usuario_id = $1`,
       [usuarioId],
@@ -157,6 +158,8 @@ export class AliadosService {
       nombre: fila.nombre,
       descripcion: fila.descripcion,
       contacto: fila.contacto,
+      ciudad: fila.ciudad,
+      ubicacion: fila.ubicacion,
       estado: fila.estado,
       creadoEn: new Date(fila.creado_en).toISOString(),
     };

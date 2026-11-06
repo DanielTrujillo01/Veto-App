@@ -26,6 +26,7 @@ export function leerCookie(encabezado: string | undefined, nombre: string): stri
 }
 
 export const COOKIE_REAUTENTICACION = 'veto_reauth';
+export const COOKIE_RECUPERACION = 'veto_password_recovery';
 
 /**
  * Constancia de que la persona volvió a pasar por Google (HU-003). Vale para las rutas de
@@ -33,4 +34,9 @@ export const COOKIE_REAUTENTICACION = 'veto_reauth';
  */
 export function cookieReautenticacion(valor: string, maxAge: number): string {
   return `${COOKIE_REAUTENTICACION}=${valor}; HttpOnly; Path=/api/identidad; SameSite=Lax; Max-Age=${maxAge}${seguro()}`;
+}
+
+/** Token temporal de restablecimiento: HttpOnly y limitado a las rutas de recuperación. */
+export function cookieRecuperacion(valor: string, maxAge: number): string {
+  return `${COOKIE_RECUPERACION}=${valor}; HttpOnly; Path=/api/identidad/recuperacion; SameSite=Lax; Max-Age=${maxAge}${seguro()}`;
 }

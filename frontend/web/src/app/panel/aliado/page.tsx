@@ -1,12 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import type { EspecieAtendida, ModoConfirmacion, Servicio, Sede } from '@veto/shared';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import type {
+  EspecieAtendida,
+  ModoConfirmacion,
+  ReglaPrecio,
+  Servicio,
+  Sede,
+  TipoAliado,
+} from '@veto/shared';
 import { api, ApiError } from '@/lib/api';
 import { AlertBox, StatusBadge, VetoButton } from '@/components/ui/veto-components';
 import { BrandLogo } from '@/components/BrandLogo';
 
-type Seccion = 'resumen' | 'equipo' | 'sedes' | 'servicios' | 'horarios' | 'especies' | 'citas';
+type Seccion =
+  'resumen' | 'equipo' | 'sedes' | 'servicios' | 'horarios' | 'especies' | 'citas' | 'productos';
 type Veterinario = {
   id: string;
   nombre: string;
@@ -15,6 +23,26 @@ type Veterinario = {
 };
 type TipoServicio = { id: number; nombre: string };
 type Franja = { diaSemana: number; horaInicio: string; horaFin: string; vigenteDesde: string };
+type IconoPanelNombre = 'home' | 'team' | 'pin' | 'heart' | 'clock' | 'paw' | 'calendar' | 'store';
+type ReglaPrecioForm = {
+  especieId: string;
+  pesoMinKg: string;
+  pesoMaxKg: string;
+  edadMinMeses: string;
+  edadMaxMeses: string;
+  precio: string;
+  prioridad: string;
+};
+
+const reglaPrecioVacia: ReglaPrecioForm = {
+  especieId: '',
+  pesoMinKg: '',
+  pesoMaxKg: '',
+  edadMinMeses: '',
+  edadMaxMeses: '',
+  precio: '',
+  prioridad: '0',
+};
 
 const dias = [
   { numero: 1, nombre: 'Lunes' },
@@ -25,27 +53,132 @@ const dias = [
   { numero: 6, nombre: 'Sábado' },
   { numero: 7, nombre: 'Domingo' },
 ];
-const navegacion: { id: Seccion; etiqueta: string; icono: string }[] = [
-  { id: 'resumen', etiqueta: 'Resumen', icono: '⌂' },
-  { id: 'equipo', etiqueta: 'Veterinarios', icono: '✳' },
-  { id: 'sedes', etiqueta: 'Sedes', icono: '⌖' },
-  { id: 'servicios', etiqueta: 'Servicios', icono: '♡' },
-  { id: 'horarios', etiqueta: 'Disponibilidad', icono: '◷' },
-  { id: 'especies', etiqueta: 'Especies', icono: '⌁' },
-  { id: 'citas', etiqueta: 'Confirmación de citas', icono: '▦' },
+const navegacionClinica: { id: Seccion; etiqueta: string; icono: IconoPanelNombre }[] = [
+  { id: 'resumen', etiqueta: 'Resumen', icono: 'home' },
+  { id: 'equipo', etiqueta: 'Veterinarios', icono: 'team' },
+  { id: 'sedes', etiqueta: 'Sedes', icono: 'pin' },
+  { id: 'servicios', etiqueta: 'Servicios', icono: 'heart' },
+  { id: 'horarios', etiqueta: 'Disponibilidad', icono: 'clock' },
+  { id: 'especies', etiqueta: 'Especies', icono: 'paw' },
+  { id: 'citas', etiqueta: 'Confirmación de citas', icono: 'calendar' },
 ];
+const navegacionVeterinario: { id: Seccion; etiqueta: string; icono: IconoPanelNombre }[] = [
+  { id: 'resumen', etiqueta: 'Resumen', icono: 'home' },
+  { id: 'servicios', etiqueta: 'Servicios', icono: 'heart' },
+  { id: 'horarios', etiqueta: 'Disponibilidad', icono: 'clock' },
+  { id: 'especies', etiqueta: 'Especies', icono: 'paw' },
+  { id: 'citas', etiqueta: 'Confirmación de citas', icono: 'calendar' },
+];
+const navegacionTienda: { id: Seccion; etiqueta: string; icono: IconoPanelNombre }[] = [
+  { id: 'resumen', etiqueta: 'Resumen', icono: 'home' },
+  { id: 'sedes', etiqueta: 'Sedes', icono: 'pin' },
+  { id: 'horarios', etiqueta: 'Horario', icono: 'clock' },
+  { id: 'productos', etiqueta: 'Productos', icono: 'store' },
+];
+
+function IconoPanel({ nombre }: { nombre: IconoPanelNombre }) {
+  const trazos = {
+    home: (
+      <>
+        <path d="m3.75 10 8.25-6.75L20.25 10v9.25a1 1 0 0 1-1 1h-5.5v-6h-3.5v6h-5.5a1 1 0 0 1-1-1V10Z" />
+      </>
+    ),
+    team: (
+      <>
+        <circle cx="9" cy="8" r="3" />
+        <path d="M3.5 19v-1.25a5.5 5.5 0 0 1 11 0V19h-11Z" />
+        <path d="M15 5.4a3 3 0 0 1 0 5.2m2.25 2.15a4.5 4.5 0 0 1 3.25 4.33V19h-3.25" />
+      </>
+    ),
+    pin: (
+      <>
+        <path d="M19 10.1c0 5.25-7 10.15-7 10.15S5 15.35 5 10.1a7 7 0 1 1 14 0Z" />
+        <circle cx="12" cy="10" r="2.25" />
+      </>
+    ),
+    heart: (
+      <path d="M20.25 8.7c0 4.55-8.25 10-8.25 10S3.75 13.25 3.75 8.7a4.45 4.45 0 0 1 8.25-2.3 4.45 4.45 0 0 1 8.25 2.3Z" />
+    ),
+    clock: (
+      <>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7v5l3.25 2" />
+      </>
+    ),
+    paw: (
+      <>
+        <ellipse cx="12" cy="15.75" rx="4.25" ry="3.1" />
+        <ellipse cx="5.6" cy="10.6" rx="1.55" ry="2.1" transform="rotate(-25 5.6 10.6)" />
+        <ellipse cx="10" cy="7.5" rx="1.55" ry="2.1" transform="rotate(-8 10 7.5)" />
+        <ellipse cx="14.8" cy="7.5" rx="1.55" ry="2.1" transform="rotate(8 14.8 7.5)" />
+        <ellipse cx="18.4" cy="10.6" rx="1.55" ry="2.1" transform="rotate(25 18.4 10.6)" />
+      </>
+    ),
+    calendar: (
+      <>
+        <rect x="4" y="5.5" width="16" height="15" rx="2" />
+        <path d="M8 3.5v4m8-4v4M4 10h16m-11 4h2m3 0h2m-7 3h2" />
+      </>
+    ),
+    store: (
+      <>
+        <path d="M4 10v10h16V10M3.5 9.5 5.5 4h13l2 5.5a2.5 2.5 0 0 1-4.5 1.5 2.5 2.5 0 0 1-4 0 2.5 2.5 0 0 1-4 0 2.5 2.5 0 0 1-4.5-1.5Z" />
+        <path d="M9 20v-5h6v5" />
+      </>
+    ),
+  }[nombre];
+
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+      {trazos}
+    </svg>
+  );
+}
+
+function IlustracionEspecie({ nombre }: { nombre: string }) {
+  const especie = nombre.toLocaleLowerCase();
+  const tipo = especie.includes('perro')
+    ? 'perro'
+    : especie.includes('gato')
+      ? 'gato'
+      : especie.includes('ave')
+        ? 'ave'
+        : especie.includes('conejo')
+          ? 'conejo'
+          : 'otra';
+
+  return (
+    <span aria-hidden="true" className={`species-option__art species-option__art--${tipo}`}>
+      {tipo === 'otra' ? (
+        <svg className="species-option__illustration" fill="none" viewBox="0 0 120 120">
+          <ellipse cx="60" cy="76" rx="25" ry="19" />
+          <ellipse cx="32" cy="45" rx="9" ry="13" transform="rotate(-28 32 45)" />
+          <ellipse cx="52" cy="34" rx="9" ry="13" transform="rotate(-10 52 34)" />
+          <ellipse cx="72" cy="34" rx="9" ry="13" transform="rotate(10 72 34)" />
+          <ellipse cx="90" cy="45" rx="9" ry="13" transform="rotate(28 90 45)" />
+        </svg>
+      ) : (
+        <img alt="" className="species-option__photo" src={`/especies/${tipo}.png`} />
+      )}
+    </span>
+  );
+}
 
 export default function PanelAliado() {
   const [seccion, setSeccion] = useState<Seccion>('resumen');
   const [aliadoId, setAliadoId] = useState('');
   const [aliadoNombre, setAliadoNombre] = useState('');
   const [aliadoEstado, setAliadoEstado] = useState('');
-  const [cargando, setCargando] = useState(false);
+  const [aliadoTipo, setAliadoTipo] = useState<TipoAliado | null>(null);
+  const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [exito, setExito] = useState('');
   const [sedes, setSedes] = useState<Sede[]>([]);
   const [servicios, setServicios] = useState<Servicio[]>([]);
   const [tipos, setTipos] = useState<TipoServicio[]>([]);
+  const [reglasPrecio, setReglasPrecio] = useState<ReglaPrecioForm[]>([]);
+  const [servicioReglasEditando, setServicioReglasEditando] = useState<Servicio | null>(null);
+  const [errorReglasPrecio, setErrorReglasPrecio] = useState('');
   const [veterinarios, setVeterinarios] = useState<Veterinario[]>([]);
   const [especies, setEspecies] = useState<{ id: number; nombre: string }[]>([]);
   const [especiesSeleccionadas, setEspeciesSeleccionadas] = useState<number[]>([]);
@@ -53,7 +186,7 @@ export default function PanelAliado() {
   const [veterinarioId, setVeterinarioId] = useState('');
   const [franjas, setFranjas] = useState<Franja[]>([]);
   const [modal, setModal] = useState<
-    'sede' | 'servicio' | 'veterinario' | 'perfilVeterinario' | null
+    'sede' | 'servicio' | 'reglasPrecio' | 'veterinario' | 'perfilVeterinario' | null
   >(null);
   const [confirmacionPendiente, setConfirmacionPendiente] = useState<
     { tipo: 'sede'; item: Sede } | { tipo: 'servicio'; item: Servicio } | null
@@ -90,13 +223,14 @@ export default function PanelAliado() {
     let vigente = true;
     setCargando(true);
     void api<{
-      aliado: { id: string; nombre: string; estado: string };
+      aliado: { id: string; nombre: string; estado: string; tipo: TipoAliado };
     }>('/aliados/me')
       .then(({ aliado }) => {
         if (!vigente) return;
         setAliadoId(aliado.id);
         setAliadoNombre(aliado.nombre);
         setAliadoEstado(aliado.estado);
+        setAliadoTipo(aliado.tipo);
       })
       .catch((causa: unknown) => {
         if (!vigente) return;
@@ -121,51 +255,92 @@ export default function PanelAliado() {
     };
   }, []);
 
-  const titulo = useMemo(
-    () => navegacion.find((item) => item.id === seccion)?.etiqueta ?? 'Resumen',
-    [seccion],
-  );
+  const navegacion = !aliadoTipo
+    ? []
+    : aliadoTipo === 'VET_INDEPENDIENTE'
+      ? navegacionVeterinario
+      : aliadoTipo === 'TIENDA'
+        ? navegacionTienda
+        : aliadoTipo === 'FUNDACION'
+          ? [{ id: 'resumen' as const, etiqueta: 'Resumen', icono: 'home' as const }]
+          : navegacionClinica;
+
+  const titulo = navegacion.find((item) => item.id === seccion)?.etiqueta ?? 'Resumen';
 
   const cargar = useCallback(async () => {
     if (!aliadoId || aliadoEstado !== 'ACTIVO') return;
+    if (aliadoTipo === 'TIENDA' && (seccion === 'horarios' || seccion === 'productos')) {
+      setCargando(false);
+      setError('');
+      return;
+    }
     setCargando(true);
     setError('');
     try {
       if (seccion === 'resumen') {
-        const [listaServicios, listaSedes, equipo] = await Promise.all([
-          api<Servicio[]>(`/aliados/${aliadoId}/servicios/gestion`),
-          api<Sede[]>(`/aliados/${aliadoId}/sedes/gestion`),
-          api<{ veterinarios: Veterinario[] }>(`/aliados/${aliadoId}/veterinarios`),
-        ]);
-        setServicios(listaServicios);
-        setSedes(listaSedes);
-        setVeterinarios(equipo.veterinarios);
+        if (aliadoTipo === 'CLINICA') {
+          const [listaServicios, listaSedes, equipo] = await Promise.all([
+            api<Servicio[]>(`/aliados/${aliadoId}/servicios/gestion`),
+            api<Sede[]>(`/aliados/${aliadoId}/sedes/gestion`),
+            api<{ veterinarios: Veterinario[] }>(`/aliados/${aliadoId}/veterinarios`),
+          ]);
+          setServicios(listaServicios);
+          setSedes(listaSedes);
+          setVeterinarios(equipo.veterinarios);
+        } else if (aliadoTipo === 'VET_INDEPENDIENTE') {
+          const [listaServicios, perfil, especiesAtendidas] = await Promise.all([
+            api<Servicio[]>(`/aliados/${aliadoId}/servicios/gestion`),
+            api<{ id: string; usuario: { nombre: string } }>('/veterinarios/me'),
+            api<EspecieAtendida[]>(`/aliados/${aliadoId}/especies`),
+          ]);
+          setServicios(listaServicios);
+          setEspeciesSeleccionadas(especiesAtendidas.map((especie) => especie.id));
+          setVeterinarios([
+            { id: perfil.id, nombre: perfil.usuario.nombre, fotoUrl: null, descripcion: null },
+          ]);
+        } else if (aliadoTipo === 'TIENDA') {
+          setSedes(await api<Sede[]>(`/aliados/${aliadoId}/sedes/gestion`));
+        }
       } else if (seccion === 'equipo') {
         const equipo = await api<{ veterinarios: Veterinario[] }>(
           `/aliados/${aliadoId}/veterinarios`,
         );
         setVeterinarios(equipo.veterinarios);
       } else if (seccion === 'sedes') {
+        if (aliadoTipo !== 'CLINICA' && aliadoTipo !== 'TIENDA') return;
         setSedes(await api<Sede[]>(`/aliados/${aliadoId}/sedes/gestion`));
       } else if (seccion === 'servicios') {
-        const [lista, tiposServicio, listaSedes] = await Promise.all([
+        const [lista, tiposServicio] = await Promise.all([
           api<Servicio[]>(`/aliados/${aliadoId}/servicios/gestion`),
           api<TipoServicio[]>('/servicios/tipos'),
-          api<Sede[]>(`/aliados/${aliadoId}/sedes/gestion`),
         ]);
         setServicios(lista);
         setTipos(tiposServicio);
-        setSedes(listaSedes.filter((sede) => sede.activa));
+        if (aliadoTipo === 'CLINICA') {
+          const listaSedes = await api<Sede[]>(`/aliados/${aliadoId}/sedes/gestion`);
+          setSedes(listaSedes.filter((sede) => sede.activa));
+        } else {
+          setSedes([]);
+        }
       } else if (seccion === 'horarios') {
-        const equipo = await api<{ veterinarios: Veterinario[] }>(
-          `/aliados/${aliadoId}/veterinarios`,
-        );
-        setVeterinarios(equipo.veterinarios);
-        if (equipo.veterinarios[0]) {
-          setVeterinarioId(equipo.veterinarios[0].id);
+        let equipo: Veterinario[];
+        if (aliadoTipo === 'VET_INDEPENDIENTE') {
+          const perfil = await api<{ id: string; usuario: { nombre: string } }>('/veterinarios/me');
+          equipo = [
+            { id: perfil.id, nombre: perfil.usuario.nombre, fotoUrl: null, descripcion: null },
+          ];
+        } else {
+          const respuesta = await api<{ veterinarios: Veterinario[] }>(
+            `/aliados/${aliadoId}/veterinarios`,
+          );
+          equipo = respuesta.veterinarios;
+        }
+        setVeterinarios(equipo);
+        if (equipo[0]) {
+          setVeterinarioId(equipo[0].id);
           const horarios = await api<
             { diaSemana: number; horaInicio: string; horaFin: string; vigenteDesde: string }[]
-          >(`/aliados/${aliadoId}/veterinarios/${equipo.veterinarios[0].id}/horarios`);
+          >(`/aliados/${aliadoId}/veterinarios/${equipo[0].id}/horarios`);
           setFranjas(
             horarios.map((horario) => ({
               ...horario,
@@ -199,7 +374,7 @@ export default function PanelAliado() {
     } finally {
       setCargando(false);
     }
-  }, [aliadoEstado, aliadoId, seccion]);
+  }, [aliadoEstado, aliadoId, aliadoTipo, seccion]);
 
   useEffect(() => {
     void cargar();
@@ -426,6 +601,7 @@ export default function PanelAliado() {
   }
 
   function abrirServicio(servicio?: Servicio) {
+    const modalidadPorDefecto = aliadoTipo === 'VET_INDEPENDIENTE' ? 'A_DOMICILIO' : 'EN_SEDE';
     setServicioEditando(servicio ?? null);
     setServicioForm(
       servicio
@@ -442,13 +618,107 @@ export default function PanelAliado() {
             tipoServicioId: '',
             nombre: '',
             descripcion: '',
-            modalidad: 'EN_SEDE',
+            modalidad: modalidadPorDefecto,
             sedeId: '',
             duracionMin: '60',
             precioBase: '',
           },
     );
     setModal('servicio');
+  }
+
+  async function abrirReglasPrecio(servicio: Servicio) {
+    setError('');
+    setErrorReglasPrecio('');
+    setExito('');
+    setCargando(true);
+    try {
+      const [reglas, catalogoEspecies] = await Promise.all([
+        api<ReglaPrecio[]>(`/aliados/${aliadoId}/servicios/${servicio.id}/reglas-precio`),
+        especies.length
+          ? Promise.resolve(especies)
+          : api<{ id: number; nombre: string }[]>('/mascotas/especies'),
+      ]);
+      if (catalogoEspecies !== especies) setEspecies(catalogoEspecies);
+      setServicioReglasEditando(servicio);
+      setReglasPrecio(
+        reglas.map((regla) => ({
+          especieId: regla.especieId == null ? '' : String(regla.especieId),
+          pesoMinKg: regla.pesoMinKg == null ? '' : String(regla.pesoMinKg),
+          pesoMaxKg: regla.pesoMaxKg == null ? '' : String(regla.pesoMaxKg),
+          edadMinMeses: regla.edadMinMeses == null ? '' : String(regla.edadMinMeses),
+          edadMaxMeses: regla.edadMaxMeses == null ? '' : String(regla.edadMaxMeses),
+          precio: String(regla.precio),
+          prioridad: String(regla.prioridad),
+        })),
+      );
+      setModal('reglasPrecio');
+    } catch (causa) {
+      setError(
+        causa instanceof ApiError
+          ? causa.message
+          : 'No pudimos cargar las reglas de precio de este servicio.',
+      );
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  async function guardarReglasPrecio(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorReglasPrecio('');
+    if (!servicioReglasEditando) {
+      setErrorReglasPrecio('No encontramos el servicio que quieres actualizar.');
+      return;
+    }
+    const rangoInvalido = reglasPrecio.some((regla) => {
+      const pesoMin = regla.pesoMinKg === '' ? null : Number(regla.pesoMinKg);
+      const pesoMax = regla.pesoMaxKg === '' ? null : Number(regla.pesoMaxKg);
+      const edadMin = regla.edadMinMeses === '' ? null : Number(regla.edadMinMeses);
+      const edadMax = regla.edadMaxMeses === '' ? null : Number(regla.edadMaxMeses);
+      return (
+        (pesoMin !== null && pesoMax !== null && pesoMin > pesoMax) ||
+        (edadMin !== null && edadMax !== null && edadMin > edadMax)
+      );
+    });
+    if (rangoInvalido) {
+      setErrorReglasPrecio('En cada regla, el mínimo debe ser menor o igual que el máximo.');
+      return;
+    }
+    if (reglasPrecio.some((regla) => regla.precio === '')) {
+      setErrorReglasPrecio('Indica el precio de cada regla antes de guardar.');
+      return;
+    }
+
+    const reglas = reglasPrecio.map((regla) => ({
+      especieId: regla.especieId === '' ? null : Number(regla.especieId),
+      pesoMinKg: regla.pesoMinKg === '' ? null : Number(regla.pesoMinKg),
+      pesoMaxKg: regla.pesoMaxKg === '' ? null : Number(regla.pesoMaxKg),
+      edadMinMeses: regla.edadMinMeses === '' ? null : Number(regla.edadMinMeses),
+      edadMaxMeses: regla.edadMaxMeses === '' ? null : Number(regla.edadMaxMeses),
+      precio: Number(regla.precio),
+      prioridad: Number(regla.prioridad || 0),
+    }));
+
+    setCargando(true);
+    try {
+      await api<ReglaPrecio[]>(
+        `/aliados/${aliadoId}/servicios/${servicioReglasEditando.id}/reglas-precio`,
+        { method: 'PUT', body: JSON.stringify({ reglas }) },
+      );
+      setModal(null);
+      setExito(
+        reglas.length
+          ? 'Las reglas de precio quedaron guardadas.'
+          : 'Se quitaron las reglas. El servicio usará su precio base.',
+      );
+    } catch (causa) {
+      setErrorReglasPrecio(
+        causa instanceof ApiError ? causa.message : 'No pudimos guardar las reglas de precio.',
+      );
+    } finally {
+      setCargando(false);
+    }
   }
 
   const contenido = () => {
@@ -462,6 +732,96 @@ export default function PanelAliado() {
       );
     }
     if (seccion === 'resumen') {
+      if (aliadoTipo === 'VET_INDEPENDIENTE') {
+        return (
+          <>
+            <div className="summary-grid">
+              <button
+                className="summary-card"
+                onClick={() => setSeccion('servicios')}
+                type="button"
+              >
+                <span>Servicios</span>
+                <strong>{servicios.length}</strong>
+                <small>Servicios veterinarios ofrecidos</small>
+              </button>
+              <button className="summary-card" onClick={() => setSeccion('especies')} type="button">
+                <span>Especies</span>
+                <strong>{especiesSeleccionadas.length}</strong>
+                <small>Especies que atiendes</small>
+              </button>
+              <button className="summary-card" onClick={() => setSeccion('horarios')} type="button">
+                <span>Disponibilidad</span>
+                <strong>Configurar</strong>
+                <small>Define cuándo pueden reservar</small>
+              </button>
+            </div>
+            <section className="workspace-card">
+              <h2>Tu espacio profesional</h2>
+              <p className="workspace-card__intro">
+                Administra tus servicios, disponibilidad, especies atendidas y confirmación de citas
+                desde tu perfil veterinario.
+              </p>
+              <div className="quick-actions">
+                {navegacion.slice(1).map((item) => (
+                  <button key={item.id} onClick={() => setSeccion(item.id)} type="button">
+                    <span>
+                      <IconoPanel nombre={item.icono} />
+                    </span>
+                    {item.etiqueta}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </>
+        );
+      }
+      if (aliadoTipo === 'TIENDA') {
+        return (
+          <>
+            <div className="summary-grid">
+              <button className="summary-card" onClick={() => setSeccion('sedes')} type="button">
+                <span>Sedes activas</span>
+                <strong>{sedes.filter((sede) => sede.activa).length}</strong>
+                <small>Puntos de atención de tu tienda</small>
+              </button>
+              <button className="summary-card" onClick={() => setSeccion('sedes')} type="button">
+                <span>Total de sedes</span>
+                <strong>{sedes.length}</strong>
+                <small>Ubicaciones registradas</small>
+              </button>
+            </div>
+            <section className="workspace-card">
+              <h2>Administra los puntos de atención</h2>
+              <p className="workspace-card__intro">
+                Mantén actualizadas las sedes y sus direcciones para que tus clientes sepan dónde
+                encontrarte.
+              </p>
+              <div className="quick-actions">
+                {navegacion.slice(1).map((item) => (
+                  <button key={item.id} onClick={() => setSeccion(item.id)} type="button">
+                    <span>
+                      <IconoPanel nombre={item.icono} />
+                    </span>
+                    {item.etiqueta}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </>
+        );
+      }
+      if (aliadoTipo === 'FUNDACION') {
+        return (
+          <section className="workspace-card">
+            <h2>Perfil de fundación</h2>
+            <p className="workspace-card__intro">
+              Tu solicitud y los datos de la fundación están asociados a esta cuenta. Las
+              herramientas para administrar publicaciones de adopción aún no están disponibles.
+            </p>
+          </section>
+        );
+      }
       return (
         <>
           <div className="summary-grid">
@@ -502,7 +862,9 @@ export default function PanelAliado() {
             <div className="quick-actions">
               {navegacion.slice(1).map((item) => (
                 <button key={item.id} onClick={() => setSeccion(item.id)} type="button">
-                  <span>{item.icono}</span>
+                  <span>
+                    <IconoPanel nombre={item.icono} />
+                  </span>
                   {item.etiqueta}
                 </button>
               ))}
@@ -578,7 +940,9 @@ export default function PanelAliado() {
             <div>
               <h2>Tus sedes</h2>
               <p className="workspace-card__intro">
-                Administra las ubicaciones disponibles para tus servicios.
+                {aliadoTipo === 'TIENDA'
+                  ? 'Administra las ubicaciones de tus puntos de atención.'
+                  : 'Administra las ubicaciones disponibles para tus servicios.'}
               </p>
             </div>
             <VetoButton onClick={() => abrirSede()}>＋ Crear sede</VetoButton>
@@ -622,6 +986,34 @@ export default function PanelAliado() {
         </section>
       );
     }
+    if (seccion === 'horarios' && aliadoTipo === 'TIENDA') {
+      return (
+        <section className="workspace-card">
+          <h2>Horario de atención</h2>
+          <p className="workspace-card__intro">
+            Próximamente podrás publicar el horario de atención de cada sede de tu tienda.
+          </p>
+          <div className="unsupported-note">
+            <strong>Configuración próximamente</strong>
+            <span>La API todavía no permite guardar horarios para tiendas.</span>
+          </div>
+        </section>
+      );
+    }
+    if (seccion === 'productos' && aliadoTipo === 'TIENDA') {
+      return (
+        <section className="workspace-card">
+          <h2>Productos</h2>
+          <p className="workspace-card__intro">
+            Próximamente podrás organizar el catálogo de productos de tu tienda.
+          </p>
+          <div className="unsupported-note">
+            <strong>Catálogo próximamente</strong>
+            <span>La gestión de productos aún no está disponible en este sprint.</span>
+          </div>
+        </section>
+      );
+    }
     if (seccion === 'servicios') {
       const visibles = servicios.filter(
         (servicio) =>
@@ -632,7 +1024,7 @@ export default function PanelAliado() {
         <section className="workspace-card">
           <div className="workspace-card__title-row">
             <div>
-              <h2>Servicios</h2>
+              <h2>{aliadoTipo === 'VET_INDEPENDIENTE' ? 'Servicios veterinarios' : 'Servicios'}</h2>
               <p className="workspace-card__intro">
                 Crea y actualiza la oferta que verán los tutores.
               </p>
@@ -680,13 +1072,16 @@ export default function PanelAliado() {
                       {servicio.modalidad === 'EN_SEDE' ? 'En sede' : 'A domicilio'} ·{' '}
                       {servicio.duracionMin} min
                     </p>
-                    <strong className="service-price">
-                      {new Intl.NumberFormat('es-CO', {
-                        style: 'currency',
-                        currency: 'COP',
-                        maximumFractionDigits: 0,
-                      }).format(servicio.precioBase)}
-                    </strong>
+                    <div className="service-price-block">
+                      <strong className="service-price">
+                        {new Intl.NumberFormat('es-CO', {
+                          style: 'currency',
+                          currency: 'COP',
+                          maximumFractionDigits: 0,
+                        }).format(servicio.precioBase)}
+                      </strong>
+                      <small>Precio base</small>
+                    </div>
                   </div>
                   <StatusBadge tone={servicio.activo ? 'success' : 'neutral'}>
                     {servicio.activo ? 'Activo' : 'Inactivo'}
@@ -698,6 +1093,13 @@ export default function PanelAliado() {
                       type="button"
                     >
                       Editar
+                    </button>
+                    <button
+                      className="text-action"
+                      onClick={() => void abrirReglasPrecio(servicio)}
+                      type="button"
+                    >
+                      Reglas de precio
                     </button>
                     <button
                       className="text-action"
@@ -716,13 +1118,10 @@ export default function PanelAliado() {
               <p>Publica tu primera opción para que los tutores puedan encontrarte.</p>
             </div>
           )}
-          <div className="unsupported-note">
-            <strong>Reglas de precio por mascota</strong>
-            <span>
-              La API aún no permite guardar rangos por especie, peso o edad; el precio base sí se
-              guarda.
-            </span>
-          </div>
+          <p className="workspace-card__intro pricing-rules-hint">
+            Configura precios por especie, peso o edad desde “Reglas de precio”. Si ninguna regla
+            coincide con los datos de la mascota, se conserva el precio base.
+          </p>
         </section>
       );
     }
@@ -733,45 +1132,51 @@ export default function PanelAliado() {
             <div>
               <h2>Horarios de trabajo</h2>
               <p className="workspace-card__intro">
-                Define cuándo pueden reservar una consulta con tu equipo.
+                {aliadoTipo === 'VET_INDEPENDIENTE'
+                  ? 'Define cuándo pueden reservar una consulta contigo.'
+                  : 'Define cuándo pueden reservar una consulta con tu equipo.'}
               </p>
             </div>
-            <label className="field field--inline">
-              <span>Veterinario</span>
-              <select
-                className="control"
-                onChange={async (event) => {
-                  const id = event.target.value;
-                  setVeterinarioId(id);
-                  if (!id) return;
-                  try {
-                    const resultado = await api<Franja[]>(
-                      `/aliados/${aliadoId}/veterinarios/${id}/horarios`,
-                    );
-                    setFranjas(
-                      resultado.map((item) => ({
-                        ...item,
-                        horaInicio: item.horaInicio.slice(0, 5),
-                        horaFin: item.horaFin.slice(0, 5),
-                        vigenteDesde: item.vigenteDesde?.slice(0, 10) ?? '',
-                      })),
-                    );
-                  } catch (causa) {
-                    setError(
-                      causa instanceof ApiError ? causa.message : 'No pudimos cargar los horarios.',
-                    );
-                  }
-                }}
-                value={veterinarioId}
-              >
-                <option value="">Selecciona</option>
-                {veterinarios.map((persona) => (
-                  <option key={persona.id} value={persona.id}>
-                    {persona.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {aliadoTipo !== 'VET_INDEPENDIENTE' && (
+              <label className="field field--inline">
+                <span>Veterinario</span>
+                <select
+                  className="control"
+                  onChange={async (event) => {
+                    const id = event.target.value;
+                    setVeterinarioId(id);
+                    if (!id) return;
+                    try {
+                      const resultado = await api<Franja[]>(
+                        `/aliados/${aliadoId}/veterinarios/${id}/horarios`,
+                      );
+                      setFranjas(
+                        resultado.map((item) => ({
+                          ...item,
+                          horaInicio: item.horaInicio.slice(0, 5),
+                          horaFin: item.horaFin.slice(0, 5),
+                          vigenteDesde: item.vigenteDesde?.slice(0, 10) ?? '',
+                        })),
+                      );
+                    } catch (causa) {
+                      setError(
+                        causa instanceof ApiError
+                          ? causa.message
+                          : 'No pudimos cargar los horarios.',
+                      );
+                    }
+                  }}
+                  value={veterinarioId}
+                >
+                  <option value="">Selecciona</option>
+                  {veterinarios.map((persona) => (
+                    <option key={persona.id} value={persona.id}>
+                      {persona.nombre}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
           {veterinarios.length ? (
             <>
@@ -897,15 +1302,15 @@ export default function PanelAliado() {
                   }
                   type="button"
                 >
-                  <span aria-hidden="true">
-                    {especie.nombre.toLowerCase().includes('perro')
-                      ? '🐕'
-                      : especie.nombre.toLowerCase().includes('gato')
-                        ? '🐈'
-                        : '✳'}
-                  </span>
-                  {especie.nombre}
-                  {seleccionada && <span aria-hidden="true">✓</span>}
+                  <IlustracionEspecie nombre={especie.nombre} />
+                  <span className="species-option__label">{especie.nombre}</span>
+                  {seleccionada && (
+                    <span aria-hidden="true" className="species-option__check">
+                      <svg fill="none" viewBox="0 0 20 20">
+                        <path d="m4 10 4 4 8-8" />
+                      </svg>
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -985,7 +1390,9 @@ export default function PanelAliado() {
               }}
               type="button"
             >
-              <span aria-hidden="true">{item.icono}</span>
+              <span aria-hidden="true">
+                <IconoPanel nombre={item.icono} />
+              </span>
               {item.etiqueta}
             </button>
           ))}
@@ -1050,7 +1457,7 @@ export default function PanelAliado() {
         <div className="modal-backdrop" role="presentation">
           <section
             aria-modal="true"
-            className="workspace-modal workspace-modal--small"
+            className={`workspace-modal${modal === 'reglasPrecio' ? ' workspace-modal--pricing' : ' workspace-modal--small'}`}
             role="dialog"
           >
             {modal === 'sede' ? (
@@ -1146,19 +1553,21 @@ export default function PanelAliado() {
                   <fieldset className="field">
                     <legend>Modalidad</legend>
                     <div className="choice-row choice-row--compact">
-                      <label
-                        className={`choice-card${servicioForm.modalidad === 'EN_SEDE' ? ' is-selected' : ''}`}
-                      >
-                        <input
-                          checked={servicioForm.modalidad === 'EN_SEDE'}
-                          name="modalidad"
-                          onChange={() =>
-                            setServicioForm({ ...servicioForm, modalidad: 'EN_SEDE' })
-                          }
-                          type="radio"
-                        />
-                        En sede
-                      </label>
+                      {aliadoTipo !== 'VET_INDEPENDIENTE' && (
+                        <label
+                          className={`choice-card${servicioForm.modalidad === 'EN_SEDE' ? ' is-selected' : ''}`}
+                        >
+                          <input
+                            checked={servicioForm.modalidad === 'EN_SEDE'}
+                            name="modalidad"
+                            onChange={() =>
+                              setServicioForm({ ...servicioForm, modalidad: 'EN_SEDE' })
+                            }
+                            type="radio"
+                          />
+                          En sede
+                        </label>
+                      )}
                       <label
                         className={`choice-card${servicioForm.modalidad === 'A_DOMICILIO' ? ' is-selected' : ''}`}
                       >
@@ -1178,7 +1587,7 @@ export default function PanelAliado() {
                       </label>
                     </div>
                   </fieldset>
-                  {servicioForm.modalidad === 'EN_SEDE' && (
+                  {servicioForm.modalidad === 'EN_SEDE' && aliadoTipo !== 'VET_INDEPENDIENTE' && (
                     <label className="field">
                       <span>Sede</span>
                       <select
@@ -1235,6 +1644,205 @@ export default function PanelAliado() {
                     </VetoButton>
                     <VetoButton loading={cargando} type="submit">
                       Guardar servicio
+                    </VetoButton>
+                  </div>
+                </form>
+              </>
+            ) : modal === 'reglasPrecio' ? (
+              <>
+                <h2>Reglas de precio</h2>
+                <p className="workspace-card__intro">
+                  {servicioReglasEditando?.nombre} · Precio base{' '}
+                  {new Intl.NumberFormat('es-CO', {
+                    style: 'currency',
+                    currency: 'COP',
+                    maximumFractionDigits: 0,
+                  }).format(servicioReglasEditando?.precioBase ?? 0)}
+                  . Los rangos incluyen sus límites; los campos vacíos aplican a cualquier valor.
+                </p>
+                {errorReglasPrecio && (
+                  <AlertBox tone="error" title="Revisa las reglas">
+                    {errorReglasPrecio}
+                  </AlertBox>
+                )}
+                <form className="form-stack pricing-rules-form" onSubmit={guardarReglasPrecio}>
+                  {reglasPrecio.map((regla, index) => (
+                    <fieldset className="pricing-rule" key={index}>
+                      <legend>Regla {index + 1}</legend>
+                      <label className="field">
+                        <span>Especie</span>
+                        <select
+                          className="control"
+                          onChange={(event) =>
+                            setReglasPrecio((actuales) =>
+                              actuales.map((actual, i) =>
+                                i === index ? { ...actual, especieId: event.target.value } : actual,
+                              ),
+                            )
+                          }
+                          value={regla.especieId}
+                        >
+                          <option value="">Cualquier especie</option>
+                          {especies.map((especie) => (
+                            <option key={especie.id} value={especie.id}>
+                              {especie.nombre}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="form-two-col">
+                        <label className="field">
+                          <span>Peso mínimo (kg)</span>
+                          <input
+                            className="control"
+                            min="0"
+                            onChange={(event) =>
+                              setReglasPrecio((actuales) =>
+                                actuales.map((actual, i) =>
+                                  i === index
+                                    ? { ...actual, pesoMinKg: event.target.value }
+                                    : actual,
+                                ),
+                              )
+                            }
+                            step="0.01"
+                            type="number"
+                            value={regla.pesoMinKg}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Peso máximo (kg)</span>
+                          <input
+                            className="control"
+                            min="0"
+                            onChange={(event) =>
+                              setReglasPrecio((actuales) =>
+                                actuales.map((actual, i) =>
+                                  i === index
+                                    ? { ...actual, pesoMaxKg: event.target.value }
+                                    : actual,
+                                ),
+                              )
+                            }
+                            step="0.01"
+                            type="number"
+                            value={regla.pesoMaxKg}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Edad mínima (meses)</span>
+                          <input
+                            className="control"
+                            min="0"
+                            onChange={(event) =>
+                              setReglasPrecio((actuales) =>
+                                actuales.map((actual, i) =>
+                                  i === index
+                                    ? { ...actual, edadMinMeses: event.target.value }
+                                    : actual,
+                                ),
+                              )
+                            }
+                            step="1"
+                            type="number"
+                            value={regla.edadMinMeses}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Edad máxima (meses)</span>
+                          <input
+                            className="control"
+                            min="0"
+                            onChange={(event) =>
+                              setReglasPrecio((actuales) =>
+                                actuales.map((actual, i) =>
+                                  i === index
+                                    ? { ...actual, edadMaxMeses: event.target.value }
+                                    : actual,
+                                ),
+                              )
+                            }
+                            step="1"
+                            type="number"
+                            value={regla.edadMaxMeses}
+                          />
+                        </label>
+                      </div>
+                      <div className="form-two-col">
+                        <label className="field">
+                          <span>Precio (COP)</span>
+                          <input
+                            className="control"
+                            min="0"
+                            onChange={(event) =>
+                              setReglasPrecio((actuales) =>
+                                actuales.map((actual, i) =>
+                                  i === index ? { ...actual, precio: event.target.value } : actual,
+                                ),
+                              )
+                            }
+                            required
+                            step="0.01"
+                            type="number"
+                            value={regla.precio}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>Prioridad</span>
+                          <input
+                            className="control"
+                            max="32767"
+                            min="-32768"
+                            onChange={(event) =>
+                              setReglasPrecio((actuales) =>
+                                actuales.map((actual, i) =>
+                                  i === index
+                                    ? { ...actual, prioridad: event.target.value }
+                                    : actual,
+                                ),
+                              )
+                            }
+                            step="1"
+                            type="number"
+                            value={regla.prioridad}
+                          />
+                        </label>
+                      </div>
+                      <button
+                        className="text-action pricing-rule__remove"
+                        onClick={() =>
+                          setReglasPrecio((actuales) => actuales.filter((_, i) => i !== index))
+                        }
+                        type="button"
+                      >
+                        Eliminar regla
+                      </button>
+                    </fieldset>
+                  ))}
+                  {!reglasPrecio.length && (
+                    <div className="empty-state empty-state--compact">
+                      <h3>Este servicio no tiene reglas</h3>
+                      <p>Al guardar sin reglas, las cotizaciones usarán el precio base.</p>
+                    </div>
+                  )}
+                  <VetoButton
+                    onClick={() =>
+                      setReglasPrecio((actuales) => [...actuales, { ...reglaPrecioVacia }])
+                    }
+                    variant="secondary"
+                  >
+                    ＋ Agregar regla
+                  </VetoButton>
+                  <p className="field__hint">
+                    Si varias reglas coinciden, se aplica primero la de mayor prioridad; si empatan,
+                    la de mayor precio.
+                  </p>
+                  <div className="form-actions">
+                    <VetoButton onClick={() => setModal(null)} variant="secondary">
+                      Cancelar
+                    </VetoButton>
+                    <VetoButton loading={cargando} type="submit">
+                      Guardar reglas
                     </VetoButton>
                   </div>
                 </form>

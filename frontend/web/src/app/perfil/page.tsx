@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import type { PerfilUsuario } from '@veto/shared';
 import { actualizarPerfilSchema, eliminarCuentaSchema } from '@veto/shared';
 import { AlertBox, Avatar, VetoButton } from '@/components/ui/veto-components';
-import { api, ApiError } from '@/lib/api';
+import { API_URL, api, ApiError } from '@/lib/api';
 import { erroresPorCampo } from '@/lib/errores';
 import { notificarCambioSesion } from '@/lib/session';
 
@@ -32,12 +33,19 @@ export default function MiPerfil() {
   const [error2fa, setError2fa] = useState('');
   const [configuracion2fa, setConfiguracion2fa] = useState<Configuracion2fa | null>(null);
   const [codigo2fa, setCodigo2fa] = useState('');
+  const [clave2faCopiada, setClave2faCopiada] = useState(false);
   const [activando2fa, setActivando2fa] = useState(false);
   const [eliminarAbierto, setEliminarAbierto] = useState(false);
   const [contrasenaEliminar, setContrasenaEliminar] = useState('');
   const [confirmacion, setConfirmacion] = useState('');
+  const [consultandoCuentaGoogle, setConsultandoCuentaGoogle] = useState(false);
+  const [eliminarRequiereGoogle, setEliminarRequiereGoogle] = useState(false);
+  const [eliminarReautenticada, setEliminarReautenticada] = useState(false);
+  const [reautenticandoGoogle, setReautenticandoGoogle] = useState(false);
   const [eliminando, setEliminando] = useState(false);
   const [eliminada, setEliminada] = useState(false);
+  const ventanaReautenticacion = useRef<Window | null>(null);
+  const temporizadorReautenticacion = useRef<number | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -66,6 +74,16 @@ export default function MiPerfil() {
     void cargar();
   }, [cargar]);
 
+  useEffect(
+    () => () => {
+      if (temporizadorReautenticacion.current !== null) {
+        window.clearInterval(temporizadorReautenticacion.current);
+      }
+      ventanaReautenticacion.current?.close();
+    },
+    [],
+  );
+
   async function cargarEstado2fa() {
     setCargando2fa(true);
     setError2fa('');
@@ -92,6 +110,7 @@ export default function MiPerfil() {
       });
       setConfiguracion2fa(resultado);
       setCodigo2fa('');
+      setClave2faCopiada(false);
     } catch (causa) {
       setError2fa(
         causa instanceof ApiError
@@ -100,6 +119,17 @@ export default function MiPerfil() {
       );
     } finally {
       setCargando2fa(false);
+    }
+  }
+
+  async function copiarClave2fa() {
+    if (!configuracion2fa) return;
+    setError2fa('');
+    try {
+      await navigator.clipboard.writeText(configuracion2fa.secreto);
+      setClave2faCopiada(true);
+    } catch {
+      setError2fa('No pudimos copiar la clave. Puedes seleccionarla y copiarla manualmente.');
     }
   }
 
@@ -170,12 +200,37 @@ export default function MiPerfil() {
     }
   }
 
-  async function eliminarCuenta(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const resultado = eliminarCuentaSchema.safeParse({
-      contrasena: contrasenaEliminar,
-      confirmacion,
-    });
+  async function prepararEliminacionCuenta() {
+    setError('');
+    setErrores({});
+    setContrasenaEliminar('');
+    setConfirmacion('');
+    setEliminarReautenticada(false);
+    setEliminarRequiereGoogle(false);
+    setConsultandoCuentaGoogle(true);
+    try {
+      const estado = await api<{ vinculada: boolean; sinContrasena: boolean }>(
+        '/identidad/google/estado',
+      );
+      setEliminarRequiereGoogle(estado.sinContrasena);
+      setEliminarAbierto(true);
+    } catch (causa) {
+      setError(
+        causa instanceof ApiError
+          ? causa.message
+          : 'No pudimos consultar cómo confirmar tu identidad. Inténtalo de nuevo.',
+      );
+    } finally {
+      setConsultandoCuentaGoogle(false);
+    }
+  }
+
+  async function enviarEliminacionCuenta(reautenticadaGoogle: boolean) {
+    const datos =
+      eliminarRequiereGoogle && reautenticadaGoogle
+        ? { confirmacion }
+        : { contrasena: contrasenaEliminar, confirmacion };
+    const resultado = eliminarCuentaSchema.safeParse(datos);
     if (!resultado.success) {
       setErrores(erroresPorCampo(resultado.error));
       return;
@@ -191,14 +246,68 @@ export default function MiPerfil() {
       setEliminada(true);
       setEliminarAbierto(false);
     } catch (causa) {
-      setError(
-        causa instanceof ApiError
-          ? causa.message
-          : 'No pudimos eliminar tu cuenta. Inténtalo de nuevo.',
-      );
+      if (causa instanceof ApiError && causa.status === 401 && eliminarRequiereGoogle) {
+        setEliminarReautenticada(false);
+        setError(
+          'La confirmación de Google venció. Confirma tu identidad otra vez para continuar.',
+        );
+      } else {
+        if (causa instanceof ApiError && Object.keys(causa.fieldErrors).length) {
+          setErrores(causa.fieldErrors);
+        }
+        setError(
+          causa instanceof ApiError && causa.status === 403
+            ? 'Las cuentas de aliados y veterinarios se eliminan con el Equipo Veto. Contáctanos.'
+            : causa instanceof ApiError
+              ? causa.message
+              : 'No pudimos eliminar tu cuenta. Inténtalo de nuevo.',
+        );
+      }
     } finally {
       setEliminando(false);
     }
+  }
+
+  function cancelarReautenticacionGoogle() {
+    if (temporizadorReautenticacion.current !== null) {
+      window.clearInterval(temporizadorReautenticacion.current);
+      temporizadorReautenticacion.current = null;
+    }
+    ventanaReautenticacion.current?.close();
+    ventanaReautenticacion.current = null;
+    setReautenticandoGoogle(false);
+  }
+
+  function iniciarReautenticacionGoogle() {
+    const ventana = window.open(
+      `${API_URL}/identidad/google/reautenticar`,
+      'veto-google-reauth',
+      'popup,width=520,height=680',
+    );
+    if (!ventana) {
+      setError(
+        'Tu navegador bloqueó la ventana de Google. Permite ventanas emergentes e inténtalo otra vez.',
+      );
+      return;
+    }
+    setError('');
+    setReautenticandoGoogle(true);
+    ventanaReautenticacion.current = ventana;
+    temporizadorReautenticacion.current = window.setInterval(() => {
+      if (!ventana.closed) return;
+      cancelarReautenticacionGoogle();
+      setEliminarReautenticada(true);
+      void enviarEliminacionCuenta(true);
+    }, 400);
+  }
+
+  async function eliminarCuenta(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (eliminarRequiereGoogle && !eliminarReautenticada) {
+      iniciarReautenticacionGoogle();
+      return;
+    }
+    await enviarEliminacionCuenta(eliminarReautenticada);
   }
 
   if (eliminada) {
@@ -382,13 +491,43 @@ export default function MiPerfil() {
             ) : configuracion2fa ? (
               <div className="form-stack">
                 <AlertBox tone="info" title="Agrega Veto a tu aplicación autenticadora">
-                  Configura una cuenta de tipo TOTP con el correo de tu cuenta y esta clave. Usa
-                  códigos de seis dígitos que cambian cada 30 segundos.
+                  Escanea el código QR con tu aplicación autenticadora. Si no puedes escanearlo,
+                  configura una cuenta TOTP con el correo de tu cuenta y la clave manual. Los
+                  códigos de seis dígitos cambian cada 30 segundos.
                 </AlertBox>
-                <label className="field">
-                  <span>Clave de configuración</span>
-                  <input className="control" readOnly value={configuracion2fa.secreto} />
-                </label>
+                <div className="totp-setup">
+                  <div className="totp-setup__manual">
+                    <label className="field">
+                      <span>Clave de configuración</span>
+                      <input
+                        autoComplete="off"
+                        className="control totp-secret"
+                        readOnly
+                        spellCheck={false}
+                        value={configuracion2fa.secreto}
+                      />
+                    </label>
+                    <button
+                      className="text-action"
+                      onClick={() => void copiarClave2fa()}
+                      type="button"
+                    >
+                      {clave2faCopiada ? 'Clave copiada' : 'Copiar clave'}
+                    </button>
+                  </div>
+                  <div className="totp-setup__qr">
+                    <QRCodeSVG
+                      aria-label="Código QR de configuración para la aplicación autenticadora"
+                      bgColor="#ffffff"
+                      fgColor="#1e1e1e"
+                      level="M"
+                      marginSize={4}
+                      size={208}
+                      value={configuracion2fa.uri}
+                    />
+                    <p>Escanéalo desde la aplicación autenticadora.</p>
+                  </div>
+                </div>
                 <form className="form-stack" onSubmit={confirmarActivacion2fa}>
                   <label className="field">
                     <span>Código de tu aplicación</span>
@@ -442,17 +581,28 @@ export default function MiPerfil() {
               </div>
             )}
           </section>
-          <section className="danger-zone">
-            <p className="eyebrow eyebrow--dark">ZONA DE PELIGRO</p>
-            <h2>Eliminar mi cuenta</h2>
-            <p>
-              Se anonimizarán tus datos personales, se cancelarán tus citas futuras y se conservará
-              el historial clínico de tus mascotas según la ley.
-            </p>
-            <VetoButton onClick={() => setEliminarAbierto(true)} variant="danger">
-              Eliminar cuenta
-            </VetoButton>
-          </section>
+          {perfil.rol === 'TUTOR' ? (
+            <section className="danger-zone">
+              <p className="eyebrow eyebrow--dark">ZONA DE PELIGRO</p>
+              <h2>Eliminar mi cuenta</h2>
+              <p>
+                Se anonimizarán tus datos personales, se cancelarán tus citas futuras y se
+                conservará el historial clínico de tus mascotas según la ley.
+              </p>
+              <VetoButton
+                loading={consultandoCuentaGoogle}
+                onClick={() => void prepararEliminacionCuenta()}
+                variant="danger"
+              >
+                Eliminar cuenta
+              </VetoButton>
+            </section>
+          ) : (
+            <AlertBox tone="info" title="Eliminación de cuenta administrada por Veto">
+              Las cuentas de aliados y veterinarios no se pueden eliminar desde el perfil. Para
+              solicitar la eliminación, contacta al Equipo Veto.
+            </AlertBox>
+          )}
         </div>
       )}
       <p className="workspace-back">
@@ -469,20 +619,30 @@ export default function MiPerfil() {
           >
             <h2 id="delete-title">¿Quieres eliminar tu cuenta?</h2>
             <p>
-              Esta acción no se puede deshacer. Necesitamos confirmar tu contraseña y tu decisión.
+              Esta acción no se puede deshacer.{' '}
+              {eliminarRequiereGoogle
+                ? reautenticandoGoogle
+                  ? 'Completa la verificación en la ventana de Google y ciérrala para continuar.'
+                  : 'Confirmaremos tu identidad con Google antes de completar la eliminación.'
+                : 'Necesitamos confirmar tu contraseña y tu decisión.'}
             </p>
             <form className="form-stack" onSubmit={eliminarCuenta}>
-              <label className="field">
-                <span>Contraseña actual</span>
-                <input
-                  autoComplete="current-password"
-                  className="control"
-                  onChange={(event) => setContrasenaEliminar(event.target.value)}
-                  required
-                  type="password"
-                  value={contrasenaEliminar}
-                />
-              </label>
+              {!eliminarRequiereGoogle && (
+                <label className="field">
+                  <span>Contraseña actual</span>
+                  <input
+                    autoComplete="current-password"
+                    className="control"
+                    onChange={(event) => setContrasenaEliminar(event.target.value)}
+                    required
+                    type="password"
+                    value={contrasenaEliminar}
+                  />
+                  {errores.contrasena && (
+                    <small className="field-error">{errores.contrasena}</small>
+                  )}
+                </label>
+              )}
               <label className="field">
                 <span>Escribe ELIMINAR para confirmar</span>
                 <input
@@ -498,6 +658,7 @@ export default function MiPerfil() {
               <div className="form-actions">
                 <VetoButton
                   onClick={() => {
+                    cancelarReautenticacionGoogle();
                     setEliminarAbierto(false);
                     setErrores({});
                   }}
@@ -506,12 +667,20 @@ export default function MiPerfil() {
                   Cancelar
                 </VetoButton>
                 <VetoButton
-                  disabled={confirmacion !== 'ELIMINAR' || !contrasenaEliminar}
-                  loading={eliminando}
+                  disabled={
+                    confirmacion !== 'ELIMINAR' ||
+                    (!eliminarRequiereGoogle && !contrasenaEliminar) ||
+                    reautenticandoGoogle
+                  }
+                  loading={eliminando || reautenticandoGoogle}
                   type="submit"
                   variant="danger"
                 >
-                  Eliminar definitivamente
+                  {reautenticandoGoogle
+                    ? 'Esperando a Google…'
+                    : eliminarRequiereGoogle && !eliminarReautenticada
+                      ? 'Continuar con Google'
+                      : 'Eliminar definitivamente'}
                 </VetoButton>
               </div>
             </form>

@@ -20,17 +20,78 @@ import {
   eliminarCuentaSchema,
   loginSchema,
   registroUsuarioSchema,
+  restablecerContrasenaSchema,
+  solicitarRecuperacionSchema,
+  verificarRecuperacionSchema,
 } from '@veto/shared';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from './auth.guard';
-import { COOKIE_REAUTENTICACION, cookieReautenticacion, cookieSesion, leerCookie } from './cookies';
+import {
+  COOKIE_REAUTENTICACION,
+  COOKIE_RECUPERACION,
+  cookieReautenticacion,
+  cookieRecuperacion,
+  cookieSesion,
+  leerCookie,
+} from './cookies';
 import { IdentidadService } from './identidad.service';
+import { RecuperacionContrasenaService } from './recuperacion-contrasena.service';
 
 @ApiTags('identidad')
 @Controller('identidad')
 export class IdentidadController {
-  constructor(private readonly identidad: IdentidadService) {}
+  constructor(
+    private readonly identidad: IdentidadService,
+    private readonly recuperacion: RecuperacionContrasenaService,
+  ) {}
+
+  @Get('recuperacion/disponible')
+  @ApiOperation({ summary: 'Consultar si el envío de códigos de recuperación está configurado' })
+  async disponibilidadRecuperacion() {
+    return { disponible: await this.recuperacion.disponibilidad() };
+  }
+
+  @Post('recuperacion/solicitar')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Solicitar un código de recuperación por correo (HU-004)' })
+  async solicitarRecuperacion(@Body() body: unknown) {
+    const datos = validar(solicitarRecuperacionSchema, body);
+    await this.recuperacion.solicitar(datos.correo);
+    return {
+      mensaje: 'Si existe una cuenta con ese correo, recibirás un código de verificación.',
+    };
+  }
+
+  @Post('recuperacion/verificar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar el código recibido y obtener un token temporal (HU-004)' })
+  async verificarRecuperacion(
+    @Body() body: unknown,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const datos = validar(verificarRecuperacionSchema, body);
+    const resultado = await this.recuperacion.verificar(datos.correo, datos.codigo);
+    response.setHeader('Set-Cookie', cookieRecuperacion(resultado.token, 600));
+    return { mensaje: 'Código verificado. Ya puedes elegir una nueva contraseña.' };
+  }
+
+  @Post('recuperacion/restablecer')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cambiar la contraseña con el token de recuperación (HU-004)' })
+  async restablecerContrasena(
+    @Req() request: Request,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const datos = validar(restablecerContrasenaSchema, body);
+    await this.recuperacion.restablecer(
+      leerCookie(request.headers.cookie, COOKIE_RECUPERACION) ?? '',
+      datos.contrasena,
+    );
+    response.setHeader('Set-Cookie', cookieRecuperacion('', 0));
+    return { mensaje: 'Tu contraseña fue actualizada. Inicia sesión con la nueva contraseña.' };
+  }
 
   @Post('login')
   @ApiOperation({ summary: 'Iniciar sesión con correo y contraseña' })

@@ -394,7 +394,7 @@ describe('HU-003 · disponibilidad (es opcional)', () => {
     expect(r.body).toEqual({ disponible: false });
 
     const inicio = await request(app.getHttpServer()).get('/api/identidad/google').expect(302);
-    expect(destinoWeb(inicio).origin + destinoWeb(inicio).pathname).toBe(`${WEB}/login`);
+    expect(destinoWeb(inicio).origin + destinoWeb(inicio).pathname).toBe(`${WEB}/ingresar`);
     expect(destinoWeb(inicio).searchParams.get('google')).toBe('error');
     expect(destinoWeb(inicio).searchParams.get('motivo')).toBe('no_disponible');
     expect(cookie(inicio, 'veto_google_estado')).toBeUndefined();
@@ -468,7 +468,7 @@ describe('HU-003 · el flujo autentica una cuenta válida y regresa a la aplicac
     const r = await ingresarConGoogle(app, e);
 
     const web = destinoWeb(r);
-    expect(`${web.origin}${web.pathname}`).toBe(`${WEB}/login`);
+    expect(`${web.origin}${web.pathname}`).toBe(`${WEB}/ingresar`);
     expect(web.searchParams.get('google')).toBe('ok');
     expect(web.searchParams.has('motivo')).toBe(false);
     expect(web.toString()).not.toContain('codigo-de-google');

@@ -24,9 +24,11 @@ export class AliadosController {
   @ApiOperation({
     summary: 'Registrar aliado (HU-007)',
     description:
-      'Body { nombre, celular, correo, contrasena, tipo (CLINICA | VET_INDEPENDIENTE | TIENDA), ' +
-      'nombreAliado?, descripcion?, contacto? }. El aliado queda PENDIENTE hasta que el Equipo ' +
-      'Veto lo active. Correo repetido → 409.',
+      'CLINICA / TIENDA: nombre de administrador, nombreAliado, ciudad y ubicacion; ' +
+      'VET_INDEPENDIENTE: nombre profesional y nombreAliado, ciudad y ubicacion opcionales. ' +
+      'Todos requieren celular, correo y contrasena. Los aliados quedan ACTIVOS al registrarse. ' +
+      'Las fundaciones usan POST /aliados/fundaciones y quedan PENDIENTE de revisión (HU-078/079). ' +
+      'Correo repetido → 409.',
   })
   @ApiCreatedResponse({ description: 'Cuenta y aliado creados: { usuario, aliado }.' })
   register(@Body() body: unknown) {

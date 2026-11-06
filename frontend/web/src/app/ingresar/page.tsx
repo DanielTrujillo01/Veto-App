@@ -1,14 +1,34 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import type { PendienteGoogle } from '@veto/shared';
 import { AlertBox, VetoButton } from '@/components/ui/veto-components';
+import { GoogleAuthButton } from '@/components/GoogleAuthButton';
 import { api, ApiError } from '@/lib/api';
 import { notificarCambioSesion } from '@/lib/session';
 
 type Usuario = { id: string; nombre: string; rol: string };
 type RespuestaLogin =
   { usuario: Usuario } | { requiere2fa: true; desafio: string; expiraEn: string };
+
+function formatearCelular(valor: string) {
+  const digitos = valor.replace(/\D/g, '').slice(0, 10);
+  if (digitos.length <= 3) return digitos;
+  if (digitos.length <= 6) return `${digitos.slice(0, 3)} ${digitos.slice(3)}`;
+  return `${digitos.slice(0, 3)} ${digitos.slice(3, 6)} ${digitos.slice(6)}`;
+}
+
+const erroresGoogle: Record<string, string> = {
+  cancelado: 'Cancelaste el inicio de sesión con Google.',
+  proveedor: 'Google no pudo completar el inicio de sesión. Inténtalo de nuevo.',
+  correo_no_verificado: 'Tu cuenta de Google necesita tener el correo verificado.',
+  estado: 'La solicitud de Google venció. Inicia el proceso de nuevo.',
+  cuenta_inactiva: 'Esta cuenta de Veto no está activa.',
+  cuenta_vinculada: 'Esta cuenta ya está vinculada a otra cuenta de Google.',
+  cuenta_distinta: 'Se inició sesión con una cuenta de Google diferente.',
+  no_disponible: 'El inicio de sesión con Google no está configurado en este servidor.',
+};
 
 export default function Ingresar() {
   const [correo, setCorreo] = useState('');
@@ -19,6 +39,69 @@ export default function Ingresar() {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [desafio2fa, setDesafio2fa] = useState('');
   const [codigo2fa, setCodigo2fa] = useState('');
+  const [googlePendiente, setGooglePendiente] = useState<PendienteGoogle | null>(null);
+  const [celularGoogle, setCelularGoogle] = useState('');
+  const [contrasenaGoogle, setContrasenaGoogle] = useState('');
+  const [codigoGoogle, setCodigoGoogle] = useState('');
+
+  useEffect(() => {
+    let vigente = true;
+    const parametros = new URLSearchParams(window.location.search);
+    const resultado = parametros.get('google');
+    if (resultado === 'ok') {
+      setCargando(true);
+      void api<{ usuario: Usuario }>('/identidad/me')
+        .then(({ usuario: perfil }) => {
+          if (!vigente) return;
+          setUsuario(perfil);
+          notificarCambioSesion(perfil);
+        })
+        .catch(() => {
+          if (vigente) setError('Google inició sesión, pero no pudimos cargar tu perfil.');
+        })
+        .finally(() => {
+          if (vigente) setCargando(false);
+        });
+    } else if (resultado === '2fa') {
+      const desafio = new URLSearchParams(window.location.hash.slice(1)).get('desafio');
+      if (desafio) {
+        setDesafio2fa(desafio);
+      } else {
+        setError('No recibimos el desafío de verificación. Inicia sesión con Google de nuevo.');
+      }
+    } else if (resultado === 'registro' || resultado === 'vincular') {
+      setCargando(true);
+      void api<{ pendiente: PendienteGoogle | null }>('/identidad/google/pendiente')
+        .then(({ pendiente }) => {
+          if (!vigente) return;
+          if (!pendiente) throw new Error('No encontramos una solicitud pendiente de Google.');
+          setGooglePendiente(pendiente);
+        })
+        .catch((causa: unknown) => {
+          if (vigente) {
+            setError(
+              causa instanceof ApiError
+                ? causa.message
+                : causa instanceof Error
+                  ? causa.message
+                  : 'No pudimos continuar el registro con Google.',
+            );
+          }
+        })
+        .finally(() => {
+          if (vigente) setCargando(false);
+        });
+    } else if (resultado === 'error') {
+      const motivo = parametros.get('motivo') ?? '';
+      setError(erroresGoogle[motivo] ?? 'No pudimos iniciar sesión con Google.');
+    } else if (resultado === 'reauth') {
+      setError('La verificación de Google se completó. Vuelve a la acción que estabas realizando.');
+    }
+
+    return () => {
+      vigente = false;
+    };
+  }, []);
 
   async function iniciarSesion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -69,6 +152,63 @@ export default function Ingresar() {
     }
   }
 
+  async function completarRegistroGoogle(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    setCargando(true);
+    try {
+      const resultado = await api<{ usuario: Usuario }>('/identidad/google/completar', {
+        method: 'POST',
+        body: JSON.stringify({ celular: celularGoogle }),
+      });
+      setUsuario(resultado.usuario);
+      setGooglePendiente(null);
+      notificarCambioSesion(resultado.usuario);
+    } catch (causa) {
+      setError(
+        causa instanceof ApiError ? causa.message : 'No pudimos completar tu registro con Google.',
+      );
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  async function vincularGoogle(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    setCargando(true);
+    try {
+      const resultado = await api<{ usuario: Usuario }>('/identidad/google/vincular', {
+        method: 'POST',
+        body: JSON.stringify({
+          contrasena: contrasenaGoogle,
+          ...(codigoGoogle ? { codigo: codigoGoogle } : {}),
+        }),
+      });
+      setUsuario(resultado.usuario);
+      setGooglePendiente(null);
+      notificarCambioSesion(resultado.usuario);
+    } catch (causa) {
+      setError(causa instanceof ApiError ? causa.message : 'No pudimos vincular tu cuenta.');
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  async function cancelarGoogle() {
+    setError('');
+    setCargando(true);
+    try {
+      await api('/identidad/google/pendiente', { method: 'DELETE' });
+      setGooglePendiente(null);
+      window.history.replaceState({}, '', window.location.pathname);
+    } catch (causa) {
+      setError(causa instanceof ApiError ? causa.message : 'No pudimos cancelar la solicitud.');
+    } finally {
+      setCargando(false);
+    }
+  }
+
   return (
     <div className="auth-page auth-page--centered auth-page--login">
       <section aria-labelledby="login-title" className="auth-form-panel">
@@ -103,6 +243,102 @@ export default function Ingresar() {
               >
                 Continuar
               </Link>
+            </>
+          ) : googlePendiente ? (
+            <>
+              <AlertBox
+                tone="info"
+                title={
+                  googlePendiente.tipo === 'REGISTRO'
+                    ? `Hola, ${googlePendiente.nombre}`
+                    : 'Vincula tu cuenta de Veto'
+                }
+              >
+                {googlePendiente.tipo === 'REGISTRO'
+                  ? `Confirma tu número para crear una cuenta con ${googlePendiente.correo}.`
+                  : `Ya existe una cuenta con ${googlePendiente.correo}. Ingresa su contraseña para demostrar que es tuya.`}
+              </AlertBox>
+              {error && (
+                <div className="auth-error" role="alert">
+                  <strong>No pudimos continuar con Google</strong>
+                  <span>{error}</span>
+                </div>
+              )}
+              {googlePendiente.tipo === 'REGISTRO' ? (
+                <form className="form-stack" onSubmit={completarRegistroGoogle}>
+                  <label className="field">
+                    <span>Celular de contacto *</span>
+                    <span className="phone-control">
+                      <span className="phone-prefix">+57</span>
+                      <input
+                        aria-describedby="google-celular-hint"
+                        autoComplete="tel-national"
+                        className="control"
+                        inputMode="numeric"
+                        maxLength={12}
+                        onChange={(event) =>
+                          setCelularGoogle(event.target.value.replace(/\D/g, '').slice(0, 10))
+                        }
+                        placeholder="300 123 4567"
+                        required
+                        value={formatearCelular(celularGoogle)}
+                      />
+                    </span>
+                    <small className="field__hint" id="google-celular-hint">
+                      Ingresa los 10 dígitos de tu celular ({celularGoogle.length}/10).
+                    </small>
+                  </label>
+                  <VetoButton
+                    className="auth-submit"
+                    disabled={celularGoogle.length !== 10}
+                    loading={cargando}
+                    type="submit"
+                  >
+                    Crear cuenta
+                  </VetoButton>
+                </form>
+              ) : (
+                <form className="form-stack" onSubmit={vincularGoogle}>
+                  <label className="field">
+                    <span>Contraseña de tu cuenta de Veto *</span>
+                    <input
+                      autoComplete="current-password"
+                      className="control"
+                      onChange={(event) => setContrasenaGoogle(event.target.value)}
+                      required
+                      type="password"
+                      value={contrasenaGoogle}
+                    />
+                  </label>
+                  {googlePendiente.requiereCodigo && (
+                    <label className="field">
+                      <span>Código de verificación *</span>
+                      <input
+                        autoComplete="one-time-code"
+                        className="control code-input"
+                        inputMode="numeric"
+                        maxLength={6}
+                        onChange={(event) =>
+                          setCodigoGoogle(event.target.value.replace(/\D/g, '').slice(0, 6))
+                        }
+                        required
+                        value={codigoGoogle}
+                      />
+                    </label>
+                  )}
+                  <VetoButton
+                    className="auth-submit"
+                    disabled={googlePendiente.requiereCodigo && codigoGoogle.length !== 6}
+                    loading={cargando}
+                    type="submit"
+                  >
+                    Vincular e ingresar
+                  </VetoButton>
+                </form>
+              )}
+              <button className="text-action" onClick={() => void cancelarGoogle()} type="button">
+                Cancelar y volver
+              </button>
             </>
           ) : desafio2fa ? (
             <>
@@ -204,19 +440,7 @@ export default function Ingresar() {
                 </VetoButton>
               </form>
 
-              <div className="auth-divider">
-                <span>o</span>
-              </div>
-              <button
-                className="veto-button veto-button--google auth-submit"
-                onClick={() =>
-                  setError('El acceso con Google es opcional y aún no está configurado.')
-                }
-                type="button"
-              >
-                <span aria-hidden="true">G</span>
-                Continuar con Google
-              </button>
+              <GoogleAuthButton />
               <p className="auth-footnote">
                 ¿Todavía no tienes cuenta? <Link href="/registro">Crea una cuenta</Link>
               </p>
