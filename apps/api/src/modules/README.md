@@ -41,6 +41,15 @@ modelo de datos (`docs/modelo-de-datos.md`).
   veterinarios. Un correo ya registrado responde 409.
 - **Cuentas:** solo `identidad` escribe en `usuario`; los demás módulos crean cuentas con
   `IdentidadService.insertUser(client, ...)` dentro de su propia transacción.
+- **Registro de fundación (HU-078):** `POST /api/aliados/fundaciones` (público) recibe `nombre`,
+  `ciudad`, `contacto`, `descripcion`, `ubicacion`, `anioFundacion`, `logoUrl?` (opcional), `representante?`
+  y los datos de la cuenta (`celular`, `correo`, `contrasena`). Crea cuenta y fundación en una
+  transacción y responde 201 `{ usuario, fundacion }` con la fundación `PENDIENTE`; tipo y estado no se
+  pueden enviar. Un campo faltante o inválido responde 400 con **todos** los errores a la vez
+  (`errores: { campo: mensaje }`) para que el formulario conserve lo ya escrito y marque cada campo.
+  Correo repetido → 409. La fundación consulta lo guardado, aun pendiente, con
+  `GET /api/aliados/me/fundacion/datos` (`{ fundacion }` con sus datos, estado y los de su cuenta).
+  `POST /api/aliados` sigue sin aceptar `FUNDACION`.
 - **Revisión de fundaciones (HU-079):** `GET /api/admin/fundaciones/pendientes`,
   `GET /api/admin/fundaciones/:fundacionId`, `PATCH .../:fundacionId/aprobar` y
   `PATCH .../:fundacionId/rechazar` son exclusivos de `EQUIPO_VETO`. Una decisión transiciona

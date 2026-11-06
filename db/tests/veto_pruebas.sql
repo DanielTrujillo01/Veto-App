@@ -620,6 +620,66 @@ BEGIN
         UPDATE aliado SET modo_confirmacion = 'AUTOMATICA' WHERE id = a_iv;
     END;
 
+    -- ---------- HU-078: registro de fundaciones ----------
+    DECLARE
+        u_f uuid; a_f uuid;
+        anio_actual int := EXTRACT(YEAR FROM (now() AT TIME ZONE 'UTC'))::int;
+    BEGIN
+        INSERT INTO usuario (nombre, celular, correo, password_hash, rol)
+            VALUES ('Fundación Tres','3005556699','fund3@mail.com','h','ALIADO') RETURNING id INTO u_f;
+
+        -- Cada dato obligatorio en blanco se rechaza (antes solo se exigía que no fuera NULL)
+        PERFORM pg_temp.debe_fallar('fundación con el nombre en blanco',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','   ','d','c','Cali','u',2015)$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('fundación con la ciudad en blanco',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F','d','c','  ','u',2015)$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('fundación con la ubicación en blanco',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F','d','c','Cali','','2015')$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('fundación con el contacto en blanco',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F','d',' ','Cali','u',2015)$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('fundación con la descripción en blanco',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F',' ','c','Cali','u',2015)$q$, u_f), '23514');
+
+        -- Año de fundación: ni anterior a 1900 ni posterior al año actual
+        PERFORM pg_temp.debe_fallar('fundación fundada antes de 1900',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F','d','c','Cali','u',1899)$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('fundación fundada en el futuro',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+                      VALUES (%L,'FUNDACION','F','d','c','Cali','u',%s)$q$, u_f, anio_actual + 1), '23514');
+
+        -- El logo es opcional, pero si viene debe ser una URL http(s)
+        PERFORM pg_temp.debe_fallar('logo que no es una URL web',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion, logo_url)
+                      VALUES (%L,'FUNDACION','F','d','c','Cali','u',2015,'javascript:alert(1)')$q$, u_f), '23514');
+        PERFORM pg_temp.debe_fallar('logo sin esquema',
+            format($q$INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion, logo_url)
+                      VALUES (%L,'FUNDACION','F','d','c','Cali','u',2015,'logo.png')$q$, u_f), '23514');
+
+        -- Registro correcto: sin logo, nace PENDIENTE
+        INSERT INTO aliado (usuario_id, tipo, nombre, descripcion, contacto, ciudad, ubicacion, anio_fundacion)
+            VALUES (u_f, 'FUNDACION', 'Fundación Tres', 'Rescate', 'tres@mail.com', 'Cali', 'Calle 5', anio_actual)
+            RETURNING id INTO a_f;
+        PERFORM pg_temp.debe_pasar('una fundación sin logo se registra como PENDIENTE',
+            (SELECT estado = 'PENDIENTE' AND logo_url IS NULL AND tipo = 'FUNDACION' FROM aliado WHERE id = a_f));
+        UPDATE aliado SET logo_url = 'https://cdn.veto.co/tres.png' WHERE id = a_f;
+        PERFORM pg_temp.debe_pasar('el logo http(s) se acepta',
+            (SELECT logo_url FROM aliado WHERE id = a_f) = 'https://cdn.veto.co/tres.png');
+        PERFORM pg_temp.debe_fallar('no se puede editar el año hacia el futuro',
+            format($q$UPDATE aliado SET anio_fundacion = %s WHERE id = %L$q$, anio_actual + 1, a_f), '23514');
+        PERFORM pg_temp.debe_fallar('no se puede dejar la ciudad en blanco al editar',
+            format($q$UPDATE aliado SET ciudad = ' ' WHERE id = %L$q$, a_f), '23514');
+
+        -- Las reglas de texto solo aplican a fundaciones; el logo, a todos los aliados
+        PERFORM pg_temp.debe_fallar('una clínica tampoco acepta un logo que no es URL web',
+            format($q$UPDATE aliado SET logo_url = 'ftp://x.co/a.png' WHERE id = %L$q$, a_clinica), '23514');
+    END;
+
     RAISE NOTICE '=== TODAS LAS PRUEBAS PASARON ===';
 END $$;
 ROLLBACK;

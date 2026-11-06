@@ -5,6 +5,7 @@ export * from './mascota';
 export * from './veterinario';
 export * from './horarios';
 export * from './aliado';
+export * from './fundacion';
 export * from './servicio';
 export * from './sede';
 export * from './consulta';

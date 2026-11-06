@@ -8,6 +8,8 @@ import { AliadoEspeciesService } from './aliado-especies.service';
 import { AliadosController } from './aliados.controller';
 import { AliadosService } from './aliados.service';
 import { ClinicasController } from './clinicas.controller';
+import { RegistroFundacionController } from './registro-fundacion.controller';
+import { RegistroFundacionService } from './registro-fundacion.service';
 import { VeterinarioPerfilController } from './veterinario-perfil.controller';
 import { VeterinarioGuard } from './veterinario.guard';
 import { VeterinariosController } from './veterinarios.controller';
@@ -19,7 +21,7 @@ import { SedesService } from './sedes.service';
  * Módulo aliados: Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes.
  *
  * Tablas propias: aliado, veterinario, sede, aliado_especie
- * Historias:      HU-007, 012–016, 021, 023, 078
+ * Historias:      HU-007, 012–016, 021, 023, 078, 079 (estado propio)
  *
  * Regla: solo este módulo escribe en sus tablas. Si otro módulo necesita un dato,
  * lo pide a través de un servicio exportado por este módulo, nunca con SQL directo.
@@ -28,6 +30,7 @@ import { SedesService } from './sedes.service';
   imports: [IdentidadModule, MascotasModule],
   controllers: [
     AliadosController,
+    RegistroFundacionController,
     VeterinariosController,
     VeterinarioPerfilController,
     AliadoEspeciesController,
@@ -39,6 +42,7 @@ import { SedesService } from './sedes.service';
     VeterinariosService,
     SedesService,
     AliadosService,
+    RegistroFundacionService,
     AliadoEspeciesService,
     AliadoConfirmacionService,
     VeterinarioGuard,

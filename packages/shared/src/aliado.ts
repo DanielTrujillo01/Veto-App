@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { celularSchema, correoSchema, contrasenaSchema } from './usuario';
 
-/** Tipos de aliado que se registran solos (HU-007). Las fundaciones tienen su propio flujo (HU-078). */
+/** Tipos de aliado que se registran solos (HU-007). Las fundaciones tienen su propio flujo: `registroFundacionSchema` (HU-078). */
 export const tipoAliadoRegistroSchema = z.enum(['CLINICA', 'VET_INDEPENDIENTE', 'TIENDA'], {
   error: 'El tipo debe ser CLINICA, VET_INDEPENDIENTE o TIENDA',
 });

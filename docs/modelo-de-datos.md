@@ -101,6 +101,7 @@ Detalles de diseño:
 | Consulta cerrada no se edita ni se borra; se corrige con anotación (HU-042)                                          | Triggers + tabla de solo inserción             |
 | Pedido: valida producto activo, descuenta stock, lo devuelve al cancelar; no se cancela tras despachar (HU-046, 049) | Triggers `fn_pedido_item` y `fn_pedido_estado` |
 | Solicitud de adopción: una activa por tutor y mascota; rechazar exige motivo (HU-090, 094)                           | Índice único parcial + `CHECK`                 |
+| Fundación: datos completos y no en blanco, año válido, logo con URL http(s) (HU-078)                                 | `CHECK` + trigger `fn_fundacion_anio_valido`   |
 | Quién cambió el estado de cita, pedido, solicitud o publicación                                                      | `historial_estado` (solo inserción)            |
 
 Para que `historial_estado` y la regla "solo el aliado finaliza" funcionen, la aplicación debe ejecutar al inicio de cada transacción:
@@ -136,6 +137,15 @@ una cita pendiente ya está permitido en la base de datos; falta el endpoint, qu
 **Servicios (HU-018).** Un servicio nunca se borra: se desactiva (`activo = false`) y deja de
 listarse como disponible; la base rechaza nuevas citas sobre él, y las citas existentes conservan su
 precio. Si un servicio ya tiene citas, la API no permite cambiar su tipo ni su modalidad.
+
+**Registro de fundaciones (HU-078).** Una fundación es un `aliado` de tipo `FUNDACION` más la cuenta que la administra
+(rol `ALIADO`), creados en una sola transacción. Nace `PENDIENTE`: el Equipo Veto la aprueba o rechaza en HU-079 y solo
+una fundación `ACTIVO` publica mascotas. El tipo y el estado no los elige quien se registra. Nombre, ciudad, contacto,
+descripción, ubicación y año de fundación son obligatorios; el logo es opcional y guarda solo la URL. La base ya exigía
+que esos datos no fueran nulos; la migración 0008 agrega que no sean solo espacios, que el año no sea futuro y que el
+logo sea una URL web. Esas restricciones se crean `NOT VALID`: rigen para todo lo que se guarde desde ahora, sin
+rechazar filas que ya existían. «Contacto» es texto libre (correo, teléfono o ambos); el nombre del representante es
+opcional y, si no se indica, la cuenta usa el nombre de la fundación.
 
 **Calendario de disponibilidad (HU-022).** La disponibilidad de un aliado Vet es la de sus veterinarios (el independiente
 tiene su propio perfil de veterinario, decisión 10). Se compone de tres cosas: el horario semanal con vigencia
