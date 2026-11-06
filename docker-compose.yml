@@ -1,4 +1,4 @@
-# Solo la base de datos. La API y la web se corren en tu máquina (pnpm dev)
+# La base de datos y el SMTP local (Mailpit). La API y la web se corren en tu máquina (pnpm dev)
 # para tener recarga en caliente.
 services:
   db:
@@ -17,6 +17,13 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: veto-mailpit
+    ports:
+      - '1025:1025'
+      - '8025:8025'
 
 volumes:
   veto_pgdata:

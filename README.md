@@ -174,7 +174,44 @@ lugar de emitir la sesión. El acceso se completa con:
 `POST /api/identidad/login/2fa` y `{ "desafio": "...", "codigo": "123456" }`.
 
 El desafío dura 5 minutos, se consume al utilizarse y los códigos inválidos o vencidos responden
-`401`. La migración `0007_dos_factores.sql` guarda el secreto y los desafíos en la base de datos.
+`401`. La tabla `usuario` guarda el secreto y `desafio_2fa` conserva los desafíos temporales.
+
+### Recuperación de contraseña (HU-004)
+
+La recuperación automática requiere correo y Google Authenticator activado. El enlace enviado por
+correo vence en 15 minutos; después de verificarlo con el código TOTP se puede definir una contraseña
+nueva durante los siguientes 10 minutos. Las cuentas sin TOTP o cuyos usuarios perdieron acceso al
+autenticador requieren soporte manual; no existe un bypass automático. Al cambiar la contraseña se
+revocan las sesiones anteriores. Cada código TOTP solo se acepta una vez en el flujo de recuperación.
+La recuperación reutiliza la tabla existente `desafio_2fa` con hashes namespaced `hu004:`; no
+requiere una nueva tabla ni migración de base de datos.
+
+El envío usa SMTP configurable por `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `MAIL_FROM` y, si el
+proveedor lo exige, `SMTP_USER` y `SMTP_PASSWORD`.
+
+Para desarrollo local, `docker-compose.yml` incluye Mailpit: arráncalo con
+`docker compose up -d mailpit`, conserva los valores de `.env.example` y revisa los mensajes en
+http://localhost:8025. Mailpit no envía correos a destinatarios reales.
+
+Para enviar correos reales sin contratar inicialmente un servicio, se puede probar con una cuenta
+personal de Gmail:
+
+1. Activa la verificación en dos pasos en la cuenta de Google.
+2. Desde la configuración de seguridad de la cuenta, genera una **contraseña de aplicación** para
+   Veto. Google solo permite crearla si la cuenta cumple sus requisitos de seguridad.
+3. En el `.env` local o en las variables secretas del entorno donde corre la API, configura
+   `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false`,
+   `SMTP_USER=tu-cuenta@gmail.com`, `SMTP_PASSWORD` con la contraseña de aplicación y
+   `MAIL_FROM=Veto <tu-cuenta@gmail.com>`. Los marcadores de `.env.example` muestran el formato.
+4. Reinicia la API y prueba la recuperación con una cuenta controlada.
+
+No uses la contraseña normal de Gmail ni compartas o subas la contraseña de aplicación al
+repositorio. Gmail tiene límites y controles antiabuso, y una cuenta personal no es un servicio de
+correo transaccional: la entrega, disponibilidad y posibilidad de uso pueden variar. Esta opción
+sirve para comenzar y probar con poco volumen, pero no garantiza envío gratuito ni es una garantía
+para producción. Si Google rechaza el acceso SMTP, verifica la contraseña de aplicación y las
+políticas de la cuenta. Las rutas de recuperación están documentadas en Swagger en `/api/docs`.
+Actualmente la página web de recuperación no está incluida; el flujo disponible es el de la API.
 
 ## Web
 

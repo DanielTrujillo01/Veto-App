@@ -85,14 +85,25 @@ export function generarCodigoTotp(secreto: string, ahora = Date.now()): string {
   return String(numero % 1_000_000).padStart(6, '0');
 }
 
-export function verificarCodigoTotp(secreto: string, codigo: string, ahora = Date.now()): boolean {
+export function contadorCodigoTotp(
+  secreto: string,
+  codigo: string,
+  ahora = Date.now(),
+): number | null {
   try {
+    if (!/^\d{6}$/.test(codigo)) return null;
     const esperado = Buffer.from(generarCodigoTotp(secreto, ahora));
     const recibido = Buffer.from(codigo);
-    return recibido.length === esperado.length && timingSafeEqual(recibido, esperado);
+    return recibido.length === esperado.length && timingSafeEqual(recibido, esperado)
+      ? Math.floor(ahora / 30_000)
+      : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function verificarCodigoTotp(secreto: string, codigo: string, ahora = Date.now()): boolean {
+  return contadorCodigoTotp(secreto, codigo, ahora) !== null;
 }
 
 export function uriTotp(secreto: string, correo: string): string {

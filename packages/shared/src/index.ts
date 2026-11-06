@@ -11,3 +11,4 @@ export * from './consulta';
 export * from './especie';
 export * from './confirmacion';
 export * from './dos-factores';
+export * from './recuperacion';

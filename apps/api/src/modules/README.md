@@ -5,7 +5,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 
 | Módulo           | Qué hace                                                                           | Tablas propias                                                   | Historias                                |
 | ---------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------- |
-| `identidad`      | Cuentas, registro e inicio de sesión                                               | usuario                                                          | HU-001, 002, 006                         |
+| `identidad`      | Cuentas, registro, inicio de sesión y recuperación de contraseña                   | usuario, sesion, desafio_2fa                                     | HU-001, 002, 004–006                     |
 | `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                        | HU-007, 012–016, 021, 023, 078–079       |
 | `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                   | HU-008–011                               |
 | `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, tipo_servicio          | HU-016, 018–022, 024–028                 |
@@ -41,6 +41,19 @@ modelo de datos (`docs/modelo-de-datos.md`).
   veterinarios. Un correo ya registrado responde 409.
 - **Cuentas:** solo `identidad` escribe en `usuario`; los demás módulos crean cuentas con
   `IdentidadService.insertUser(client, ...)` dentro de su propia transacción.
+- **Recuperación de contraseña (HU-004):** `POST /api/identidad/recuperar-contrasena` envía un enlace
+  por SMTP solo a cuentas activas con TOTP. `POST .../verificar` consume ese enlace y exige un código
+  TOTP; devuelve un token de cambio de un solo uso, válido 10 minutos. `POST .../completar` actualiza
+  el hash de contraseña, consume el token y revoca las sesiones y desafíos existentes en una
+  transacción. Reutiliza `desafio_2fa` con hashes de token namespaced por `hu004:` y no requiere
+  cambios al esquema existente. Enlaces vencidos, inválidos, reutilizados y códigos incorrectos se
+  rechazan; hay un máximo de cinco intentos de código y tres solicitudes por hora. Un código TOTP
+  ya aceptado tampoco se puede reutilizar en otra solicitud de recuperación. La respuesta a la
+  solicitud no revela si el correo está registrado. Sin TOTP o sin acceso al autenticador se requiere soporte manual. SMTP usa
+  las variables documentadas en `.env.example`; Mailpit local está disponible en
+  `http://localhost:8025`. Para pruebas reales de bajo volumen se puede configurar Gmail con una
+  contraseña de aplicación; está sujeto a límites y no se garantiza como servicio gratuito para
+  producción.
 - **Revisión de fundaciones (HU-079):** `GET /api/admin/fundaciones/pendientes`,
   `GET /api/admin/fundaciones/:fundacionId`, `PATCH .../:fundacionId/aprobar` y
   `PATCH .../:fundacionId/rechazar` son exclusivos de `EQUIPO_VETO`. Una decisión transiciona
