@@ -82,17 +82,6 @@ export default function Inicio() {
               <span aria-hidden="true">⌕</span> Buscar
             </button>
           </form>
-          <div className="home-trust">
-            <span>
-              <i>✓</i> Aliados verificados
-            </span>
-            <span>
-              <i>♡</i> Cuidado cercano
-            </span>
-            <span>
-              <i>⌖</i> En Bogotá
-            </span>
-          </div>
         </div>
         <div className="home-hero__visual">
           <div className="home-hero__photo">

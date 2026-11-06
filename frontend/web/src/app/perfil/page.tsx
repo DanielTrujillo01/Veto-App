@@ -7,6 +7,7 @@ import { actualizarPerfilSchema, eliminarCuentaSchema } from '@veto/shared';
 import { AlertBox, Avatar, VetoButton } from '@/components/ui/veto-components';
 import { api, ApiError } from '@/lib/api';
 import { erroresPorCampo } from '@/lib/errores';
+import { notificarCambioSesion } from '@/lib/session';
 
 type PerfilForm = { nombre: string; celular: string; correo: string; contrasenaActual: string };
 type Estado2fa = { activado: boolean; activadoEn: string | null };
@@ -186,6 +187,7 @@ export default function MiPerfil() {
         method: 'DELETE',
         body: JSON.stringify(resultado.data),
       });
+      notificarCambioSesion(null);
       setEliminada(true);
       setEliminarAbierto(false);
     } catch (causa) {

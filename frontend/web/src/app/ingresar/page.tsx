@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { AlertBox, VetoButton } from '@/components/ui/veto-components';
 import { api, ApiError } from '@/lib/api';
+import { notificarCambioSesion } from '@/lib/session';
 
 type Usuario = { id: string; nombre: string; rol: string };
 type RespuestaLogin =
@@ -30,6 +31,7 @@ export default function Ingresar() {
       });
       if ('usuario' in resultado) {
         setUsuario(resultado.usuario);
+        notificarCambioSesion(resultado.usuario);
       } else {
         setDesafio2fa(resultado.desafio);
       }
@@ -54,6 +56,7 @@ export default function Ingresar() {
         body: JSON.stringify({ desafio: desafio2fa, codigo: codigo2fa }),
       });
       setUsuario(resultado.usuario);
+      notificarCambioSesion(resultado.usuario);
       setDesafio2fa('');
     } catch (causa) {
       setError(
