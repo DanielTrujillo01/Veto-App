@@ -21,7 +21,14 @@ import { CorreoRecuperacionService } from './correo-recuperacion.service';
 @Module({
   imports: [CitasModule],
   controllers: [IdentidadController, RegistroUsuariosController, GoogleAuthController],
-  providers: [IdentidadService, AuthGuard, RolesGuard, CorreoRecuperacionService, GoogleAuthService, GoogleOAuthClient],
+  providers: [
+    IdentidadService,
+    AuthGuard,
+    RolesGuard,
+    CorreoRecuperacionService,
+    GoogleAuthService,
+    GoogleOAuthClient,
+  ],
   exports: [IdentidadService, AuthGuard, RolesGuard],
 })
 export class IdentidadModule {}

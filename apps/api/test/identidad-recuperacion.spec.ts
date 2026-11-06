@@ -7,6 +7,8 @@ import type { INestApplication } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { generarCodigoTotp, verificarContrasena } from '../src/modules/identidad/seguridad';
 import { IdentidadService } from '../src/modules/identidad/identidad.service';
+import { ENV } from '../src/config/env';
+import { ENV_PRUEBA } from './utilidades';
 
 const USUARIO_ID = '11111111-1111-4111-8111-111111111111';
 const CORREO = 'ana@mail.com';
@@ -567,7 +569,10 @@ describe('HU-004 · recuperación segura de contraseña', () => {
     const escenario = crearEscenario();
     const correo = crearCorreoFalso();
     const modulo = await Test.createTestingModule({ imports: [IdentidadModule] })
-      .useMocker((token) => (token === DatabaseService ? escenario.db : undefined))
+      .useMocker((token) => {
+        if (token === DatabaseService) return escenario.db;
+        if (token === ENV) return ENV_PRUEBA;
+      })
       .overrideProvider(CorreoRecuperacionService)
       .useValue(correo.servicio)
       .compile();
