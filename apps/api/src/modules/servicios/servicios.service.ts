@@ -5,12 +5,20 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import type { FiltrarServicios, GuardarServicio, Servicio, TipoAliado } from '@veto/shared';
+import type {
+  FiltrarServicios,
+  GuardarReglasPrecio,
+  GuardarServicio,
+  ReglaPrecio,
+  Servicio,
+  TipoAliado,
+} from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { AliadoEspeciesService } from '../aliados/aliado-especies.service';
 import { AliadosService } from '../aliados/aliados.service';
 import { CitasService } from '../citas/citas.service';
+import { MascotasService } from '../mascotas/mascotas.service';
 import { ServiciosRepository } from './servicios.repository';
 
 /** Solo clínicas y veterinarios independientes ofrecen servicios (la BD también lo exige). */
@@ -32,6 +40,7 @@ export class ServiciosService {
     private readonly aliados: AliadosService,
     private readonly especies: AliadoEspeciesService,
     private readonly citas: CitasService,
+    private readonly mascotas: MascotasService,
   ) {}
 
   /** HU-018: crea un servicio del aliado administrado por el usuario. */
@@ -110,6 +119,60 @@ export class ServiciosService {
       if (!servicio) throw new NotFoundException(NO_ENCONTRADO);
       return servicio;
     });
+  }
+
+  /** HU-020: consulta las reglas configuradas por el aliado propietario del servicio. */
+  async listarReglasPrecio(
+    usuarioId: string,
+    aliadoId: string,
+    servicioId: string,
+  ): Promise<ReglaPrecio[]> {
+    return this.db.withUser(usuarioId, async (client) => {
+      await this.aliados.verificarAdministrador(client, usuarioId, aliadoId, TIPOS_CON_SERVICIOS);
+      if (!(await this.repo.buscar(client, servicioId, aliadoId))) {
+        throw new NotFoundException(NO_ENCONTRADO);
+      }
+      return this.repo.listarReglasPrecio(client, servicioId);
+    });
+  }
+
+  /**
+   * HU-020: reemplaza toda la configuración en una transacción. Si una regla es inválida en
+   * PostgreSQL, se revierte también el borrado inicial y se conserva la configuración anterior.
+   */
+  async guardarReglasPrecio(
+    usuarioId: string,
+    aliadoId: string,
+    servicioId: string,
+    datos: GuardarReglasPrecio,
+  ): Promise<ReglaPrecio[]> {
+    try {
+      return await this.db.withUser(usuarioId, async (client) => {
+        await this.aliados.verificarAdministrador(client, usuarioId, aliadoId, TIPOS_CON_SERVICIOS);
+        if (!(await this.repo.buscar(client, servicioId, aliadoId, true))) {
+          throw new NotFoundException(NO_ENCONTRADO);
+        }
+        await this.repo.reemplazarReglasPrecio(client, servicioId, datos);
+        return this.repo.listarReglasPrecio(client, servicioId);
+      });
+    } catch (error) {
+      if (esErrorPg(error, PG.LLAVE_FORANEA)) {
+        throw errorDeCampo('especieId', 'La especie no existe');
+      }
+      throw error;
+    }
+  }
+
+  /** HU-020: cotiza un servicio disponible usando únicamente los datos de una mascota propia. */
+  async cotizarParaMascota(
+    tutorId: string,
+    servicioId: string,
+    mascotaId: string,
+  ): Promise<{ servicioId: string; mascotaId: string; precioBase: number; precio: number }> {
+    const servicio = await this.obtenerDisponible(servicioId);
+    await this.mascotas.obtener(tutorId, mascotaId);
+    const precio = await this.repo.precioParaMascota(this.db, servicioId, mascotaId);
+    return { servicioId, mascotaId, precioBase: servicio.precioBase, precio };
   }
 
   /**

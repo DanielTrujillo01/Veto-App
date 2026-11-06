@@ -4,7 +4,7 @@
 export const ROLES_USUARIO = ['TUTOR', 'ALIADO', 'VETERINARIO', 'EQUIPO_VETO'] as const;
 export const ESTADOS_CUENTA = ['ACTIVA', 'SUSPENDIDA', 'ELIMINADA'] as const;
 export const TIPOS_ALIADO = ['CLINICA', 'VET_INDEPENDIENTE', 'TIENDA', 'FUNDACION'] as const;
-export const ESTADOS_ALIADO = ['PENDIENTE', 'ACTIVO', 'SUSPENDIDO'] as const;
+export const ESTADOS_ALIADO = ['PENDIENTE', 'ACTIVO', 'SUSPENDIDO', 'RECHAZADO'] as const;
 export const SEXOS_ANIMAL = ['MACHO', 'HEMBRA'] as const;
 export const TAMANOS_MASCOTA = ['PEQUENO', 'MEDIANO', 'GRANDE'] as const;
 export const MODALIDADES_SERVICIO = ['EN_SEDE', 'A_DOMICILIO'] as const;
@@ -48,6 +48,8 @@ export const TIPOS_ACCION_ADMIN = [
   'OCULTAR',
   'MARCAR',
   'PUBLICAR',
+  'APROBAR_FUNDACION',
+  'RECHAZAR_FUNDACION',
 ] as const;
 
 export type RolUsuario = (typeof ROLES_USUARIO)[number];
