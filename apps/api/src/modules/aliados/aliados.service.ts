@@ -40,15 +40,37 @@ export class AliadosService {
       return await this.database.withUser(null, async (client) => {
         const user = await this.identidad.insertUser(client, userInput, passwordHash, 'ALIADO');
         const result = await client.query(
-          `INSERT INTO aliado (usuario_id,tipo,nombre,descripcion,contacto)
-           VALUES ($1,$2,$3,$4,$5)
-           RETURNING id,usuario_id,tipo,nombre,descripcion,contacto,estado,creado_en`,
+          `INSERT INTO aliado (
+              usuario_id,
+              tipo,
+              nombre,
+              descripcion,
+              contacto,
+              estado,
+              ciudad,
+              ubicacion
+          )
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+          RETURNING
+              id,
+              usuario_id,
+              tipo,
+              nombre,
+              descripcion,
+              contacto,
+              estado,
+              ciudad,
+              ubicacion,
+              creado_en`,
           [
             user.id,
             input.tipo,
             input.nombreAliado ?? input.nombre,
             input.descripcion ?? null,
             input.contacto ?? null,
+            'ACTIVO',
+            input.ciudad ?? null,
+            input.ubicacion ?? null,
           ],
         );
         const ally = result.rows[0];

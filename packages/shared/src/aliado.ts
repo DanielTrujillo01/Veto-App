@@ -4,21 +4,46 @@ import { celularSchema, correoSchema, contrasenaSchema } from './usuario';
 export const tipoAliadoRegistroSchema = z.enum(['CLINICA', 'VET_INDEPENDIENTE', 'TIENDA']);
 export const registroAliadoSchema = z
   .object({
-    nombre: z.string().trim().min(1).max(120),
-    nombreAliado: z.string().trim().min(1).max(160).optional(),
+    nombre: z.string(),
+    nombreAliado: z.string().optional(),
     celular: celularSchema,
     correo: correoSchema,
-    contrasena: contrasenaSchema.optional(),
-    password: contrasenaSchema.optional(),
+
+    contrasena: contrasenaSchema,
+    password: z.string().optional(),
+
     tipo: tipoAliadoRegistroSchema,
-    descripcion: z.string().trim().max(2000).optional(),
-    contacto: z.string().trim().max(160).optional(),
+
+    descripcion: z.string().optional(),
+    contacto: z.string().optional(),
+
+    ciudad: z.string().optional(),
+    ubicacion: z.string().optional(),
   })
-  .refine((data) => data.contrasena !== undefined || data.password !== undefined, {
-    path: ['contrasena'],
-    message: 'La contraseña es obligatoria y debe tener al menos 8 caracteres.',
+  .superRefine((data, ctx) => {
+    if (data.tipo === 'CLINICA' || data.tipo === 'TIENDA') {
+      if (!data.ciudad?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['ciudad'],
+          message: 'La ciudad es obligatoria para clínicas y tiendas.',
+        });
+      }
+
+      if (!data.ubicacion?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['ubicacion'],
+          message: 'La ubicación es obligatoria para clínicas y tiendas.',
+        });
+      }
+    }
   })
-  .transform((data) => ({ ...data, contrasena: data.contrasena ?? data.password! }));
+  .transform((data) => ({
+    ...data,
+    contrasena: data.contrasena ?? data.password ?? '',
+  }));
+
 export type RegistroAliado = z.infer<typeof registroAliadoSchema>;
 
 export const sedeInputSchema = z.object({
