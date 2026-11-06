@@ -14,7 +14,6 @@ import { VeterinariosController } from './veterinarios.controller';
 import { VeterinariosService } from './veterinarios.service';
 import { SedesController } from './sedes.controller';
 import { SedesService } from './sedes.service';
-import { AliadosController } from './aliados.controller';
 
 /**
  * Módulo aliados: Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes.

@@ -22,6 +22,8 @@ export type AliadoRegistrado = {
   creadoEn: string;
 };
 
+type UserRegistration = { nombre: string; celular: string; correo: string; contrasena: string };
+
 export type FundacionRevision = {
   id: string;
   nombre: string;
@@ -53,6 +55,12 @@ export class AliadosService {
   async register(
     input: RegistroAliado,
   ): Promise<{ usuario: PerfilUsuario; aliado: AliadoRegistrado }> {
+    const userInput: UserRegistration = {
+      nombre: input.nombre,
+      celular: input.celular,
+      correo: input.correo,
+      contrasena: input.contrasena,
+    };
     const passwordHash = await hashContrasena(input.contrasena);
     try {
       return await this.database.withUser(null, async (client) => {
