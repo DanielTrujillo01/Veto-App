@@ -5,7 +5,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 
 | Módulo           | Qué hace                                                                           | Tablas propias                                                          | Historias                                |
 | ---------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
-| `identidad`      | Cuentas, registro e inicio de sesión                                               | usuario                                                                 | HU-001, 002, 006                         |
+| `identidad`      | Cuentas, registro e inicio de sesión                                               | usuario, cuenta_google, google_estado_oauth, google_pendiente           | HU-001, 002, 003, 006                    |
 | `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                               | HU-007, 012–016, 021, 023, 078–079       |
 | `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                          | HU-008–011                               |
 | `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, bloqueo_agenda, tipo_servicio | HU-016, 018–022, 024–028                 |
@@ -50,6 +50,27 @@ modelo de datos (`docs/modelo-de-datos.md`).
   Correo repetido → 409. La fundación consulta lo guardado, aun pendiente, con
   `GET /api/aliados/me/fundacion/datos` (`{ fundacion }` con sus datos, estado y los de su cuenta).
   `POST /api/aliados` sigue sin aceptar `FUNDACION`.
+- **Inicio de sesión con Google (HU-003, opcional):** con `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`
+  (y `GOOGLE_REDIRECT_URI` si no es el valor por defecto) en el entorno. Son **navegaciones**, no `fetch`:
+  `GET /api/identidad/google` redirige a Google y `GET /api/identidad/google/callback` es donde vuelve.
+  La API responde siempre con una redirección a `WEB_ORIGIN/login?google=<resultado>`:
+  `ok` (sesión abierta, cookie `veto_session`), `2fa` (la cuenta tiene verificación en dos pasos:
+  el desafío va en el fragmento `#desafio=...` y se completa con `POST /api/identidad/login/2fa`),
+  `vincular` (el correo ya tiene cuenta), `registro` (primera vez) o `error` con
+  `&motivo=cancelado|proveedor|correo_no_verificado|estado|cuenta_inactiva|cuenta_vinculada|no_disponible`.
+  Cancelar, rechazar o fallar en Google **nunca** crea una sesión. Para `vincular` y `registro` la web
+  consulta `GET /api/identidad/google/pendiente` (`{ pendiente: { tipo, correo, nombre, requiereCodigo? } }`) y termina con
+  `POST /api/identidad/google/vincular` `{ contrasena, codigo? }` (200 + sesión) o
+  `POST /api/identidad/google/completar` `{ celular }` (201 + sesión); `DELETE .../pendiente` descarta.
+  `GET /api/identidad/google/disponible` indica si el botón debe mostrarse.
+  **Cuentas que entran solo con Google** (sin contraseña): `GET /api/identidad/google/estado`
+  (con sesión) responde `{ vinculada, sinContrasena }`. Si `sinContrasena` es `true`, para eliminar la cuenta
+  la web navega a `GET /api/identidad/google/reautenticar` (Google pide las credenciales de nuevo), vuelve
+  con `?google=reauth` y una constancia de 5 minutos de un solo uso en la cookie `veto_reauth`; luego llama a
+  `DELETE /api/identidad/me` con `{ confirmacion: "ELIMINAR" }` (sin `contrasena`). Sin constancia responde
+  401 con `requiereReautenticacion: true`. Para una cuenta con contraseña, `contrasena` sigue siendo
+  obligatoria. Cambiar el correo de una cuenta de Google responde 403. Todas las cookies del flujo son
+  `HttpOnly` y solo viajan a `/api/identidad/google`.
 - **Revisión de fundaciones (HU-079):** `GET /api/admin/fundaciones/pendientes`,
   `GET /api/admin/fundaciones/:fundacionId`, `PATCH .../:fundacionId/aprobar` y
   `PATCH .../:fundacionId/rechazar` son exclusivos de `EQUIPO_VETO`. Una decisión transiciona

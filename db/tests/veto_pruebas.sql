@@ -680,6 +680,85 @@ BEGIN
             format($q$UPDATE aliado SET logo_url = 'ftp://x.co/a.png' WHERE id = %L$q$, a_clinica), '23514');
     END;
 
+    -- ---------- HU-003: inicio de sesión con Google ----------
+    DECLARE
+        u_g1 uuid; u_g2 uuid; u_g3 uuid;
+    BEGIN
+        INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Google Uno','3007770001','g1@mail.com','GOOGLE') RETURNING id INTO u_g1;
+        INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Google Dos','3007770002','g2@mail.com','h') RETURNING id INTO u_g2;
+        INSERT INTO usuario (nombre, celular, correo, password_hash) VALUES ('Google Tres','3007770003','g3@mail.com','h') RETURNING id INTO u_g3;
+
+        INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('sub-1', u_g1, 'g1@mail.com');
+        PERFORM pg_temp.debe_pasar('una cuenta de Google se vincula a una cuenta de Veto',
+            EXISTS (SELECT 1 FROM cuenta_google WHERE google_sub = 'sub-1' AND usuario_id = u_g1));
+        PERFORM pg_temp.debe_fallar('la misma cuenta de Google no se vincula a dos usuarios',
+            format($q$INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('sub-1',%L,'g2@mail.com')$q$, u_g2), '23505');
+        PERFORM pg_temp.debe_fallar('un usuario no tiene dos cuentas de Google',
+            format($q$INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('sub-2',%L,'g1@mail.com')$q$, u_g1), '23505');
+        PERFORM pg_temp.debe_fallar('el identificador de Google no puede estar vacío',
+            format($q$INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('',%L,'g2@mail.com')$q$, u_g2), '23514');
+        PERFORM pg_temp.debe_fallar('no se vincula a un usuario que no existe',
+            $q$INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('sub-3', gen_random_uuid(), 'x@mail.com')$q$, '23503');
+
+        -- Solicitudes pendientes: vincular exige cuenta de Veto; registrar no puede tenerla
+        INSERT INTO google_pendiente (token_hash, tipo, google_sub, correo, nombre, usuario_id, expira_en)
+            VALUES ('p1', 'VINCULAR', 'sub-2', 'g2@mail.com', 'Google Dos', u_g2, now() + interval '10 minutes');
+        INSERT INTO google_pendiente (token_hash, tipo, google_sub, correo, nombre, expira_en)
+            VALUES ('p2', 'REGISTRO', 'sub-9', 'nuevo@mail.com', 'Nuevo', now() + interval '10 minutes');
+        PERFORM pg_temp.debe_pasar('se guardan las solicitudes de vincular y de registro',
+            (SELECT count(*) FROM google_pendiente WHERE token_hash IN ('p1','p2')) = 2);
+        PERFORM pg_temp.debe_fallar('vincular sin cuenta de Veto',
+            $q$INSERT INTO google_pendiente (token_hash, tipo, google_sub, correo, nombre, expira_en)
+               VALUES ('p3','VINCULAR','sub-4','a@mail.com','A', now() + interval '10 minutes')$q$, '23514');
+        PERFORM pg_temp.debe_fallar('registro con una cuenta de Veto asignada',
+            format($q$INSERT INTO google_pendiente (token_hash, tipo, google_sub, correo, nombre, usuario_id, expira_en)
+                      VALUES ('p4','REGISTRO','sub-5','a@mail.com','A',%L, now() + interval '10 minutes')$q$, u_g3), '23514');
+        PERFORM pg_temp.debe_fallar('tipo de solicitud desconocido',
+            $q$INSERT INTO google_pendiente (token_hash, tipo, google_sub, correo, nombre, expira_en)
+               VALUES ('p5','OTRO','sub-6','a@mail.com','A', now() + interval '10 minutes')$q$, '23514');
+
+        -- Intentos de OAuth: el state es único
+        INSERT INTO google_estado_oauth (state_hash, nonce, code_verifier, expira_en)
+            VALUES ('s1', 'n', 'v', now() + interval '10 minutes');
+        PERFORM pg_temp.debe_fallar('un state no se puede repetir',
+            $q$INSERT INTO google_estado_oauth (state_hash, nonce, code_verifier, expira_en)
+               VALUES ('s1','n2','v2', now() + interval '10 minutes')$q$, '23505');
+
+        -- Suspender no suelta la cuenta de Google; eliminar la cuenta sí (y limpia lo pendiente)
+        UPDATE usuario SET estado = 'SUSPENDIDA' WHERE id = u_g1;
+        PERFORM pg_temp.debe_pasar('suspender la cuenta conserva el vínculo con Google',
+            EXISTS (SELECT 1 FROM cuenta_google WHERE usuario_id = u_g1));
+        UPDATE usuario SET estado = 'ACTIVA' WHERE id = u_g1;
+        UPDATE usuario SET estado = 'ELIMINADA', eliminado_en = now() WHERE id = u_g1;
+        PERFORM pg_temp.debe_pasar('al eliminar la cuenta se suelta la cuenta de Google',
+            NOT EXISTS (SELECT 1 FROM cuenta_google WHERE usuario_id = u_g1));
+        INSERT INTO cuenta_google (google_sub, usuario_id, correo) VALUES ('sub-1', u_g3, 'g1@mail.com');
+        PERFORM pg_temp.debe_pasar('esa cuenta de Google puede vincularse a una cuenta nueva',
+            EXISTS (SELECT 1 FROM cuenta_google WHERE google_sub = 'sub-1' AND usuario_id = u_g3));
+        UPDATE usuario SET estado = 'ELIMINADA', eliminado_en = now() WHERE id = u_g2;
+        PERFORM pg_temp.debe_pasar('al eliminar la cuenta se descartan sus solicitudes pendientes',
+            NOT EXISTS (SELECT 1 FROM google_pendiente WHERE usuario_id = u_g2));
+        PERFORM pg_temp.debe_pasar('las solicitudes de otras cuentas no se tocan',
+            EXISTS (SELECT 1 FROM google_pendiente WHERE token_hash = 'p2'));
+
+        -- Reautenticación con Google (acciones delicadas de quien no tiene contraseña)
+        INSERT INTO google_estado_oauth (state_hash, nonce, code_verifier, usuario_id, expira_en)
+            VALUES ('s2', 'n', 'v', u_g3, now() + interval '10 minutes');
+        PERFORM pg_temp.debe_fallar('un intento de reautenticación necesita un usuario real',
+            $q$INSERT INTO google_estado_oauth (state_hash, nonce, code_verifier, usuario_id, expira_en)
+               VALUES ('s3','n','v', gen_random_uuid(), now() + interval '10 minutes')$q$, '23503');
+        INSERT INTO google_reautenticacion (token_hash, usuario_id, expira_en)
+            VALUES ('r1', u_g3, now() + interval '5 minutes');
+        PERFORM pg_temp.debe_pasar('se guarda la constancia de reautenticación',
+            EXISTS (SELECT 1 FROM google_reautenticacion WHERE token_hash = 'r1' AND usuario_id = u_g3));
+        PERFORM pg_temp.debe_fallar('una constancia no se puede repetir',
+            format($q$INSERT INTO google_reautenticacion (token_hash, usuario_id, expira_en)
+                      VALUES ('r1',%L, now() + interval '5 minutes')$q$, u_g3), '23505');
+        PERFORM pg_temp.debe_fallar('una constancia necesita un usuario real',
+            $q$INSERT INTO google_reautenticacion (token_hash, usuario_id, expira_en)
+               VALUES ('r2', gen_random_uuid(), now() + interval '5 minutes')$q$, '23503');
+    END;
+
     RAISE NOTICE '=== TODAS LAS PRUEBAS PASARON ===';
 END $$;
 ROLLBACK;

@@ -102,6 +102,7 @@ Detalles de diseño:
 | Pedido: valida producto activo, descuenta stock, lo devuelve al cancelar; no se cancela tras despachar (HU-046, 049) | Triggers `fn_pedido_item` y `fn_pedido_estado` |
 | Solicitud de adopción: una activa por tutor y mascota; rechazar exige motivo (HU-090, 094)                           | Índice único parcial + `CHECK`                 |
 | Fundación: datos completos y no en blanco, año válido, logo con URL http(s) (HU-078)                                 | `CHECK` + trigger `fn_fundacion_anio_valido`   |
+| Una cuenta de Google se vincula a una sola cuenta de Veto, y al revés (HU-003)                                       | `PK` + `UNIQUE` en `cuenta_google`             |
 | Quién cambió el estado de cita, pedido, solicitud o publicación                                                      | `historial_estado` (solo inserción)            |
 
 Para que `historial_estado` y la regla "solo el aliado finaliza" funcionen, la aplicación debe ejecutar al inicio de cada transacción:
@@ -146,6 +147,29 @@ que esos datos no fueran nulos; la migración 0008 agrega que no sean solo espac
 logo sea una URL web. Esas restricciones se crean `NOT VALID`: rigen para todo lo que se guarde desde ahora, sin
 rechazar filas que ya existían. «Contacto» es texto libre (correo, teléfono o ambos); el nombre del representante es
 opcional y, si no se indica, la cuenta usa el nombre de la fundación.
+
+**Inicio de sesión con Google (HU-003).** Es opcional: sin `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET` la API lo
+informa (`GET /identidad/google/disponible`) y la web oculta el botón. Usa el flujo de código de autorización de
+OpenID Connect con PKCE. Una cuenta de Google se identifica por su `sub` (no por el correo) y se guarda en
+`cuenta_google`, con una sola cuenta de Google por cuenta de Veto y al revés. `google_estado_oauth` guarda cada intento
+(hash del `state`, `nonce` y verificador PKCE) y se consume una sola vez; `google_pendiente` guarda lo que falta antes
+de abrir sesión. Se guardan solo hashes de los tokens. Decisiones a confirmar:
+
+- **Un correo que ya tiene cuenta no se vincula solo por coincidir.** Aunque Google confirme el correo, en Veto el
+  correo no se verifica al registrarse; si alguien se hubiera registrado antes con el correo de otra persona y se
+  vinculara sin más, conservaría el acceso. Por eso quien llega con Google debe demostrar que la cuenta es suya con
+  su contraseña (y su código de Google Authenticator si tiene 2FA); cinco fallos invalidan la solicitud.
+- **Quien entra por primera vez crea la cuenta de tutor completando el celular**, porque Google no lo entrega y es
+  obligatorio (HU-001). La cuenta queda sin contraseña utilizable (`password_hash = 'GOOGLE'`), así que solo entra con
+  Google. Como no hay contraseña con la que confirmar acciones delicadas, **eliminar la cuenta se confirma volviendo a pasar por
+  Google**: la API manda a Google con `prompt=login`, y si vuelve la misma cuenta de Google vinculada (con la sesión
+  aún abierta) emite una constancia de 5 minutos y de un solo uso (`google_reautenticacion`), que se gasta dentro de la
+  misma transacción que anonimiza la cuenta. Cambiar el correo queda bloqueado en estas cuentas: su correo es el de
+  Google y el ingreso se hace por el `sub`, no por el correo.
+- **Google no salta la verificación en dos pasos**: si la cuenta la tiene activa, la API entrega el desafío y la web lo
+  completa con el endpoint de 2FA que ya existía.
+- Al eliminar la cuenta (HU-006) un trigger suelta la cuenta de Google y descarta sus solicitudes pendientes.
+- Cancelar, rechazar o un error de Google redirige a la web con `google=error&motivo=...` y nunca abre sesión.
 
 **Calendario de disponibilidad (HU-022).** La disponibilidad de un aliado Vet es la de sus veterinarios (el independiente
 tiene su propio perfil de veterinario, decisión 10). Se compone de tres cosas: el horario semanal con vigencia

@@ -13,3 +13,4 @@ export * from './especie';
 export * from './confirmacion';
 export * from './dos-factores';
 export * from './agenda';
+export * from './google';
