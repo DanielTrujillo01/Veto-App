@@ -87,6 +87,34 @@ export class AliadosService {
     }
   }
 
+  async obtenerDeUsuario(usuarioId: string): Promise<AliadoRegistrado> {
+    const resultado = await this.database.query<{
+      id: string;
+      tipo: TipoAliado;
+      nombre: string;
+      descripcion: string | null;
+      contacto: string | null;
+      estado: EstadoAliado;
+      creado_en: Date | string;
+    }>(
+      `SELECT id, tipo, nombre, descripcion, contacto, estado, creado_en
+         FROM aliado
+        WHERE usuario_id = $1`,
+      [usuarioId],
+    );
+    const fila = resultado.rows[0];
+    if (!fila) throw new NotFoundException('Esta cuenta no tiene un aliado asociado');
+    return {
+      id: fila.id,
+      tipo: fila.tipo,
+      nombre: fila.nombre,
+      descripcion: fila.descripcion,
+      contacto: fila.contacto,
+      estado: fila.estado,
+      creadoEn: new Date(fila.creado_en).toISOString(),
+    };
+  }
+
   /**
    * Comprueba que `usuarioId` administra el aliado, que la cuenta está activa, que el aliado
    * está ACTIVO y que es de uno de los `tipos` permitidos. Lanza 404 / 403 si no.

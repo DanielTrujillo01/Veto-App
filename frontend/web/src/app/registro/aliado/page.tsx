@@ -89,9 +89,8 @@ export default function RegistroAliado() {
         body: JSON.stringify(validacion.data),
       });
       if (!resultado.aliado?.id) {
-        throw new Error('La API no confirmó el identificador de tu aliado. Inténtalo de nuevo.');
+        throw new Error('La API no confirmó el perfil de tu aliado.');
       }
-      window.localStorage.setItem('veto-aliado-id', resultado.aliado.id);
       setRegistroCompletado(true);
     } catch (causa) {
       if (causa instanceof ApiError) {

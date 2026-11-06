@@ -1,13 +1,23 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { registroAliadoSchema } from '@veto/shared';
 import { validar } from '../../common/validacion';
+import { AuthGuard, type RequestAutenticada } from '../identidad/auth.guard';
+import { Roles, RolesGuard } from '../identidad/roles.guard';
 import { AliadosService } from './aliados.service';
 
 @ApiTags('aliados')
 @Controller('aliados')
 export class AliadosController {
   constructor(private readonly aliados: AliadosService) {}
+
+  @Get('me')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({ summary: 'Obtener el aliado asociado a la cuenta autenticada' })
+  async obtenerDeUsuario(@Req() request: RequestAutenticada) {
+    return { aliado: await this.aliados.obtenerDeUsuario(request.usuario.id) };
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)

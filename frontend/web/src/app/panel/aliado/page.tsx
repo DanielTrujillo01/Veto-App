@@ -38,7 +38,8 @@ const navegacion: { id: Seccion; etiqueta: string; icono: string }[] = [
 export default function PanelAliado() {
   const [seccion, setSeccion] = useState<Seccion>('resumen');
   const [aliadoId, setAliadoId] = useState('');
-  const [idEditado, setIdEditado] = useState('');
+  const [aliadoNombre, setAliadoNombre] = useState('');
+  const [aliadoEstado, setAliadoEstado] = useState('');
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [exito, setExito] = useState('');
@@ -86,9 +87,38 @@ export default function PanelAliado() {
   const [filtroTipo, setFiltroTipo] = useState('todos');
 
   useEffect(() => {
-    const guardado = window.localStorage.getItem('veto-aliado-id') ?? '';
-    setAliadoId(guardado);
-    setIdEditado(guardado);
+    let vigente = true;
+    setCargando(true);
+    void api<{
+      aliado: { id: string; nombre: string; estado: string };
+    }>('/aliados/me')
+      .then(({ aliado }) => {
+        if (!vigente) return;
+        setAliadoId(aliado.id);
+        setAliadoNombre(aliado.nombre);
+        setAliadoEstado(aliado.estado);
+      })
+      .catch((causa: unknown) => {
+        if (!vigente) return;
+        setError(
+          causa instanceof ApiError && causa.status === 401
+            ? 'Inicia sesión con la cuenta de administrador del aliado para continuar.'
+            : causa instanceof ApiError && causa.status === 403
+              ? 'Esta sección es exclusiva para cuentas administradoras de aliados.'
+              : causa instanceof ApiError && causa.status === 404
+                ? 'Tu cuenta no tiene un perfil de aliado asociado. Si acabas de registrarte, contacta al equipo de Veto para revisar tu solicitud.'
+                : causa instanceof ApiError
+                  ? causa.message
+                  : 'No pudimos cargar el perfil de tu aliado. Revisa la conexión con la API.',
+        );
+      })
+      .finally(() => {
+        if (vigente) setCargando(false);
+      });
+
+    return () => {
+      vigente = false;
+    };
   }, []);
 
   const titulo = useMemo(
@@ -97,7 +127,7 @@ export default function PanelAliado() {
   );
 
   const cargar = useCallback(async () => {
-    if (!aliadoId) return;
+    if (!aliadoId || aliadoEstado !== 'ACTIVO') return;
     setCargando(true);
     setError('');
     try {
@@ -169,19 +199,11 @@ export default function PanelAliado() {
     } finally {
       setCargando(false);
     }
-  }, [aliadoId, seccion]);
+  }, [aliadoEstado, aliadoId, seccion]);
 
   useEffect(() => {
     void cargar();
   }, [cargar]);
-
-  function seleccionarAliado(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const id = idEditado.trim();
-    setAliadoId(id);
-    window.localStorage.setItem('veto-aliado-id', id);
-    setError('');
-  }
 
   async function guardarSede(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -980,32 +1002,10 @@ export default function PanelAliado() {
           </div>
           <div className="partner-user">
             <span className="avatar">V</span>
-            <span>Mi clínica</span>
+            <span>{aliadoNombre || 'Mi aliado'}</span>
           </div>
         </header>
         <section className="partner-content">
-          <form className="ally-id-form" onSubmit={seleccionarAliado}>
-            <label className="field">
-              <span>Identificador de aliado</span>
-              <input
-                className="control"
-                onChange={(event) => setIdEditado(event.target.value)}
-                placeholder="Pega aquí el UUID de tu aliado"
-                value={idEditado}
-              />
-            </label>
-            <VetoButton
-              disabled={!idEditado.trim() || idEditado === aliadoId}
-              type="submit"
-              variant="secondary"
-            >
-              Conectar
-            </VetoButton>
-          </form>
-          <p className="workspace-card__intro">
-            El backend aún no expone una ruta de sesión que identifique automáticamente el aliado
-            asociado a tu cuenta.
-          </p>
           {error && (
             <AlertBox tone="error" title="No se pudo completar la solicitud">
               {error}
@@ -1016,18 +1016,31 @@ export default function PanelAliado() {
               {exito}
             </AlertBox>
           )}
-          {!aliadoId ? (
-            <div className="empty-state empty-state--card">
-              <span className="empty-state__illustration" aria-hidden="true">
-                ⌖
-              </span>
-              <h2>Conecta el perfil de tu aliado</h2>
-              <p>
-                Ingresa el identificador de la clínica o del veterinario independiente para cargar
-                sus datos desde la API.
-              </p>
+          {aliadoId && aliadoEstado !== 'ACTIVO' && (
+            <AlertBox tone="warning" title="Perfil pendiente de activación">
+              {aliadoEstado === 'PENDIENTE'
+                ? 'El equipo de Veto debe activar tu aliado antes de que puedas gestionar sus datos.'
+                : 'Este perfil no está activo. Contacta al equipo de Veto para obtener ayuda.'}
+            </AlertBox>
+          )}
+          {cargando && !aliadoId ? (
+            <div className="empty-state empty-state--card" aria-live="polite">
+              <h2>Cargando tu perfil de aliado…</h2>
             </div>
-          ) : (
+          ) : !aliadoId ? (
+            error ? null : (
+              <div className="empty-state empty-state--card">
+                <span className="empty-state__illustration" aria-hidden="true">
+                  ⌖
+                </span>
+                <h2>No encontramos tu perfil de aliado</h2>
+                <p>
+                  El perfil se carga desde la cuenta con la que iniciaste sesión. Si ya registraste
+                  tu aliado, contacta al equipo de Veto para revisar la asociación de tu cuenta.
+                </p>
+              </div>
+            )
+          ) : aliadoEstado !== 'ACTIVO' ? null : (
             contenido()
           )}
         </section>
