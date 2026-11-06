@@ -56,7 +56,13 @@ export class AliadosService {
     const passwordHash = await hashContrasena(input.contrasena);
     try {
       return await this.database.withUser(null, async (client) => {
-        const user = await this.identidad.insertUser(client, userInput, passwordHash, 'ALIADO');
+        const user = await this.identidad.insertUser(
+          client,
+          userInput,
+          passwordHash,
+          'ALIADO',
+        );
+
         const result = await client.query(
           `INSERT INTO aliado (
               usuario_id,
@@ -81,7 +87,7 @@ export class AliadosService {
               ubicacion,
               creado_en`,
           [
-            usuario.id,
+            user.id,
             input.tipo,
             input.nombreAliado ?? input.nombre,
             input.descripcion ?? null,
@@ -91,13 +97,16 @@ export class AliadosService {
             input.ubicacion ?? null,
           ],
         );
-        const fila = r.rows[0];
+
+        const fila = result.rows[0];
+
         if (input.tipo === 'VET_INDEPENDIENTE') {
-          await client.query('INSERT INTO veterinario (aliado_id, usuario_id) VALUES ($1, $2)', [
-            fila.id,
-            usuario.id,
-          ]);
+          await client.query(
+            'INSERT INTO veterinario (aliado_id, usuario_id) VALUES ($1, $2)',
+            [fila.id, user.id],
+          );
         }
+
         const aliado: AliadoRegistrado = {
           id: fila.id,
           tipo: fila.tipo,
@@ -107,7 +116,8 @@ export class AliadosService {
           estado: fila.estado,
           creadoEn: new Date(fila.creado_en).toISOString(),
         };
-        return { usuario, aliado };
+
+        return { usuario: user, aliado };
       });
     } catch (error) {
       if (esErrorPg(error, PG.UNICO)) {
