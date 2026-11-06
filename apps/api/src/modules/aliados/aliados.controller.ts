@@ -32,4 +32,14 @@ export class AliadosController {
   register(@Body() body: unknown) {
     return this.aliados.register(validar(registroAliadoSchema, body));
   }
+
+  @Get('me/fundacion')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ALIADO')
+  @ApiOperation({ summary: 'Consultar el estado de la solicitud de fundación (HU-079)' })
+  async estadoFundacion(@Req() request: RequestAutenticada) {
+    return {
+      fundacion: await this.aliados.estadoFundacionPropia(request.usuario.id),
+    };
+  }
 }

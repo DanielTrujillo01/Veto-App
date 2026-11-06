@@ -1,5 +1,6 @@
 import { INestApplication, type Type } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ENV, type Env } from '../src/config/env';
 import { DatabaseService } from '../src/database/database.service';
 
 export type Fila = Record<string, unknown>;
@@ -60,10 +61,23 @@ export function crearBdFalsa(manejador: Manejador, usuario: UsuarioPrueba | null
   return { db, consultas };
 }
 
-export async function crearApp(modulos: Type[], db: unknown): Promise<INestApplication> {
+/** Variables de entorno de prueba: sin Google configurado, salvo que la prueba lo pida. */
+export const ENV_PRUEBA: Env = {
+  NODE_ENV: 'test',
+  DATABASE_URL: 'postgres://prueba',
+  API_PORT: 3001,
+  WEB_ORIGIN: 'http://localhost:3000',
+};
+
+export async function crearApp(
+  modulos: Type[],
+  db: unknown,
+  env: Partial<Env> = {},
+): Promise<INestApplication> {
   const modulo = await Test.createTestingModule({ imports: modulos })
     .useMocker((token) => {
       if (token === DatabaseService) return db;
+      if (token === ENV) return { ...ENV_PRUEBA, ...env };
     })
     .compile();
   const app = modulo.createNestApplication();
