@@ -35,7 +35,7 @@ import { AliadosController } from './aliados.controller';
     AliadoConfirmacionController,
     ClinicasController,
     SedesController,
-    AliadosController
+    AliadosController,
   ],
   providers: [
     VeterinariosService,
