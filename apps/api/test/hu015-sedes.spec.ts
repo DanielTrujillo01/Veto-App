@@ -143,7 +143,7 @@ describe('HU-015 · gestión de sedes', () => {
     const r = await request(app.getHttpServer()).get(base).expect(200);
     expect(r.body).toHaveLength(1);
     expect(r.body[0]).toMatchObject({ id: SEDE_ID, activa: true });
-    expect(consultas[0].sql).toContain("tipo = 'CLINICA' AND estado = 'ACTIVO'");
+    expect(consultas[0].sql).toContain('tipo = ANY($2::tipo_aliado[]) AND estado =');
     await app.close();
   });
 
@@ -160,8 +160,15 @@ describe('HU-015 · gestión de sedes', () => {
     await app.close();
   });
 
+  it('permite a una tienda administrar sus sedes', async () => {
+    const { db } = bd({ tipo: 'TIENDA' });
+    const app = await crearApp([AliadosModule], db);
+    await request(app.getHttpServer()).post(base).set('Cookie', COOKIE).send(datos).expect(201);
+    await app.close();
+  });
+
   it.each([
-    ['una tienda', { tipo: 'TIENDA' }, 403],
+    ['un veterinario independiente', { tipo: 'VET_INDEPENDIENTE' }, 403],
     ['un aliado pendiente', { estado: 'PENDIENTE' }, 403],
     ['el aliado de otro usuario', { dueno: TUTOR.id }, 403],
   ])('no permite a %s gestionar sedes', async (_caso, escenario, status) => {

@@ -89,10 +89,12 @@ export class HorariosService {
       tipo: string;
       estado: string;
       usuario_id: string;
+      veterinario_usuario_id: string;
       rol: string;
       estado_cuenta: string;
     }>(
-      `SELECT a.tipo, a.estado, a.usuario_id, u.rol, u.estado AS estado_cuenta
+      `SELECT a.tipo, a.estado, a.usuario_id, v.usuario_id AS veterinario_usuario_id,
+              u.rol, u.estado AS estado_cuenta
          FROM aliado a
          JOIN usuario u ON u.id = a.usuario_id
          JOIN veterinario v ON v.aliado_id = a.id
@@ -103,8 +105,11 @@ export class HorariosService {
       throw new NotFoundException('La clínica o el veterinario no existe');
     }
     const acceso = resultado.rows[0];
+    const veterinarioPerteneceAlIndependiente =
+      acceso.tipo === 'VET_INDEPENDIENTE' && acceso.veterinario_usuario_id === administradorId;
     if (
       !TIPOS_CON_HORARIO.includes(acceso.tipo) ||
+      (acceso.tipo === 'VET_INDEPENDIENTE' && !veterinarioPerteneceAlIndependiente) ||
       acceso.estado !== 'ACTIVO' ||
       acceso.usuario_id !== administradorId ||
       acceso.rol !== 'ALIADO' ||

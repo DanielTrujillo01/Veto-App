@@ -3,19 +3,19 @@
 Cada carpeta es un módulo de dominio (monolito modular). Los módulos reflejan la división del
 modelo de datos (`docs/modelo-de-datos.md`).
 
-| Módulo           | Qué hace                                                                           | Tablas propias                                                          | Historias                                |
-| ---------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
-| `identidad`      | Cuentas, registro e inicio de sesión                                               | usuario, cuenta_google, google_estado_oauth, google_pendiente           | HU-001, 002, 003, 006                    |
-| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                               | HU-007, 012–016, 021, 023, 078–079       |
-| `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                          | HU-008–011                               |
-| `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, bloqueo_agenda, tipo_servicio | HU-016, 018–022, 024–028                 |
-| `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                                  | HU-029, 031, 032, 034                    |
-| `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                            | HU-014, 017, 037, 042, 043               |
-| `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto        | HU-044–050                               |
-| `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, solicitud_adopcion                                    | HU-080, 082, 083, 086, 087, 090, 092–094 |
-| `admin`          | Moderación, revisión de fundaciones y estado de cuentas del Equipo Veto            | accion_admin                                                            | HU-065–067, 079                          |
-| `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                              | v_citas_reporte, v_ventas_productos                                     | HU-070, 073, 074                         |
-| `notificaciones` | Notificaciones internas de la aplicación                                           | notificacion                                                            | HU-048, 052, 054                         |
+| Módulo           | Qué hace                                                                           | Tablas propias                                                                         | Historias                                |
+| ---------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `identidad`      | Cuentas, registro, inicio de sesión y recuperación de contraseña                   | usuario, cuenta_google, google_estado_oauth, google_pendiente, recuperacion_contrasena | HU-001–004, 006                          |
+| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                                              | HU-007, 012–016, 021, 023, 078–079       |
+| `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                                         | HU-008–011                               |
+| `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, bloqueo_agenda, tipo_servicio                | HU-016, 018–022, 024–028                 |
+| `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                                                 | HU-029, 031, 032, 034                    |
+| `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                                           | HU-014, 017, 037, 042, 043               |
+| `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto                       | HU-044–050                               |
+| `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, solicitud_adopcion                                                   | HU-080, 082, 083, 086, 087, 090, 092–094 |
+| `admin`          | Moderación, revisión de fundaciones y estado de cuentas del Equipo Veto            | accion_admin                                                                           | HU-065–067, 079                          |
+| `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                              | v_citas_reporte, v_ventas_productos                                                    | HU-070, 073, 074                         |
+| `notificaciones` | Notificaciones internas de la aplicación                                           | notificacion                                                                           | HU-048, 052, 054                         |
 
 ## Reglas
 
@@ -41,6 +41,14 @@ modelo de datos (`docs/modelo-de-datos.md`).
   veterinarios. Un correo ya registrado responde 409.
 - **Cuentas:** solo `identidad` escribe en `usuario`; los demás módulos crean cuentas con
   `IdentidadService.insertUser(client, ...)` dentro de su propia transacción.
+- **Recuperación de contraseña (HU-004):** configura `SMTP_URL` y `SMTP_FROM` en `.env`. La web
+  solicita un código con `POST /api/identidad/recuperacion/solicitar` `{ correo }`, lo verifica con
+  `POST /api/identidad/recuperacion/verificar` `{ correo, codigo }` y cambia la contraseña mediante
+  `POST /api/identidad/recuperacion/restablecer` `{ contrasena }`. Al verificar, la API entrega el
+  token temporal en una cookie `HttpOnly`, no legible por JavaScript. Los códigos vencen en diez
+  minutos, admiten cinco intentos y solo se puede pedir uno cada sesenta segundos. La respuesta a la
+  solicitud no revela si el correo tiene una cuenta; el cambio cierra las sesiones activas. La web
+  consulta `GET /api/identidad/recuperacion/disponible` antes de mostrar el flujo.
 - **Registro de fundación (HU-078):** `POST /api/aliados/fundaciones` (público) recibe `nombre`,
   `ciudad`, `contacto`, `descripcion`, `ubicacion`, `anioFundacion`, `logoUrl?` (opcional), `representante?`
   y los datos de la cuenta (`celular`, `correo`, `contrasena`). Crea cuenta y fundación en una
@@ -53,7 +61,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 - **Inicio de sesión con Google (HU-003, opcional):** con `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`
   (y `GOOGLE_REDIRECT_URI` si no es el valor por defecto) en el entorno. Son **navegaciones**, no `fetch`:
   `GET /api/identidad/google` redirige a Google y `GET /api/identidad/google/callback` es donde vuelve.
-  La API responde siempre con una redirección a `WEB_ORIGIN/login?google=<resultado>`:
+  La API responde siempre con una redirección a `WEB_ORIGIN/ingresar?google=<resultado>`:
   `ok` (sesión abierta, cookie `veto_session`), `2fa` (la cuenta tiene verificación en dos pasos:
   el desafío va en el fragmento `#desafio=...` y se completa con `POST /api/identidad/login/2fa`),
   `vincular` (el correo ya tiene cuenta), `registro` (primera vez) o `error` con

@@ -8,8 +8,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm build:shared && pnpm --parallel --filter @veto/shared --filter @veto/api --filter @veto/web dev",
-    "build": "pnpm build:shared && pnpm --filter @veto/api --filter @veto/web build",
+    "dev": "pnpm build:shared && pnpm --parallel --filter @veto/shared --filter @veto/api --filter @veto/web --filter @veto/figma dev",
+    "build": "pnpm build:shared && pnpm --filter @veto/api --filter @veto/web --filter @veto/figma build",
     "build:shared": "pnpm --filter @veto/shared build",
     "lint": "eslint .",
     "typecheck": "pnpm build:shared && pnpm -r typecheck",

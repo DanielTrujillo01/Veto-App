@@ -64,7 +64,7 @@ export class GoogleAuthController {
     summary: 'Empezar el inicio de sesión con Google (HU-003)',
     description:
       'Navegación del navegador (no fetch): redirige a Google. Al terminar, la API redirige a ' +
-      '`WEB_ORIGIN/login?google=<ok|2fa|vincular|registro|error>` (con `&motivo=` si falló).',
+      '`WEB_ORIGIN/ingresar?google=<ok|2fa|vincular|registro|error>` (con `&motivo=` si falló).',
   })
   async iniciar(@Res() response: Response) {
     if (!this.cliente.disponible) return this.volver(response, 'error', 'no_disponible');
@@ -97,7 +97,7 @@ export class GoogleAuthController {
     summary: 'Volver a pasar por Google para confirmar una acción delicada (HU-003)',
     description:
       'Navegación del navegador con la sesión abierta; Google pide las credenciales de nuevo. ' +
-      'Termina en `WEB_ORIGIN/login?google=reauth` (constancia de 5 minutos en la cookie ' +
+      'Termina en `WEB_ORIGIN/ingresar?google=reauth` (constancia de 5 minutos en la cookie ' +
       '`veto_reauth`, de un solo uso) o en `google=error&motivo=...`. Después se llama a ' +
       '`DELETE /identidad/me` con { confirmacion: "ELIMINAR" }.',
   })
@@ -243,7 +243,7 @@ export class GoogleAuthController {
     motivo?: MotivoErrorGoogle,
     desafio?: string,
   ) {
-    const destino = new URL('/login', this.cliente.urlWeb);
+    const destino = new URL('/ingresar', this.cliente.urlWeb);
     destino.searchParams.set('google', resultado);
     if (motivo) destino.searchParams.set('motivo', motivo);
     // El desafío 2FA va en el fragmento: no llega a servidores ni a registros de acceso.

@@ -47,5 +47,4 @@ export const registroAliadoSchema = z
     ...data,
     contrasena: data.contrasena ?? data.password ?? '',
   }));
-
 export type RegistroAliado = z.infer<typeof registroAliadoSchema>;

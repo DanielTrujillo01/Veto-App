@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - frontend/*
   - packages/*
 
 # pnpm bloquea por defecto los scripts de instalación de las dependencias.

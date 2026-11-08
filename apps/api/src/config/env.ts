@@ -14,6 +14,10 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: opcional,
   /** URL de retorno registrada en Google; por defecto, el callback de esta API en localhost. */
   GOOGLE_REDIRECT_URI: opcional,
+  /** HU-004: URL SMTP, por ejemplo smtps://usuario:clave@smtp.example.com:465. */
+  SMTP_URL: opcional,
+  /** HU-004: dirección visible como remitente de los correos de recuperación. */
+  SMTP_FROM: opcional,
 });
 
 export type Env = z.infer<typeof envSchema>;

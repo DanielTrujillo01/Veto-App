@@ -25,7 +25,7 @@ export class SedesController {
   constructor(private readonly sedes: SedesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Lista las sedes activas disponibles de una clínica' })
+  @ApiOperation({ summary: 'Lista las sedes activas disponibles de un aliado con sedes' })
   disponibles(@Param('aliadoId', new ParseUUIDPipe()) aliadoId: string) {
     return this.sedes.listarDisponibles(aliadoId);
   }
@@ -33,7 +33,9 @@ export class SedesController {
   @Get('gestion')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('ALIADO')
-  @ApiOperation({ summary: 'Lista todas las sedes de una clínica para su administración (HU-015)' })
+  @ApiOperation({
+    summary: 'Lista todas las sedes de una clínica o tienda para su administración (HU-015)',
+  })
   gestion(
     @Req() request: RequestAutenticada,
     @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
@@ -44,7 +46,7 @@ export class SedesController {
   @Get(':sedeId')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('ALIADO')
-  @ApiOperation({ summary: 'Consulta una sede de la clínica administrada' })
+  @ApiOperation({ summary: 'Consulta una sede del aliado administrado' })
   obtener(
     @Req() request: RequestAutenticada,
     @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
@@ -57,7 +59,7 @@ export class SedesController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('ALIADO')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Crea una sede para la clínica (HU-015)' })
+  @ApiOperation({ summary: 'Crea una sede para la clínica o tienda (HU-015)' })
   crear(
     @Req() request: RequestAutenticada,
     @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
@@ -69,7 +71,7 @@ export class SedesController {
   @Put(':sedeId')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('ALIADO')
-  @ApiOperation({ summary: 'Edita una sede de la clínica (HU-015)' })
+  @ApiOperation({ summary: 'Edita una sede de la clínica o tienda (HU-015)' })
   actualizar(
     @Req() request: RequestAutenticada,
     @Param('aliadoId', new ParseUUIDPipe()) aliadoId: string,
