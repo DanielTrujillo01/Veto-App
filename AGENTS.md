@@ -21,4 +21,3 @@ a second preview server.
 Use the Veto color, typography, and radius tokens already defined in the relevant frontend app.
 Keep global element defaults in Tailwind's base layer so utility classes remain effective. Prefer
 existing components over adding duplicate patterns.
-
