@@ -493,6 +493,33 @@ CREATE TRIGGER trg_mascota_adopcion_tipo BEFORE INSERT OR UPDATE OF fundacion_id
 
 -- 12.4 Reglas de la cita: reservar solo a futuro, con un servicio disponible y una especie
 --      que el aliado atiende; transiciones válidas; solo el aliado finaliza (HU-029..034).
+CREATE FUNCTION fn_cita_dentro_del_horario() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    v_dia smallint := extract(isodow FROM NEW.inicio)::smallint;
+    v_fecha date := NEW.inicio::date;
+    v_inicio time := NEW.inicio::time;
+    v_fin time := NEW.fin::time;
+BEGIN
+    IF NEW.veterinario_id IS NOT NULL
+       AND EXISTS (
+           SELECT 1 FROM veterinario v
+            WHERE v.id = NEW.veterinario_id AND v.aliado_id = NEW.aliado_id
+       )
+       AND NOT EXISTS (
+        SELECT 1 FROM horario h
+         WHERE h.aliado_id = NEW.aliado_id AND h.veterinario_id = NEW.veterinario_id
+           AND h.dia_semana = v_dia AND h.vigencia @> v_fecha
+           AND h.hora_inicio <= v_inicio AND h.hora_fin >= v_fin
+    ) THEN
+        RAISE EXCEPTION 'La cita está fuera del horario configurado del veterinario'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER trg_cita_dentro_del_horario
+    BEFORE INSERT OR UPDATE OF inicio, fin, veterinario_id ON cita
+    FOR EACH ROW EXECUTE FUNCTION fn_cita_dentro_del_horario();
+
 CREATE FUNCTION fn_cita_validar() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     v_ok      boolean;

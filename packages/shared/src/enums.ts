@@ -4,12 +4,19 @@
 export const ROLES_USUARIO = ['TUTOR', 'ALIADO', 'VETERINARIO', 'EQUIPO_VETO'] as const;
 export const ESTADOS_CUENTA = ['ACTIVA', 'SUSPENDIDA', 'ELIMINADA'] as const;
 export const TIPOS_ALIADO = ['CLINICA', 'VET_INDEPENDIENTE', 'TIENDA', 'FUNDACION'] as const;
-export const ESTADOS_ALIADO = ['PENDIENTE', 'ACTIVO', 'SUSPENDIDO'] as const;
+export const ESTADOS_ALIADO = ['PENDIENTE', 'ACTIVO', 'SUSPENDIDO', 'RECHAZADO'] as const;
 export const SEXOS_ANIMAL = ['MACHO', 'HEMBRA'] as const;
 export const TAMANOS_MASCOTA = ['PEQUENO', 'MEDIANO', 'GRANDE'] as const;
 export const MODALIDADES_SERVICIO = ['EN_SEDE', 'A_DOMICILIO'] as const;
 export const ESTADOS_MODERACION = ['PUBLICADO', 'MARCADO', 'OCULTO'] as const;
-export const ESTADOS_CITA = ['AGENDADA', 'FINALIZADA', 'NO_ASISTIO', 'CANCELADA'] as const;
+export const ESTADOS_CITA = [
+  'PENDIENTE',
+  'AGENDADA',
+  'FINALIZADA',
+  'NO_ASISTIO',
+  'CANCELADA',
+] as const;
+export const MODOS_CONFIRMACION = ['AUTOMATICA', 'MANUAL'] as const;
 export const ESTADOS_CONSULTA = ['ABIERTA', 'CERRADA'] as const;
 export const ESTADOS_PEDIDO = [
   'PENDIENTE',
@@ -41,6 +48,8 @@ export const TIPOS_ACCION_ADMIN = [
   'OCULTAR',
   'MARCAR',
   'PUBLICAR',
+  'APROBAR_FUNDACION',
+  'RECHAZAR_FUNDACION',
 ] as const;
 
 export type RolUsuario = (typeof ROLES_USUARIO)[number];
@@ -53,6 +62,7 @@ export type ModalidadServicio = (typeof MODALIDADES_SERVICIO)[number];
 export type EstadoModeracion = (typeof ESTADOS_MODERACION)[number];
 export type EstadoCita = (typeof ESTADOS_CITA)[number];
 export type EstadoConsulta = (typeof ESTADOS_CONSULTA)[number];
+export type ModoConfirmacion = (typeof MODOS_CONFIRMACION)[number];
 export type EstadoPedido = (typeof ESTADOS_PEDIDO)[number];
 export type EstadoMascotaAdopcion = (typeof ESTADOS_MASCOTA_ADOPCION)[number];
 export type EstadoSolicitud = (typeof ESTADOS_SOLICITUD)[number];
@@ -69,6 +79,7 @@ export const ENUMS_BASE_DE_DATOS = {
   modalidad_servicio: MODALIDADES_SERVICIO,
   estado_moderacion: ESTADOS_MODERACION,
   estado_cita: ESTADOS_CITA,
+  modo_confirmacion: MODOS_CONFIRMACION,
   estado_consulta: ESTADOS_CONSULTA,
   estado_pedido: ESTADOS_PEDIDO,
   estado_mascota_adopcion: ESTADOS_MASCOTA_ADOPCION,

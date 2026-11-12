@@ -4,15 +4,15 @@ Plataforma web que conecta a tutores de mascotas con clínicas veterinarias, vet
 independientes, tiendas y fundaciones: búsqueda y agendamiento de servicios, compra de productos,
 registro de consulta clínica, adopción y administración por el Equipo Veto.
 
-> **Estado:** esqueleto del proyecto. Ya funcionan: el monorepo, la base de datos con sus reglas,
-> la API con conexión a la base (`/api/health`, documentación OpenAPI), la web con la pantalla de
-> inicio y el CI. Las historias de usuario se implementan sobre esta base, sprint a sprint.
+> **Estado:** monorepo funcional con API, aplicación Next.js, prototipo Figma Make y guía de
+> componentes. Las historias de usuario se implementan sprint a sprint.
 
 ## Tecnologías
 
 | Parte         | Tecnología                                                          |
 | ------------- | ------------------------------------------------------------------- |
 | Web           | Next.js 16 (React 19), TypeScript, Tailwind CSS 4                   |
+| Prototipo UI  | React 19, Vite 8, TypeScript, Tailwind CSS 4 (Figma Make)           |
 | API           | NestJS 11, TypeScript, documentación OpenAPI (Swagger)              |
 | Base de datos | PostgreSQL 17, migraciones en SQL                                   |
 | Compartido    | Esquemas de validación con Zod (`@veto/shared`)                     |
@@ -45,17 +45,18 @@ pnpm install
 # 3. Crea automáticamente el esquema, tipos, tablas, índices y reglas en Supabase
 pnpm db:migrate
 
-# 4. Todo en modo desarrollo (shared + API + web)
+# 4. Todo en modo desarrollo (shared + API + web + prototipo Figma)
 pnpm dev
 ```
 
 Cuando termine de arrancar:
 
-| Servicio                          | URL                                                   |
-| --------------------------------- | ----------------------------------------------------- |
-| Web                               | http://localhost:3000                                 |
-| API                               | http://localhost:3001/api/health                      |
-| Documentación de la API (OpenAPI) | http://localhost:3001/api/docs                        |
+| Servicio                          | URL                                                  |
+| --------------------------------- | ---------------------------------------------------- |
+| Web                               | http://localhost:3000                                |
+| Prototipo Figma Make              | http://localhost:8443                                |
+| API                               | http://localhost:3001/api/health                     |
+| Documentación de la API (OpenAPI) | http://localhost:3001/api/docs                       |
 | PostgreSQL                        | Tu proyecto Supabase (configurado en `DATABASE_URL`) |
 
 > `pnpm db:migrate` crea las tablas desde los archivos versionados de `db/migrations/`; no tienes
@@ -63,7 +64,7 @@ Cuando termine de arrancar:
 > limitación de IPv6, usa la cadena de conexión del pooler que ofrece Supabase para tu proyecto.
 > La contraseña se mantiene en `.env`, que está excluido de Git.
 
-Si tu API no corre en el puerto 3001, copia `apps/web/.env.example` a `apps/web/.env.local` y
+Si tu API no corre en el puerto 3001, copia `frontend/web/.env.example` a `frontend/web/.env.local` y
 ajusta `NEXT_PUBLIC_API_URL`.
 
 ## Comandos
@@ -72,8 +73,8 @@ Se ejecutan desde la raíz del repositorio.
 
 | Comando                             | Qué hace                                                          |
 | ----------------------------------- | ----------------------------------------------------------------- |
-| `pnpm dev`                          | Arranca shared (en vigilancia), API y web con recarga en caliente |
-| `pnpm build`                        | Compila shared, API y web                                         |
+| `pnpm dev`                          | Arranca shared (en vigilancia), API, web y prototipo Figma        |
+| `pnpm build`                        | Compila shared, API, web y prototipo Figma                        |
 | `pnpm test`                         | Corre todas las pruebas (shared, API y web)                       |
 | `pnpm lint`                         | ESLint sobre todo el repositorio                                  |
 | `pnpm typecheck`                    | Revisa los tipos de todos los paquetes                            |
@@ -83,25 +84,31 @@ Se ejecutan desde la raíz del repositorio.
 | `pnpm db:test`                      | Corre las pruebas de las reglas de la base de datos               |
 | `pnpm db:reset`                     | **Borra** la base de datos local de Docker y la recrea desde cero |
 
-Para un solo paquete: `pnpm --filter @veto/api test`, `pnpm --filter @veto/web dev`, etc.
+Para un solo paquete: `pnpm --filter @veto/api test`, `pnpm --filter @veto/web dev`,
+`pnpm --filter @veto/figma dev`, etc.
 
 ## Estructura del repositorio
 
 ```
 veto/
 ├─ apps/
-│  ├─ api/                 API (NestJS)
-│  │  ├─ src/
-│  │  │  ├─ modules/       un módulo por dominio (ver su README)
-│  │  │  ├─ database/      conexión a PostgreSQL y withUser()
-│  │  │  ├─ config/        variables de entorno validadas
-│  │  │  └─ health/        GET /api/health
-│  │  └─ test/
-│  └─ web/                 Web (Next.js)
-│     └─ src/
-│        ├─ app/           páginas (App Router)
-│        ├─ components/
-│        └─ lib/           cliente de la API, utilidades
+│  └─ api/                 API (NestJS)
+│     ├─ src/
+│     │  ├─ modules/       un módulo por dominio (ver su README)
+│     │  ├─ database/      conexión a PostgreSQL y withUser()
+│     │  ├─ config/        variables de entorno validadas
+│     │  └─ health/        GET /api/health
+│     └─ test/
+├─ frontend/
+│  ├─ web/                 Aplicación web (Next.js)
+│  │  └─ src/
+│  │     ├─ app/           páginas (App Router)
+│  │     ├─ components/
+│  │     └─ lib/           cliente de la API, utilidades
+│  └─ figma/               Prototipo visual (React + Vite)
+│     ├─ src/              Inicio, layouts y guía de componentes
+│     ├─ public/
+│     └─ index.html
 ├─ packages/
 │  └─ shared/              esquemas Zod y tipos compartidos (sin lógica de negocio)
 ├─ db/
@@ -118,7 +125,7 @@ veto/
 
 ## Base de datos
 
-El modelo cubre las 55 historias esenciales del backlog: 25 tablas, 4 vistas y las reglas de
+El modelo cubre las 55 historias esenciales del backlog: 25 tablas, 5 vistas y las reglas de
 negocio principales hechas en la propia base (citas sin solapamiento, consulta clínica inmutable
 al cerrarse, stock de pedidos, etc.). Documentación y diagramas:
 
@@ -155,11 +162,32 @@ await this.db.withUser(usuarioId, async (client) => {
 - Valida la entrada con los esquemas de `@veto/shared` y comprueba rol y pertenencia en cada
   endpoint.
 
+### Verificación en dos pasos con Google Authenticator (HU-005)
+
+La API implementa TOTP compatible con Google Authenticator. El código tiene 6 dígitos y cambia
+cada 30 segundos. No se envían códigos por correo.
+
+Con una cookie `veto_session` válida, el flujo de activación es:
+
+1. `GET /api/identidad/2fa` consulta el estado de activación.
+2. `POST /api/identidad/2fa/activar` genera un secreto y una URI `otpauth://` para registrarla
+   en Google Authenticator.
+3. `POST /api/identidad/2fa/activar/confirmar` con `{ "codigo": "123456" }` valida el primer
+   código y activa la cuenta.
+
+Cuando 2FA está activo, `POST /api/identidad/login` responde `202` con un desafío temporal en
+lugar de emitir la sesión. El acceso se completa con:
+
+`POST /api/identidad/login/2fa` y `{ "desafio": "...", "codigo": "123456" }`.
+
+El desafío dura 5 minutos, se consume al utilizarse y los códigos inválidos o vencidos responden
+`401`. La migración `0007_dos_factores.sql` guarda el secreto y los desafíos en la base de datos.
+
 ## Web
 
-- Next.js con App Router. Los colores viven como variables en `apps/web/src/app/globals.css`;
+- Next.js con App Router. Los colores viven como variables en `frontend/web/src/app/globals.css`;
   cambiar la identidad visual es editar ese bloque.
-- Toda llamada al backend pasa por `apps/web/src/lib/api.ts`.
+- Toda llamada al backend pasa por `frontend/web/src/lib/api.ts`.
 
 ## Paquete compartido (`@veto/shared`)
 
@@ -179,11 +207,11 @@ pruebas de la base y del código, y compila todo. Si falla, no se mezcla.
 | Síntoma                                                      | Causa y solución                                                                           |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `pnpm: command not found`                                    | Corre `corepack enable` o `npm install -g pnpm@10`                                         |
-| `pnpm db:up` falla con "cannot connect to the Docker daemon" | Abre Docker Desktop; solo es necesario para PostgreSQL local                                      |
+| `pnpm db:up` falla con "cannot connect to the Docker daemon" | Abre Docker Desktop; solo es necesario para PostgreSQL local                               |
 | `port is already allocated` (5440, 3000 o 3001)              | Otro programa usa ese puerto. Ciérralo o cambia el puerto en `.env` / `docker-compose.yml` |
-| La API arranca y dice `Variables de entorno inválidas`       | Falta `DATABASE_URL` o está vacía; configura el archivo `.env` desde `.env.example`          |
-| `/api/health` responde 503                                   | Revisa `DATABASE_URL`, la conectividad a Supabase y ejecuta `pnpm db:migrate`                 |
+| La API arranca y dice `Variables de entorno inválidas`       | Falta `DATABASE_URL` o está vacía; configura el archivo `.env` desde `.env.example`        |
+| `/api/health` responde 503                                   | Revisa `DATABASE_URL`, la conectividad a Supabase y ejecuta `pnpm db:migrate`              |
 | `relation "veto.…" does not exist`                           | Falta aplicar migraciones: `pnpm db:migrate`                                               |
-| Error de conexión SSL o red con Supabase                      | Verifica `DATABASE_URL`; si la conexión directa requiere IPv6, usa el pooler de Supabase   |
+| Error de conexión SSL o red con Supabase                     | Verifica `DATABASE_URL`; si la conexión directa requiere IPv6, usa el pooler de Supabase   |
 | `Cannot find module '@veto/shared'`                          | Falta compilar el paquete: `pnpm build:shared`                                             |
 | Quieres empezar con la base limpia                           | `pnpm db:reset` (borra todos los datos locales)                                            |

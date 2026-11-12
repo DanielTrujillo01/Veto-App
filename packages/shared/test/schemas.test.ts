@@ -47,3 +47,65 @@ describe('crearMascotaSchema (HU-008)', () => {
     expect(r.success).toBe(false);
   });
 });
+
+describe('crearMascotaSchema · validaciones de formato (HU-008 / HU-010)', () => {
+  const base = { nombre: 'Firulais', especieId: 1, sexo: 'MACHO' };
+
+  it('acepta todos los opcionales válidos', () => {
+    const r = crearMascotaSchema.safeParse({
+      ...base,
+      raza: 'Criollo',
+      fechaNacimiento: '2020-05-01',
+      color: 'Café',
+      pesoKg: 12.5,
+      chip: 'ABC-123',
+      fotos: ['https://fotos.veto.co/firulais.jpg'],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rechaza una fecha de nacimiento futura', () => {
+    expect(crearMascotaSchema.safeParse({ ...base, fechaNacimiento: '2999-01-01' }).success).toBe(
+      false,
+    );
+  });
+
+  it('no permite fecha de nacimiento y edad a la vez', () => {
+    expect(
+      crearMascotaSchema.safeParse({ ...base, fechaNacimiento: '2020-01-01', edadMeses: 3 })
+        .success,
+    ).toBe(false);
+  });
+
+  it('rechaza peso no positivo, fotos que no son URL y más de 5 fotos', () => {
+    expect(crearMascotaSchema.safeParse({ ...base, pesoKg: 0 }).success).toBe(false);
+    expect(crearMascotaSchema.safeParse({ ...base, fotos: ['no-es-url'] }).success).toBe(false);
+    const fotos = Array.from({ length: 6 }, (_, i) => `https://x.co/${i}.jpg`);
+    expect(crearMascotaSchema.safeParse({ ...base, fotos }).success).toBe(false);
+  });
+
+  it('exige especie y nombre', () => {
+    expect(crearMascotaSchema.safeParse({ nombre: 'X', sexo: 'HEMBRA' }).success).toBe(false);
+    expect(
+      crearMascotaSchema.safeParse({ nombre: ' ', especieId: 1, sexo: 'HEMBRA' }).success,
+    ).toBe(false);
+  });
+});
+
+describe('mensajes de campos obligatorios en español', () => {
+  it('registro y login dicen qué falta', () => {
+    const r = registroUsuarioSchema.safeParse({});
+    const mensajes = Object.fromEntries(
+      (r.error?.issues ?? []).map((i) => [i.path.join('.'), i.message]),
+    );
+    expect(mensajes).toEqual({
+      nombre: 'El nombre es obligatorio',
+      celular: 'El celular es obligatorio',
+      correo: 'El correo es obligatorio',
+      contrasena: 'La contraseña es obligatoria',
+    });
+    expect(loginSchema.safeParse({ correo: 'a@b.co' }).error?.issues[0].message).toBe(
+      'La contraseña es obligatoria',
+    );
+  });
+});

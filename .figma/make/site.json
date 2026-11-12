@@ -1,0 +1,10 @@
+{
+  "description": "Conecta a tutores de mascotas en Bogotá con clínicas, veterinarios, tiendas y fundaciones para acceder fácilmente a servicios de salud, bienestar y adopción.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

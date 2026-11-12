@@ -1,0 +1,203 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Patch,
+  Post,
+  Req,
+  Res,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  actualizarPerfilSchema,
+  codigo2faSchema,
+  desafio2faSchema,
+  eliminarCuentaSchema,
+  loginSchema,
+  registroUsuarioSchema,
+  restablecerContrasenaSchema,
+  solicitarRecuperacionSchema,
+  verificarRecuperacionSchema,
+} from '@veto/shared';
+import type { Request, Response } from 'express';
+import { validar } from '../../common/validacion';
+import { AuthGuard, type RequestAutenticada } from './auth.guard';
+import {
+  COOKIE_REAUTENTICACION,
+  COOKIE_RECUPERACION,
+  cookieReautenticacion,
+  cookieRecuperacion,
+  cookieSesion,
+  leerCookie,
+} from './cookies';
+import { IdentidadService } from './identidad.service';
+import { RecuperacionContrasenaService } from './recuperacion-contrasena.service';
+
+@ApiTags('identidad')
+@Controller('identidad')
+export class IdentidadController {
+  constructor(
+    private readonly identidad: IdentidadService,
+    private readonly recuperacion: RecuperacionContrasenaService,
+  ) {}
+
+  @Get('recuperacion/disponible')
+  @ApiOperation({ summary: 'Consultar si el envío de códigos de recuperación está configurado' })
+  async disponibilidadRecuperacion() {
+    return { disponible: await this.recuperacion.disponibilidad() };
+  }
+
+  @Post('recuperacion/solicitar')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Solicitar un código de recuperación por correo (HU-004)' })
+  async solicitarRecuperacion(@Body() body: unknown) {
+    const datos = validar(solicitarRecuperacionSchema, body);
+    await this.recuperacion.solicitar(datos.correo);
+    return {
+      mensaje: 'Si existe una cuenta con ese correo, recibirás un código de verificación.',
+    };
+  }
+
+  @Post('recuperacion/verificar')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar el código recibido y obtener un token temporal (HU-004)' })
+  async verificarRecuperacion(
+    @Body() body: unknown,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const datos = validar(verificarRecuperacionSchema, body);
+    const resultado = await this.recuperacion.verificar(datos.correo, datos.codigo);
+    response.setHeader('Set-Cookie', cookieRecuperacion(resultado.token, 600));
+    return { mensaje: 'Código verificado. Ya puedes elegir una nueva contraseña.' };
+  }
+
+  @Post('recuperacion/restablecer')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cambiar la contraseña con el token de recuperación (HU-004)' })
+  async restablecerContrasena(
+    @Req() request: Request,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const datos = validar(restablecerContrasenaSchema, body);
+    await this.recuperacion.restablecer(
+      leerCookie(request.headers.cookie, COOKIE_RECUPERACION) ?? '',
+      datos.contrasena,
+    );
+    response.setHeader('Set-Cookie', cookieRecuperacion('', 0));
+    return { mensaje: 'Tu contraseña fue actualizada. Inicia sesión con la nueva contraseña.' };
+  }
+
+  @Post('login')
+  @ApiOperation({ summary: 'Iniciar sesión con correo y contraseña' })
+  async login(@Body() body: unknown, @Res({ passthrough: true }) response: Response) {
+    const datos = validar(loginSchema, body);
+    const resultado = await this.identidad.iniciarSesion(datos.correo, datos.contrasena);
+    if (!resultado) throw new UnauthorizedException('El correo o la contraseña no son correctos');
+
+    if ('requiere2fa' in resultado) {
+      response.status(HttpStatus.ACCEPTED);
+      return resultado;
+    }
+
+    response.setHeader('Set-Cookie', cookieSesion(resultado.token, 604800));
+    return { usuario: resultado.usuario };
+  }
+
+  @Post('login/2fa')
+  @ApiOperation({ summary: 'Completar el login con el código de Google Authenticator' })
+  async completarLogin2fa(@Body() body: unknown, @Res({ passthrough: true }) response: Response) {
+    const datos = validar(desafio2faSchema, body);
+    const resultado = await this.identidad.completarLogin2fa(datos.desafio, datos.codigo);
+    response.setHeader('Set-Cookie', cookieSesion(resultado.token, 604800));
+    return { usuario: resultado.usuario };
+  }
+
+  @Get('2fa')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Consultar el estado de la verificación en dos pasos' })
+  estado2fa(@Req() request: RequestAutenticada) {
+    return this.identidad.estado2fa(request.usuario.id);
+  }
+
+  @Post('2fa/activar')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Generar un secreto para Google Authenticator' })
+  iniciarActivacion2fa(@Req() request: RequestAutenticada) {
+    return this.identidad.iniciarActivacion2fa(request.usuario.id);
+  }
+
+  @Post('2fa/activar/confirmar')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Confirmar la activación con un código de Google Authenticator' })
+  confirmarActivacion2fa(@Req() request: RequestAutenticada, @Body() body: unknown) {
+    const datos = validar(codigo2faSchema, body);
+    return this.identidad.confirmarActivacion2fa(request.usuario.id, datos.codigo);
+  }
+
+  @Get('me')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Obtener el perfil del usuario autenticado (HU-006)' })
+  async me(@Req() request: RequestAutenticada) {
+    return { usuario: await this.identidad.obtenerPerfil(request.usuario.id) };
+  }
+
+  @Patch('me')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Editar nombre, celular o correo del perfil (HU-006)' })
+  async actualizar(@Req() request: RequestAutenticada, @Body() body: unknown) {
+    const datos = validar(actualizarPerfilSchema, body);
+    return { usuario: await this.identidad.actualizarPerfil(request.usuario.id, datos) };
+  }
+
+  @Delete('me')
+  @UseGuards(AuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Eliminar la cuenta (HU-006)',
+    description:
+      'Requiere { contrasena, confirmacion: "ELIMINAR" }. Si la cuenta entra solo con Google no ' +
+      'tiene contraseña: se envía solo { confirmacion } después de GET /identidad/google/reautenticar ' +
+      '(constancia en la cookie veto_reauth); sin ella responde 401 con requiereReautenticacion. ' +
+      'Anonimiza los datos personales, cierra todas las sesiones y cancela las citas futuras; ' +
+      'se conservan mascotas e historial clínico.',
+  })
+  async eliminar(
+    @Req() request: RequestAutenticada,
+    @Body() body: unknown,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const datos = validar(eliminarCuentaSchema, body);
+    await this.identidad.eliminarCuenta(
+      request.usuario.id,
+      datos,
+      leerCookie(request.headers.cookie, COOKIE_REAUTENTICACION),
+    );
+    response.setHeader('Set-Cookie', [cookieSesion('', 0), cookieReautenticacion('', 0)]);
+    return { mensaje: 'Tu cuenta fue eliminada. Ya no podrás iniciar sesión con ella.' };
+  }
+}
+
+@ApiTags('identidad')
+@Controller('usuarios')
+export class RegistroUsuariosController {
+  constructor(private readonly identidad: IdentidadService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Registrar tutor (HU-001)',
+    description: 'Body { nombre, celular, correo, contrasena }. Correo repetido → 409.',
+  })
+  @ApiCreatedResponse({
+    description: 'Cuenta creada: { usuario }. La contraseña nunca se devuelve.',
+  })
+  async register(@Body() body: unknown) {
+    return { usuario: await this.identidad.createTutor(validar(registroUsuarioSchema, body)) };
+  }
+}

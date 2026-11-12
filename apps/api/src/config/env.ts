@@ -1,11 +1,23 @@
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
+/** Una variable vacía (`GOOGLE_CLIENT_ID=`) se trata como no configurada. */
+const opcional = z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).optional());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL es obligatoria'),
   API_PORT: z.coerce.number().int().positive().default(3001),
   WEB_ORIGIN: z.string().min(1).default('http://localhost:3000'),
+  // HU-003 (opcional): sin estas dos variables el inicio de sesión con Google queda desactivado.
+  GOOGLE_CLIENT_ID: opcional,
+  GOOGLE_CLIENT_SECRET: opcional,
+  /** URL de retorno registrada en Google; por defecto, el callback de esta API en localhost. */
+  GOOGLE_REDIRECT_URI: opcional,
+  /** HU-004: URL SMTP, por ejemplo smtps://usuario:clave@smtp.example.com:465. */
+  SMTP_URL: opcional,
+  /** HU-004: dirección visible como remitente de los correos de recuperación. */
+  SMTP_FROM: opcional,
 });
 
 export type Env = z.infer<typeof envSchema>;
