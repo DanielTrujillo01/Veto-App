@@ -219,6 +219,28 @@ describe('HU-080 · publicación de mascotas en adopción', () => {
     await app.close();
   });
 
+  it('filtra las publicaciones propias por estado y valida el filtro', async () => {
+    const escenario = baseDeDatos();
+    const app = await crearApp([AdopcionModule], escenario.db);
+
+    await request(app.getHttpServer())
+      .get('/api/adopciones/mis-publicaciones?estado=PAUSADA')
+      .set('Cookie', COOKIE)
+      .expect(200);
+
+    const consultaListado = escenario.consultas.find((consulta) =>
+      consulta.sql.includes('FROM mascota_adopcion m'),
+    );
+    expect(consultaListado?.sql).toContain('m.estado = $2');
+    expect(consultaListado?.valores).toEqual(['77777777-7777-4777-8777-777777777779', 'PAUSADA']);
+
+    await request(app.getHttpServer())
+      .get('/api/adopciones/mis-publicaciones?estado=INEXISTENTE')
+      .set('Cookie', COOKIE)
+      .expect(400);
+    await app.close();
+  });
+
   it.each(['PAUSADA', 'RETIRADA'] as const)(
     'cambia a %s y deja de aparecer en el catálogo',
     async (estado) => {

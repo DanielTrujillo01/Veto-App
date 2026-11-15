@@ -113,7 +113,14 @@ export class AdopcionRepository {
     return r.rows[0] ? aMascotaAdopcion(r.rows[0]) : null;
   }
 
-  async listarDeFundacion(client: Consultor, fundacionId: string): Promise<MascotaAdopcion[]> {
+  async listarDeFundacion(
+    client: Consultor,
+    fundacionId: string,
+    estado?: MascotaAdopcion['estado'],
+  ): Promise<MascotaAdopcion[]> {
+    const parametros: unknown[] = [fundacionId];
+    const filtroEstado = estado ? ' AND m.estado = $2' : '';
+    if (estado) parametros.push(estado);
     const r = await client.query<MascotaAdopcionRow>(
       `SELECT m.id, m.nombre, m.especie_id, m.edad_meses, m.sexo, m.tamano, m.ubicacion,
               m.descripcion, m.estado, m.creado_en,
@@ -126,9 +133,9 @@ export class AdopcionRepository {
              FROM mascota_adopcion_media mm
             WHERE mm.mascota_adopcion_id = m.id
          ) media ON true
-        WHERE m.fundacion_id = $1
+        WHERE m.fundacion_id = $1${filtroEstado}
         ORDER BY m.creado_en DESC, m.id`,
-      [fundacionId],
+      parametros,
     );
     return r.rows.map((row) => aMascotaAdopcion(row));
   }

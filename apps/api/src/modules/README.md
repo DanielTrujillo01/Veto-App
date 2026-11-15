@@ -109,6 +109,11 @@ modelo de datos (`docs/modelo-de-datos.md`).
   listado privado y del catálogo incluyen `fotos` en el orden enviado y `videoUrl` cuando existe;
   el proveedor externo de almacenamiento/CDN es responsable de validar el contenido y el tamaño
   del archivo antes de entregar la URL.
+- **Listado de mascotas de la fundación (HU-085):** `GET /api/adopciones/mis-publicaciones`
+  devuelve únicamente las publicaciones asociadas a la fundación autenticada e incluye su estado
+  actual. Acepta el filtro opcional `?estado=DISPONIBLE|PAUSADA|EN_PROCESO|ADOPTADA|RETIRADA`;
+  sin filtro devuelve todas. El estado se consulta directamente en la base, por lo que refleja
+  cambios recientes de edición o transición.
 
 ## Piezas comunes
 

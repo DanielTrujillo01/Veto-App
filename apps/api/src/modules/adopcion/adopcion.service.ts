@@ -10,6 +10,7 @@ import type {
   EditarMascotaAdopcion,
   MascotaAdopcion,
   MascotaAdopcionPublica,
+  ListarMascotasAdopcion,
   PublicarMascotaAdopcion,
 } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
@@ -36,10 +37,13 @@ export class AdopcionService {
     });
   }
 
-  async listarPropias(usuarioId: string): Promise<MascotaAdopcion[]> {
+  async listarPropias(
+    usuarioId: string,
+    filtro: ListarMascotasAdopcion = {},
+  ): Promise<MascotaAdopcion[]> {
     return this.database.withUser(usuarioId, async (client) => {
       const fundacionId = await this.fundacionActiva(client, usuarioId);
-      return this.repository.listarDeFundacion(client, fundacionId);
+      return this.repository.listarDeFundacion(client, fundacionId, filtro.estado);
     });
   }
 

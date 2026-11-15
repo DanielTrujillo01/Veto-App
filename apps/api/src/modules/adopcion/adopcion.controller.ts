@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   cambiarEstadoMascotaAdopcionSchema,
   editarMascotaAdopcionSchema,
+  listarMascotasAdopcionSchema,
   publicarMascotaAdopcionSchema,
 } from '@veto/shared';
 import { validar } from '../../common/validacion';
@@ -51,9 +53,12 @@ export class AdopcionController {
   @Get('mis-publicaciones')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('ALIADO')
-  @ApiOperation({ summary: 'Listar las publicaciones de la fundación autenticada (HU-082)' })
-  propias(@Req() request: RequestAutenticada) {
-    return this.adopcion.listarPropias(request.usuario.id);
+  @ApiOperation({ summary: 'Listar las publicaciones de la fundación autenticada (HU-085)' })
+  propias(@Req() request: RequestAutenticada, @Query() query: unknown) {
+    return this.adopcion.listarPropias(
+      request.usuario.id,
+      validar(listarMascotasAdopcionSchema, query),
+    );
   }
 
   @Put(':id')

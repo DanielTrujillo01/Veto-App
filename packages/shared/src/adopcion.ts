@@ -39,6 +39,11 @@ export const cambiarEstadoMascotaAdopcionSchema = z.object({
 });
 export type CambiarEstadoMascotaAdopcion = z.infer<typeof cambiarEstadoMascotaAdopcionSchema>;
 
+export const listarMascotasAdopcionSchema = z.object({
+  estado: z.enum(ESTADOS_MASCOTA_ADOPCION, { error: 'El estado no es válido' }).optional(),
+});
+export type ListarMascotasAdopcion = z.infer<typeof listarMascotasAdopcionSchema>;
+
 export type MascotaAdopcion = Omit<
   PublicarMascotaAdopcion,
   'descripcion' | 'fotos' | 'videoUrl'
