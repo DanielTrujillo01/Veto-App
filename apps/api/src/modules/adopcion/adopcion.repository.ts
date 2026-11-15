@@ -3,6 +3,7 @@ import type { PoolClient, QueryResultRow } from 'pg';
 import type {
   MascotaAdopcion,
   MascotaAdopcionPublica,
+  EditarMascotaAdopcion,
   PublicarMascotaAdopcion,
 } from '@veto/shared';
 import type { Consultor } from '../../database/database.service';
@@ -57,6 +58,63 @@ export class AdopcionRepository {
       ],
     );
     return aMascotaAdopcion(r.rows[0]);
+  }
+
+  async actualizar(
+    client: PoolClient,
+    publicacionId: string,
+    fundacionId: string,
+    datos: EditarMascotaAdopcion,
+  ): Promise<MascotaAdopcion | null> {
+    const r = await client.query<MascotaAdopcionRow>(
+      `UPDATE mascota_adopcion
+          SET nombre = $3, especie_id = $4, edad_meses = $5, sexo = $6,
+              tamano = $7, ubicacion = $8, descripcion = $9
+        WHERE id = $1 AND fundacion_id = $2
+       RETURNING id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion, descripcion,
+                 estado, creado_en`,
+      [
+        publicacionId,
+        fundacionId,
+        datos.nombre,
+        datos.especieId,
+        datos.edadMeses,
+        datos.sexo,
+        datos.tamano,
+        datos.ubicacion,
+        datos.descripcion ?? null,
+      ],
+    );
+    return r.rows[0] ? aMascotaAdopcion(r.rows[0]) : null;
+  }
+
+  async cambiarEstado(
+    client: PoolClient,
+    publicacionId: string,
+    fundacionId: string,
+    estado: MascotaAdopcion['estado'],
+  ): Promise<MascotaAdopcion | null> {
+    const r = await client.query<MascotaAdopcionRow>(
+      `UPDATE mascota_adopcion
+          SET estado = $3
+        WHERE id = $1 AND fundacion_id = $2
+       RETURNING id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion, descripcion,
+                 estado, creado_en`,
+      [publicacionId, fundacionId, estado],
+    );
+    return r.rows[0] ? aMascotaAdopcion(r.rows[0]) : null;
+  }
+
+  async listarDeFundacion(client: Consultor, fundacionId: string): Promise<MascotaAdopcion[]> {
+    const r = await client.query<MascotaAdopcionRow>(
+      `SELECT id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion, descripcion,
+              estado, creado_en
+         FROM mascota_adopcion
+        WHERE fundacion_id = $1
+        ORDER BY creado_en DESC, id`,
+      [fundacionId],
+    );
+    return r.rows.map(aMascotaAdopcion);
   }
 
   async listarPublicas(client: Consultor): Promise<MascotaAdopcionPublica[]> {

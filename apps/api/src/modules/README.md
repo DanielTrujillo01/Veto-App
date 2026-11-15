@@ -93,6 +93,14 @@ modelo de datos (`docs/modelo-de-datos.md`).
   `DISPONIBLE` y nunca acepta el id de la fundación desde el cliente. El catálogo público se consulta
   con `GET /api/adopciones/catalogo`: lee únicamente `v_catalogo_adopcion`, por lo que solo muestra
   publicaciones `DISPONIBLE` de fundaciones `ACTIVO` y no expone datos que identifiquen la fundación.
+- **Gestión de publicaciones (HU-082):** la fundación administra sus publicaciones con
+  `GET /api/adopciones/mis-publicaciones`, `PUT /api/adopciones/:id` y
+  `PATCH /api/adopciones/:id/estado`. La edición exige los mismos datos obligatorios de HU-080 y
+  solo afecta publicaciones propias. Los estados permitidos siguen el flujo
+  `DISPONIBLE → PAUSADA | EN_PROCESO | RETIRADA`, `PAUSADA → DISPONIBLE | RETIRADA` y
+  `EN_PROCESO → DISPONIBLE | ADOPTADA | RETIRADA`; `ADOPTADA` y `RETIRADA` son terminales.
+  El catálogo público solo lee publicaciones `DISPONIBLE`, por lo que pausar, retirar, iniciar un
+  proceso o marcar como adoptada impide nuevas solicitudes y las oculta del catálogo.
 
 ## Piezas comunes
 

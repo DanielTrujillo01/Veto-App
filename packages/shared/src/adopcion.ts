@@ -14,6 +14,14 @@ export const publicarMascotaAdopcionSchema = z.object({
 });
 export type PublicarMascotaAdopcion = z.infer<typeof publicarMascotaAdopcionSchema>;
 
+export const editarMascotaAdopcionSchema = publicarMascotaAdopcionSchema;
+export type EditarMascotaAdopcion = PublicarMascotaAdopcion;
+
+export const cambiarEstadoMascotaAdopcionSchema = z.object({
+  estado: z.enum(ESTADOS_MASCOTA_ADOPCION, { error: 'El estado no es válido' }),
+});
+export type CambiarEstadoMascotaAdopcion = z.infer<typeof cambiarEstadoMascotaAdopcionSchema>;
+
 export type MascotaAdopcion = Omit<PublicarMascotaAdopcion, 'descripcion'> & {
   id: string;
   descripcion: string | null;
