@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
+import { MAX_FOTOS_ADOPCION } from '@veto/shared';
 import type {
   MascotaAdopcion,
   MascotaAdopcionPublica,
@@ -17,6 +18,8 @@ interface MascotaAdopcionRow extends QueryResultRow {
   tamano: MascotaAdopcion['tamano'];
   ubicacion: string;
   descripcion: string | null;
+  fotos: string[] | null;
+  video_url: string | null;
   estado: MascotaAdopcion['estado'];
   creado_en: Date | string;
 }
@@ -31,6 +34,8 @@ interface MascotaAdopcionPublicaRow extends QueryResultRow {
   tamano: MascotaAdopcion['tamano'];
   ubicacion: string;
   descripcion: string | null;
+  fotos: string[] | null;
+  video_url: string | null;
 }
 
 @Injectable()
@@ -57,7 +62,8 @@ export class AdopcionRepository {
         datos.descripcion ?? null,
       ],
     );
-    return aMascotaAdopcion(r.rows[0]);
+    await this.reemplazarMedios(client, r.rows[0].id, datos);
+    return aMascotaAdopcion(r.rows[0], datos);
   }
 
   async actualizar(
@@ -85,7 +91,9 @@ export class AdopcionRepository {
         datos.descripcion ?? null,
       ],
     );
-    return r.rows[0] ? aMascotaAdopcion(r.rows[0]) : null;
+    if (!r.rows[0]) return null;
+    await this.reemplazarMedios(client, r.rows[0].id, datos);
+    return aMascotaAdopcion(r.rows[0], datos);
   }
 
   async cambiarEstado(
@@ -107,19 +115,28 @@ export class AdopcionRepository {
 
   async listarDeFundacion(client: Consultor, fundacionId: string): Promise<MascotaAdopcion[]> {
     const r = await client.query<MascotaAdopcionRow>(
-      `SELECT id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion, descripcion,
-              estado, creado_en
-         FROM mascota_adopcion
-        WHERE fundacion_id = $1
-        ORDER BY creado_en DESC, id`,
+      `SELECT m.id, m.nombre, m.especie_id, m.edad_meses, m.sexo, m.tamano, m.ubicacion,
+              m.descripcion, m.estado, m.creado_en,
+              COALESCE(media.fotos, ARRAY[]::text[]) AS fotos, media.video_url
+         FROM mascota_adopcion m
+         LEFT JOIN LATERAL (
+           SELECT array_agg(mm.url ORDER BY mm.posicion, mm.id)
+                    FILTER (WHERE mm.tipo = 'FOTO') AS fotos,
+                  max(mm.url) FILTER (WHERE mm.tipo = 'VIDEO') AS video_url
+             FROM mascota_adopcion_media mm
+            WHERE mm.mascota_adopcion_id = m.id
+         ) media ON true
+        WHERE m.fundacion_id = $1
+        ORDER BY m.creado_en DESC, m.id`,
       [fundacionId],
     );
-    return r.rows.map(aMascotaAdopcion);
+    return r.rows.map((row) => aMascotaAdopcion(row));
   }
 
   async listarPublicas(client: Consultor): Promise<MascotaAdopcionPublica[]> {
     const r = await client.query<MascotaAdopcionPublicaRow>(
-      `SELECT id, nombre, especie_id, especie, edad_meses, sexo, tamano, ubicacion, descripcion
+      `SELECT id, nombre, especie_id, especie, edad_meses, sexo, tamano, ubicacion, descripcion,
+              fotos, video_url
          FROM v_catalogo_adopcion
         ORDER BY id`,
     );
@@ -133,11 +150,40 @@ export class AdopcionRepository {
       tamano: row.tamano,
       ubicacion: row.ubicacion,
       descripcion: row.descripcion,
+      fotos: row.fotos ?? [],
+      videoUrl: row.video_url,
     }));
+  }
+
+  private async reemplazarMedios(
+    client: PoolClient,
+    publicacionId: string,
+    datos: PublicarMascotaAdopcion,
+  ): Promise<void> {
+    await client.query('DELETE FROM mascota_adopcion_media WHERE mascota_adopcion_id = $1', [
+      publicacionId,
+    ]);
+    for (const [indice, url] of datos.fotos.entries()) {
+      await client.query(
+        `INSERT INTO mascota_adopcion_media (mascota_adopcion_id, tipo, url, posicion)
+         VALUES ($1, 'FOTO', $2, $3)`,
+        [publicacionId, url, indice + 1],
+      );
+    }
+    if (datos.videoUrl) {
+      await client.query(
+        `INSERT INTO mascota_adopcion_media (mascota_adopcion_id, tipo, url, posicion)
+         VALUES ($1, 'VIDEO', $2, $3)`,
+        [publicacionId, datos.videoUrl, MAX_FOTOS_ADOPCION + 1],
+      );
+    }
   }
 }
 
-function aMascotaAdopcion(row: MascotaAdopcionRow): MascotaAdopcion {
+function aMascotaAdopcion(
+  row: MascotaAdopcionRow,
+  medios?: Pick<PublicarMascotaAdopcion, 'fotos' | 'videoUrl'>,
+): MascotaAdopcion {
   return {
     id: row.id,
     nombre: row.nombre,
@@ -147,6 +193,8 @@ function aMascotaAdopcion(row: MascotaAdopcionRow): MascotaAdopcion {
     tamano: row.tamano,
     ubicacion: row.ubicacion,
     descripcion: row.descripcion,
+    fotos: medios?.fotos ?? row.fotos ?? [],
+    videoUrl: medios?.videoUrl ?? row.video_url ?? null,
     estado: row.estado,
     creadoEn: new Date(row.creado_en).toISOString(),
   };

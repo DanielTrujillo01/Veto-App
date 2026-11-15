@@ -51,6 +51,7 @@ export const TIPOS_ACCION_ADMIN = [
   'APROBAR_FUNDACION',
   'RECHAZAR_FUNDACION',
 ] as const;
+export const TIPOS_MEDIA_ADOPCION = ['FOTO', 'VIDEO'] as const;
 
 export type RolUsuario = (typeof ROLES_USUARIO)[number];
 export type EstadoCuenta = (typeof ESTADOS_CUENTA)[number];
@@ -67,6 +68,7 @@ export type EstadoPedido = (typeof ESTADOS_PEDIDO)[number];
 export type EstadoMascotaAdopcion = (typeof ESTADOS_MASCOTA_ADOPCION)[number];
 export type EstadoSolicitud = (typeof ESTADOS_SOLICITUD)[number];
 export type TipoAccionAdmin = (typeof TIPOS_ACCION_ADMIN)[number];
+export type TipoMediaAdopcion = (typeof TIPOS_MEDIA_ADOPCION)[number];
 
 /** Nombre del tipo en PostgreSQL → valores. Lo usa el test que compara con las migraciones. */
 export const ENUMS_BASE_DE_DATOS = {
@@ -85,4 +87,5 @@ export const ENUMS_BASE_DE_DATOS = {
   estado_mascota_adopcion: ESTADOS_MASCOTA_ADOPCION,
   estado_solicitud: ESTADOS_SOLICITUD,
   tipo_accion_admin: TIPOS_ACCION_ADMIN,
+  tipo_media_adopcion: TIPOS_MEDIA_ADOPCION,
 } as const;

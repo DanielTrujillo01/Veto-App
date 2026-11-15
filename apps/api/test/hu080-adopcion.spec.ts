@@ -81,7 +81,7 @@ function baseDeDatos(usuario: UsuarioPrueba = FUNDACION, autorizada = true) {
         ],
       };
     }
-    if (sql.includes('FROM mascota_adopcion') && sql.includes('ORDER BY creado_en')) {
+    if (sql.includes('FROM mascota_adopcion') && sql.includes('ORDER BY m.creado_en')) {
       return {
         rows: [
           {
@@ -164,6 +164,31 @@ describe('HU-080 · publicación de mascotas en adopción', () => {
       expect.objectContaining({ nombre: 'Nube', especie: 'Perro' }),
     );
     expect(respuesta.body[0]).not.toHaveProperty('fundacionId');
+    await app.close();
+  });
+
+  it('valida el límite de fotos y conserva el orden de las URLs', async () => {
+    const escenario = baseDeDatos();
+    const app = await crearApp([AdopcionModule], escenario.db);
+    const fotos = ['https://cdn.veto.co/nube-1.jpg', 'https://cdn.veto.co/nube-2.jpg'];
+
+    const respuesta = await request(app.getHttpServer())
+      .post('/api/adopciones')
+      .set('Cookie', COOKIE)
+      .send({ ...PUBLICACION, fotos, videoUrl: 'https://cdn.veto.co/nube.mp4' })
+      .expect(201);
+
+    expect(respuesta.body.fotos).toEqual(fotos);
+    expect(respuesta.body.videoUrl).toBe('https://cdn.veto.co/nube.mp4');
+
+    await request(app.getHttpServer())
+      .post('/api/adopciones')
+      .set('Cookie', COOKIE)
+      .send({
+        ...PUBLICACION,
+        fotos: Array.from({ length: 11 }, (_, i) => `https://cdn.veto.co/${i}.jpg`),
+      })
+      .expect(400);
     await app.close();
   });
 

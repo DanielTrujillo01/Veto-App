@@ -12,7 +12,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 | `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                                                 | HU-029, 031, 032, 034                    |
 | `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                                           | HU-014, 017, 037, 042, 043               |
 | `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto                       | HU-044–050                               |
-| `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, solicitud_adopcion                                                   | HU-080, 082, 083, 086, 087, 090, 092–094 |
+| `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, mascota_adopcion_media, solicitud_adopcion                           | HU-080, 082, 084, 086, 087, 090, 092–094 |
 | `admin`          | Moderación, revisión de fundaciones y estado de cuentas del Equipo Veto            | accion_admin                                                                           | HU-065–067, 079                          |
 | `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                              | v_citas_reporte, v_ventas_productos                                                    | HU-070, 073, 074                         |
 | `notificaciones` | Notificaciones internas de la aplicación                                           | notificacion                                                                           | HU-048, 052, 054                         |
@@ -101,6 +101,14 @@ modelo de datos (`docs/modelo-de-datos.md`).
   `EN_PROCESO → DISPONIBLE | ADOPTADA | RETIRADA`; `ADOPTADA` y `RETIRADA` son terminales.
   El catálogo público solo lee publicaciones `DISPONIBLE`, por lo que pausar, retirar, iniciar un
   proceso o marcar como adoptada impide nuevas solicitudes y las oculta del catálogo.
+- **Fotos y video de adopción (HU-084):** `POST /api/adopciones` y `PUT /api/adopciones/:id`
+  reciben `fotos` como una lista ordenada de URLs `http`/`https` (máximo 10) y `videoUrl` como
+  una URL opcional. La API solo guarda estas URLs en `mascota_adopcion_media`; nunca recibe ni
+  almacena archivos binarios. La lista se reemplaza dentro de la misma transacción, por lo que un
+  error de validación o persistencia no deja medios parcialmente guardados. Las respuestas del
+  listado privado y del catálogo incluyen `fotos` en el orden enviado y `videoUrl` cuando existe;
+  el proveedor externo de almacenamiento/CDN es responsable de validar el contenido y el tamaño
+  del archivo antes de entregar la URL.
 
 ## Piezas comunes
 
