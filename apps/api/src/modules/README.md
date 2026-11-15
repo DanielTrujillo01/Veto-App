@@ -87,6 +87,12 @@ modelo de datos (`docs/modelo-de-datos.md`).
   consulta su propio resultado con `GET /api/aliados/me/fundacion`. Solo aliados `ACTIVO` pueden
   publicar mascotas en adopción; la base de datos rechaza también las publicaciones de fundaciones
   rechazadas.
+- **Publicación de mascotas en adopción (HU-080):** una fundación autenticada y `ACTIVO` publica con
+  `POST /api/adopciones` enviando `nombre`, `especieId`, `edadMeses`, `sexo`, `tamano` y `ubicacion`;
+  `descripcion` es opcional. La API valida todos los campos, crea la publicación en estado inicial
+  `DISPONIBLE` y nunca acepta el id de la fundación desde el cliente. El catálogo público se consulta
+  con `GET /api/adopciones/catalogo`: lee únicamente `v_catalogo_adopcion`, por lo que solo muestra
+  publicaciones `DISPONIBLE` de fundaciones `ACTIVO` y no expone datos que identifiquen la fundación.
 
 ## Piezas comunes
 
