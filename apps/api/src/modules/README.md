@@ -12,7 +12,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 | `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                                                 | HU-029, 031, 032, 034                    |
 | `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                                           | HU-014, 017, 037, 042, 043               |
 | `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto                       | HU-044–050                               |
-| `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, solicitud_adopcion                                                   | HU-080, 082, 083, 086, 087, 090, 092–094 |
+| `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, mascota_adopcion_media, solicitud_adopcion                           | HU-080, 082, 084, 086, 087, 090, 092–094 |
 | `admin`          | Moderación, revisión de fundaciones y estado de cuentas del Equipo Veto            | accion_admin                                                                           | HU-065–067, 079                          |
 | `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                              | v_citas_reporte, v_ventas_productos                                                    | HU-070, 073, 074                         |
 | `notificaciones` | Notificaciones internas de la aplicación                                           | notificacion                                                                           | HU-048, 052, 054                         |
@@ -87,6 +87,33 @@ modelo de datos (`docs/modelo-de-datos.md`).
   consulta su propio resultado con `GET /api/aliados/me/fundacion`. Solo aliados `ACTIVO` pueden
   publicar mascotas en adopción; la base de datos rechaza también las publicaciones de fundaciones
   rechazadas.
+- **Publicación de mascotas en adopción (HU-080):** una fundación autenticada y `ACTIVO` publica con
+  `POST /api/adopciones` enviando `nombre`, `especieId`, `edadMeses`, `sexo`, `tamano` y `ubicacion`;
+  `descripcion` es opcional. La API valida todos los campos, crea la publicación en estado inicial
+  `DISPONIBLE` y nunca acepta el id de la fundación desde el cliente. El catálogo público se consulta
+  con `GET /api/adopciones/catalogo`: lee únicamente `v_catalogo_adopcion`, por lo que solo muestra
+  publicaciones `DISPONIBLE` de fundaciones `ACTIVO` y no expone datos que identifiquen la fundación.
+- **Gestión de publicaciones (HU-082):** la fundación administra sus publicaciones con
+  `GET /api/adopciones/mis-publicaciones`, `PUT /api/adopciones/:id` y
+  `PATCH /api/adopciones/:id/estado`. La edición exige los mismos datos obligatorios de HU-080 y
+  solo afecta publicaciones propias. Los estados permitidos siguen el flujo
+  `DISPONIBLE → PAUSADA | EN_PROCESO | RETIRADA`, `PAUSADA → DISPONIBLE | RETIRADA` y
+  `EN_PROCESO → DISPONIBLE | ADOPTADA | RETIRADA`; `ADOPTADA` y `RETIRADA` son terminales.
+  El catálogo público solo lee publicaciones `DISPONIBLE`, por lo que pausar, retirar, iniciar un
+  proceso o marcar como adoptada impide nuevas solicitudes y las oculta del catálogo.
+- **Fotos y video de adopción (HU-084):** `POST /api/adopciones` y `PUT /api/adopciones/:id`
+  reciben `fotos` como una lista ordenada de URLs `http`/`https` (máximo 10) y `videoUrl` como
+  una URL opcional. La API solo guarda estas URLs en `mascota_adopcion_media`; nunca recibe ni
+  almacena archivos binarios. La lista se reemplaza dentro de la misma transacción, por lo que un
+  error de validación o persistencia no deja medios parcialmente guardados. Las respuestas del
+  listado privado y del catálogo incluyen `fotos` en el orden enviado y `videoUrl` cuando existe;
+  el proveedor externo de almacenamiento/CDN es responsable de validar el contenido y el tamaño
+  del archivo antes de entregar la URL.
+- **Listado de mascotas de la fundación (HU-085):** `GET /api/adopciones/mis-publicaciones`
+  devuelve únicamente las publicaciones asociadas a la fundación autenticada e incluye su estado
+  actual. Acepta el filtro opcional `?estado=DISPONIBLE|PAUSADA|EN_PROCESO|ADOPTADA|RETIRADA`;
+  sin filtro devuelve todas. El estado se consulta directamente en la base, por lo que refleja
+  cambios recientes de edición o transición.
 
 ## Piezas comunes
 
