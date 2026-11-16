@@ -301,3 +301,18 @@ descripcion, precio, stock, fotos, activo, ocultoPorVeto, creadoEn }`. `ocultoPo
   la moderación (HU-066) lo ocultó: no se ve en la tienda aunque esté activo.
 - Migración `0015_hu044_gestion_productos.sql`: `producto_foto.posicion` (1 a 5, única por producto)
   y los límites de nombre, descripción y precio en la base.
+
+## HU-046 · Elegir un producto
+
+- `GET /api/productos/:id` (público): detalle de un **producto visible** (acuerdo A-16: activo, no
+  ocultado por moderación y de una tienda activa), con la misma forma que cada elemento de
+  `GET /api/productos` (`ProductoCatalogo`: `{ id, aliadoId, aliado, categoriaId, categoria, nombre,
+descripcion, precio, stock, fotos, creadoEn }`; fotos en orden, la primera es la portada). Si no
+  existe o ya no está visible: **404** `"Este producto ya no está disponible"`; un id que no es
+  uuid: **400**. La web lo vuelve a consultar al pulsar "Agregar al carrito" para comprobar que
+  sigue visible y cuánto stock queda.
+- **El carrito no pasa por la API** (acuerdo A-17): vive en el navegador (`localStorage`, clave
+  `veto_carrito`, `frontend/web/src/lib/carrito.ts`) con el formato `Carrito` de `@veto/shared`
+  (`{ aliadoId, items: [{ productoId, cantidad }] }`): una sola tienda, sin precios, hasta 99
+  unidades por producto y nunca más que el stock (`agregarAlCarrito`). HU-047 debe leer ese mismo
+  formato y volver a validar precio y stock al crear el pedido (la base ya descuenta el stock).

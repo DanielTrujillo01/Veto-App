@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { OrdenProductos, ProductoCatalogo } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { ProductosRepository } from './productos.repository';
@@ -13,5 +13,15 @@ export class ProductosService {
   /** Público: todos los productos disponibles de tiendas activas. */
   async listarDisponibles(orden: OrdenProductos): Promise<ProductoCatalogo[]> {
     return this.repo.listarDisponibles(this.db, orden);
+  }
+
+  /**
+   * HU-046, público: detalle de un producto visible (acuerdo A-16). La web lo vuelve a consultar
+   * al pulsar "Agregar al carrito" para comprobar que sigue disponible y cuánto stock queda.
+   */
+  async obtenerVisible(id: string): Promise<ProductoCatalogo> {
+    const producto = await this.repo.buscarVisible(this.db, id);
+    if (!producto) throw new NotFoundException('Este producto ya no está disponible');
+    return producto;
   }
 }

@@ -5384,6 +5384,77 @@
   background: #fff;
 }
 
+/* HU-046: galería y descripción del detalle de producto (/tienda/productos/[id]). */
+.product-gallery {
+  display: grid;
+  gap: 12px;
+}
+
+.product-gallery__main {
+  display: grid;
+  width: min(100%, 520px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: #fff;
+}
+
+.product-gallery__main img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.product-gallery__fallback {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  background: var(--soft-pink);
+  color: var(--burgundy);
+  font-size: 3rem;
+}
+
+.product-gallery__thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.product-gallery__thumbs button {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+  place-items: center;
+  padding: 0;
+  border: 2px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  background: var(--soft-pink);
+  color: var(--burgundy);
+  cursor: pointer;
+}
+
+.product-gallery__thumbs button.is-active {
+  border-color: var(--burgundy);
+}
+
+.product-gallery__thumbs img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-description {
+  max-width: 720px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
 .clinic-profile__sticky {
   position: sticky;
   top: 24px;
