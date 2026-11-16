@@ -38,11 +38,12 @@ export class ProductosRepository {
     );
     if (r.rows.length === 0) return [];
 
+    // Las fotos en su orden: la primera es la portada (HU-044).
     const fotos = await client.query<{ producto_id: string; url: string }>(
       `SELECT producto_id, url
          FROM producto_foto
         WHERE producto_id = ANY($1::uuid[]) AND moderacion = 'PUBLICADO'
-        ORDER BY id`,
+        ORDER BY posicion`,
       [r.rows.map((fila) => fila.id)],
     );
 

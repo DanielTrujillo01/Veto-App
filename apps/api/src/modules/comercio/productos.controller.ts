@@ -2,12 +2,22 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ordenProductosSchema } from '@veto/shared';
 import { validar } from '../../common/validacion';
+import { ProductosGestionService } from './productos-gestion.service';
 import { ProductosService } from './productos.service';
 
 @ApiTags('productos')
 @Controller('productos')
 export class ProductosController {
-  constructor(private readonly productos: ProductosService) {}
+  constructor(
+    private readonly productos: ProductosService,
+    private readonly gestion: ProductosGestionService,
+  ) {}
+
+  @Get('categorias')
+  @ApiOperation({ summary: 'Categorías de producto del sistema (público, HU-044)' })
+  categorias() {
+    return this.gestion.listarCategorias();
+  }
 
   @Get()
   @ApiOperation({

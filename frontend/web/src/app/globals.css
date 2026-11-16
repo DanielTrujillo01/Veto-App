@@ -2758,6 +2758,18 @@
   font-size: 0.72rem;
 }
 
+/* HU-044: fila de producto en el panel de la tienda (portada + datos en la primera columna). */
+.product-row__main {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.product-row__main > div {
+  min-width: 0;
+}
+
 .entity-subtle {
   color: var(--text-muted);
   font-weight: 400;
