@@ -15,3 +15,4 @@ export * from './dos-factores';
 export * from './agenda';
 export * from './adopcion';
 export * from './google';
+export * from './producto';

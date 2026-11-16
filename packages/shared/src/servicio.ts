@@ -97,3 +97,15 @@ export type GuardarReglasPrecio = z.infer<typeof guardarReglasPrecioSchema>;
 export const cotizarServicioSchema = z.object({
   mascotaId: z.uuid('La mascota no es válida'),
 });
+/** Servicio del catálogo público, con su precio mínimo y las reglas que lo modifican. */
+export type ServicioConReglas = Servicio & {
+  /** Menor entre precioBase y el precio de sus reglas; es lo que se muestra como "Desde $X". */
+  precioDesde: number;
+  reglasPrecio: ReglaPrecio[];
+};
+
+/** Orden del catálogo público de servicios (?orden=). El precio se ordena por precioDesde. */
+export const ordenServiciosSchema = z.object({
+  orden: z.enum(['nombre', 'precio_asc', 'precio_desc']).default('nombre'),
+});
+export type OrdenServicios = z.infer<typeof ordenServiciosSchema>['orden'];

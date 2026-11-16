@@ -38,6 +38,25 @@ interface MascotaAdopcionPublicaRow extends QueryResultRow {
   video_url: string | null;
 }
 
+function aMascotaPublica(row: MascotaAdopcionPublicaRow): MascotaAdopcionPublica {
+  return {
+    id: row.id,
+    nombre: row.nombre,
+    especieId: row.especie_id,
+    especie: row.especie,
+    edadMeses: row.edad_meses,
+    sexo: row.sexo,
+    tamano: row.tamano,
+    ubicacion: row.ubicacion,
+    descripcion: row.descripcion,
+    fotos: row.fotos ?? [],
+    videoUrl: row.video_url,
+  };
+}
+
+const COLUMNAS_PUBLICAS = `id, nombre, especie_id, especie, edad_meses, sexo, tamano, ubicacion,
+  descripcion, fotos, video_url`;
+
 @Injectable()
 export class AdopcionRepository {
   async insertar(
@@ -140,27 +159,21 @@ export class AdopcionRepository {
     return r.rows.map((row) => aMascotaAdopcion(row));
   }
 
-  async listarPublicas(client: Consultor): Promise<MascotaAdopcionPublica[]> {
-    const r = await client.query<MascotaAdopcionPublicaRow>(
-      `SELECT id, nombre, especie_id, especie, edad_meses, sexo, tamano, ubicacion, descripcion,
-              fotos, video_url
-         FROM v_catalogo_adopcion
-        ORDER BY id`,
-    );
-    return r.rows.map((row) => ({
-      id: row.id,
-      nombre: row.nombre,
-      especieId: row.especie_id,
-      especie: row.especie,
-      edadMeses: row.edad_meses,
-      sexo: row.sexo,
-      tamano: row.tamano,
-      ubicacion: row.ubicacion,
-      descripcion: row.descripcion,
-      fotos: row.fotos ?? [],
-      videoUrl: row.video_url,
-    }));
-  }
+async listarPublicas(client: Consultor): Promise<MascotaAdopcionPublica[]> {
+  const r = await client.query<MascotaAdopcionPublicaRow>(
+    `SELECT ${COLUMNAS_PUBLICAS} FROM v_catalogo_adopcion ORDER BY id`,
+  );
+  return r.rows.map(aMascotaPublica);
+}
+
+/** Detalle público: solo mascotas DISPONIBLES de fundaciones activas, sin datos de la fundación. */
+async buscarPublica(client: Consultor, id: string): Promise<MascotaAdopcionPublica | null> {
+  const r = await client.query<MascotaAdopcionPublicaRow>(
+    `SELECT ${COLUMNAS_PUBLICAS} FROM v_catalogo_adopcion WHERE id = $1`,
+    [id],
+  );
+  return r.rows[0] ? aMascotaPublica(r.rows[0]) : null;
+}
 
   private async reemplazarMedios(
     client: PoolClient,

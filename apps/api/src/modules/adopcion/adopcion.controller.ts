@@ -88,4 +88,12 @@ export class AdopcionController {
       validar(cambiarEstadoMascotaAdopcionSchema, body),
     );
   }
+
+  @Get(':mascotaId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('TUTOR')
+  @ApiOperation({ summary: 'Detalle de una mascota en adopción, sin datos de la fundación' })
+  obtenerPublica(@Param('mascotaId', new ParseUUIDPipe()) mascotaId: string) {
+    return this.adopcion.obtenerPublica(mascotaId);
+  }
 }

@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import type { EstadoAliado, PerfilUsuario, RegistroAliado, TipoAliado } from '@veto/shared';
+import type { EstadoAliado, PerfilUsuario, RegistroAliado, TipoAliado, AliadoPublico } from '@veto/shared';
 import { DatabaseService, type Consultor } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { IdentidadService } from '../identidad/identidad.service';
@@ -162,6 +162,38 @@ export class AliadosService {
       ubicacion: fila.ubicacion,
       estado: fila.estado,
       creadoEn: new Date(fila.creado_en).toISOString(),
+    };
+  }
+
+
+  /** HU público: detalle de un aliado activo para los tutores. Las fundaciones no se exponen. */
+  async obtenerPublico(aliadoId: string): Promise<AliadoPublico> {
+    const r = await this.database.query<{
+      id: string;
+      tipo: AliadoPublico['tipo'];
+      nombre: string;
+      descripcion: string | null;
+      logo_url: string | null;
+      contacto: string | null;
+      ciudad: string | null;
+      ubicacion: string | null;
+    }>(
+      `SELECT id, tipo, nombre, descripcion, logo_url, contacto, ciudad, ubicacion
+        FROM aliado
+        WHERE id = $1 AND estado = 'ACTIVO' AND tipo <> 'FUNDACION'`,
+      [aliadoId],
+    );
+    const fila = r.rows[0];
+    if (!fila) throw new NotFoundException('El aliado no existe');
+    return {
+      id: fila.id,
+      tipo: fila.tipo,
+      nombre: fila.nombre,
+      descripcion: fila.descripcion,
+      logoUrl: fila.logo_url,
+      contacto: fila.contacto,
+      ciudad: fila.ciudad,
+      ubicacion: fila.ubicacion,
     };
   }
 
