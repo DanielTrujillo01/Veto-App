@@ -75,7 +75,8 @@ INSERT INTO producto (id, aliado_id, categoria_id, nombre, descripcion, precio, 
 SELECT x.id, a.id, c.id, x.nombre, x.descripcion, x.precio, x.stock, true, 'PUBLICADO'
 FROM (VALUES
   ('00000000-0000-4000-8000-000000000601'::uuid, 'Alimento balanceado demo', 'Concentrado de prueba para perros.', 95000::numeric, 20, 'Alimentos'),
-  ('00000000-0000-4000-8000-000000000602'::uuid, 'Juguete para mascotas demo', 'Juguete de prueba para el catálogo.', 18000::numeric, 35, 'Accesorios')
+  ('00000000-0000-4000-8000-000000000602'::uuid, 'Juguete para mascotas demo', 'Juguete de prueba para el catálogo.', 18000::numeric, 35, 'Accesorios'),
+  ('00000000-0000-4000-8000-000000000603'::uuid, 'Croquetas Árbol Norte', 'Fixture local para validar búsqueda parcial sin acentos y con espacios normalizados.', 45000::numeric, 0, 'Alimentos')
 ) AS x(id, nombre, descripcion, precio, stock, categoria)
 JOIN aliado a ON a.id = '00000000-0000-4000-8000-000000000103'
 JOIN categoria_producto c ON c.nombre = x.categoria

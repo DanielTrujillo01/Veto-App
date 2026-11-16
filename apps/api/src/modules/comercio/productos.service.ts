@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { OrdenProductos, ProductoCatalogo } from '@veto/shared';
+import type { CategoriaProducto, FiltrosCatalogoProductos, ProductoCatalogo } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { ProductosRepository } from './productos.repository';
 
@@ -11,7 +11,11 @@ export class ProductosService {
   ) {}
 
   /** Público: todos los productos disponibles de tiendas activas. */
-  async listarDisponibles(orden: OrdenProductos): Promise<ProductoCatalogo[]> {
-    return this.repo.listarDisponibles(this.db, orden);
+  async listarDisponibles(filtros: FiltrosCatalogoProductos): Promise<ProductoCatalogo[]> {
+    return this.repo.listarDisponibles(this.db, filtros);
+  }
+
+  listarCategorias(): Promise<CategoriaProducto[]> {
+    return this.repo.listarCategorias(this.db);
   }
 }

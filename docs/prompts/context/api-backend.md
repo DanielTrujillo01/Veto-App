@@ -281,9 +281,12 @@ Los cierres solo admiten citas `AGENDADA` y cuya hora de inicio ya llegó (hora 
 
 ### Catálogo de productos
 
-| Método y ruta        | Acceso  | Entrada y respuesta                                       |
-| -------------------- | ------- | --------------------------------------------------------- |
-| `GET /api/productos` | Público | Lista productos disponibles. Query opcional `orden=nombre | precio_asc | precio_desc`; se ordena el catálogo completo. |
+| Método y ruta                   | Acceso  | Entrada y respuesta                                                                                                                                                                                                               |
+| ------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/productos/categorias` | Público | Lista `{ id, nombre }` de `categoria_producto`, ordenada por id.                                                                                                                                                                  |
+| `GET /api/productos`            | Público | Filtros opcionales `categoriaId` (entero positivo), `nombre` (coincidencia parcial, ignora mayúsculas/acentos y normaliza espacios) y `orden=nombre\|precio_asc\|precio_desc`. Se combinan; devuelve `ProductoCatalogo[]` o `[]`. |
+
+Los filtros conservan disponibilidad actual (`activo`, moderación `PUBLICADO`, aliado `ACTIVO`) y fotos publicadas. `nombre` solo consulta `producto.nombre`; un texto vacío normalizado se omite. Las entradas inválidas devuelven `400`.
 
 ### Búsqueda general por palabra clave (HU-025)
 

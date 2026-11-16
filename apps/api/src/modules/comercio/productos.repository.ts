@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { QueryResultRow } from 'pg';
-import type { OrdenProductos, ProductoCatalogo } from '@veto/shared';
+import type {
+  CategoriaProducto,
+  FiltrosCatalogoProductos,
+  OrdenProductos,
+  ProductoCatalogo,
+} from '@veto/shared';
 import type { Consultor } from '../../database/database.service';
+import { textoBusquedaNormalizadoSql } from '../../common/texto-busqueda';
 
 interface ProductoRow extends QueryResultRow {
   id: string;
@@ -25,8 +31,20 @@ const ORDENES: Record<OrdenProductos, string> = {
 
 @Injectable()
 export class ProductosRepository {
+  /** Lista el catálogo persistido, incluido vacío, en orden estable por ID. */
+  async listarCategorias(client: Consultor): Promise<CategoriaProducto[]> {
+    const resultado = await client.query<CategoriaProducto>(
+      'SELECT id, nombre FROM categoria_producto ORDER BY id',
+    );
+    return resultado.rows;
+  }
+
   /** Productos disponibles de tiendas activas, ordenados sobre todo el catálogo. */
-  async listarDisponibles(client: Consultor, orden: OrdenProductos): Promise<ProductoCatalogo[]> {
+  async listarDisponibles(
+    client: Consultor,
+    filtros: FiltrosCatalogoProductos,
+  ): Promise<ProductoCatalogo[]> {
+    const { categoriaId, nombre, orden } = filtros;
     const r = await client.query<ProductoRow>(
       `SELECT p.id, p.aliado_id, a.nombre AS aliado, p.categoria_id, c.nombre AS categoria,
               p.nombre, p.descripcion, p.precio::float8 AS precio, p.stock, p.creado_en
@@ -34,7 +52,11 @@ export class ProductosRepository {
          JOIN aliado a             ON a.id = p.aliado_id
          JOIN categoria_producto c ON c.id = p.categoria_id
         WHERE p.activo AND p.moderacion = 'PUBLICADO' AND a.estado = 'ACTIVO'
+          AND ($1::smallint IS NULL OR p.categoria_id = $1)
+          AND (NULLIF(${textoBusquedaNormalizadoSql('$2::text')}, '') IS NULL OR
+               strpos(${textoBusquedaNormalizadoSql('p.nombre')}, ${textoBusquedaNormalizadoSql('$2::text')}) > 0)
         ORDER BY ${ORDENES[orden]}`,
+      [categoriaId ?? null, nombre ?? null],
     );
     if (r.rows.length === 0) return [];
 
