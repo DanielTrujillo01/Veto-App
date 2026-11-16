@@ -12,6 +12,7 @@ import type {
 import { api, ApiError } from '@/lib/api';
 import { AlertBox, StatusBadge, VetoButton } from '@/components/ui/veto-components';
 import { BrandLogo } from '@/components/BrandLogo';
+import { ProductosTienda } from './ProductosTienda';
 
 type Seccion =
   'resumen' | 'equipo' | 'sedes' | 'servicios' | 'horarios' | 'especies' | 'citas' | 'productos';
@@ -1001,18 +1002,8 @@ export default function PanelAliado() {
       );
     }
     if (seccion === 'productos' && aliadoTipo === 'TIENDA') {
-      return (
-        <section className="workspace-card">
-          <h2>Productos</h2>
-          <p className="workspace-card__intro">
-            Próximamente podrás organizar el catálogo de productos de tu tienda.
-          </p>
-          <div className="unsupported-note">
-            <strong>Catálogo próximamente</strong>
-            <span>La gestión de productos aún no está disponible en este sprint.</span>
-          </div>
-        </section>
-      );
+      // HU-044: la sección vive en su propio componente y carga sus propios datos.
+      return <ProductosTienda aliadoId={aliadoId} />;
     }
     if (seccion === 'servicios') {
       const visibles = servicios.filter(

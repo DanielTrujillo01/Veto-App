@@ -1,13 +1,23 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { catalogoProductosSchema } from '@veto/shared';
+import { ordenProductosSchema, catalogoProductosSchema } from '@veto/shared';
 import { validar } from '../../common/validacion';
+import { ProductosGestionService } from './productos-gestion.service';
 import { ProductosService } from './productos.service';
 
 @ApiTags('productos')
 @Controller('productos')
 export class ProductosController {
-  constructor(private readonly productos: ProductosService) {}
+  constructor(
+    private readonly productos: ProductosService,
+    private readonly gestion: ProductosGestionService,
+  ) {}
+
+  @Get('categorias')
+  @ApiOperation({ summary: 'Categorías de producto del sistema (público, HU-044)' })
+  categorias() {
+    return this.gestion.listarCategorias();
+  }
 
   @Get('categorias')
   @ApiOperation({
@@ -61,5 +71,16 @@ export class ProductosController {
   @ApiResponse({ status: 500, description: 'Error interno al consultar el catálogo.' })
   todos(@Query() query: unknown) {
     return this.productos.listarDisponibles(validar(catalogoProductosSchema, query));
+  }
+
+  @Get(':productoId')
+  @ApiOperation({
+    summary: 'Detalle de un producto visible (público, HU-046)',
+    description:
+      'Solo productos activos, no ocultos por moderación y de una tienda activa; si no, 404 ' +
+      '"Este producto ya no está disponible". Las fotos van en orden (la primera es la portada).',
+  })
+  detalle(@Param('productoId', new ParseUUIDPipe()) productoId: string) {
+    return this.productos.obtenerVisible(productoId);
   }
 }

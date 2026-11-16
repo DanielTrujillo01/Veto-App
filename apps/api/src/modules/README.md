@@ -272,3 +272,47 @@ aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con 
     `GET /api/citas/:citaId/historial` (tutor, aliado, veterinarios) lista los cambios de estado de la cita; la observación
     de una inasistencia solo la ven el aliado y sus veterinarios. `NO_ASISTIO` queda como estado final igual que `FINALIZADA` (decisión a
     confirmar; es lo que ya hace `fn_cita_validar`).
+
+## HU-044 · Productos de la tienda
+
+Módulo `comercio`. Solo el **administrador de una tienda activa** (rol `ALIADO`, aliado de tipo
+`TIENDA` y estado `ACTIVO`, comprobado con `AliadosService.verificarAdministrador`) gestiona productos,
+y solo los suyos. Un producto de otra tienda responde **404**, igual que si no existiera.
+
+- `GET /api/productos/categorias` (público): `[{ id, nombre }]`, las categorías del sistema.
+- `GET /api/aliados/:aliadoId/productos?q=&estado=todos|activos|inactivos`: lista del panel, más
+  recientes primero. `q` busca por nombre sin distinguir mayúsculas ni tildes (cada palabra debe
+  aparecer; `%` y `_` se buscan tal cual). Un `estado` inválido se ignora.
+- `GET /api/aliados/:aliadoId/productos/:id`: un producto para editarlo.
+- `POST /api/aliados/:aliadoId/productos` (**201**) y `PUT .../:id` (**200**) con
+  `{ nombre, categoriaId, precio, stock, descripcion?, fotos? }` (`guardarProductoSchema` de
+  `@veto/shared`): nombre de 2 a 120 caracteres, precio en pesos **sin decimales y mayor que 0**,
+  stock entero desde 0, descripción hasta 2000 y hasta **5 fotos** (enlaces http/https, sin
+  repetir). **El orden de `fotos` es el de la tienda: la primera es la portada.** En `PUT`, las fotos
+  enviadas reemplazan a las anteriores. Errores: **400** `{ message, errores: { campo: mensaje } }`
+  (`errores.categoriaId` si la categoría no existe; `errores["fotos.N"]` para un enlace concreto).
+  Un producto nuevo queda activo.
+- `PATCH .../:id/desactivar` y `PATCH .../:id/activar` (**200**): desactivar lo saca de la tienda de
+  inmediato y la base rechaza pedirlo; se puede volver a activar y un producto inactivo se puede
+  editar. **Nunca se borra**: los pedidos guardan `precio_unitario`, así que cambiar el precio no
+  altera pedidos anteriores.
+- Respuesta de todos (`ProductoGestion`): `{ id, aliadoId, categoriaId, categoria, nombre,
+descripcion, precio, stock, fotos, activo, ocultoPorVeto, creadoEn }`. `ocultoPorVeto` es `true` si
+  la moderación (HU-066) lo ocultó: no se ve en la tienda aunque esté activo.
+- Migración `0015_hu044_gestion_productos.sql`: `producto_foto.posicion` (1 a 5, única por producto)
+  y los límites de nombre, descripción y precio en la base.
+
+## HU-046 · Elegir un producto
+
+- `GET /api/productos/:id` (público): detalle de un **producto visible** (acuerdo A-16: activo, no
+  ocultado por moderación y de una tienda activa), con la misma forma que cada elemento de
+  `GET /api/productos` (`ProductoCatalogo`: `{ id, aliadoId, aliado, categoriaId, categoria, nombre,
+descripcion, precio, stock, fotos, creadoEn }`; fotos en orden, la primera es la portada). Si no
+  existe o ya no está visible: **404** `"Este producto ya no está disponible"`; un id que no es
+  uuid: **400**. La web lo vuelve a consultar al pulsar "Agregar al carrito" para comprobar que
+  sigue visible y cuánto stock queda.
+- **El carrito no pasa por la API** (acuerdo A-17): vive en el navegador (`localStorage`, clave
+  `veto_carrito`, `frontend/web/src/lib/carrito.ts`) con el formato `Carrito` de `@veto/shared`
+  (`{ aliadoId, items: [{ productoId, cantidad }] }`): una sola tienda, sin precios, hasta 99
+  unidades por producto y nunca más que el stock (`agregarAlCarrito`). HU-047 debe leer ese mismo
+  formato y volver a validar precio y stock al crear el pedido (la base ya descuenta el stock).
