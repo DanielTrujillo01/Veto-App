@@ -1,4 +1,4 @@
-﻿# HU-088 – Tareas de implementación para Taiga
+# HU-088 – Tareas de implementación para Taiga
 
 **Historia relacionada:** HU-088 – Filtrar el catálogo de mascotas en adopción.
 
@@ -10,23 +10,23 @@
 
 ## Tareas
 
-### Tarea 1: Definir y validar el contrato de filtros del catálogo
+### Tarea 1: Definir y validar el contrato de filtros del catálogo — Completada
 
 **Descripción:** definir un esquema de query compartido para especie, límites de edad en meses, tamaño y ubicación exacta, con validación consistente con los tipos existentes.
 
-**Alcance:** contrato de query de `GET /api/adopciones/catalogo`, validación de `especieId`, enum de tamaño, `edadMinMeses`/`edadMaxMeses` y texto de ubicación. Decisión pendiente: confirmar inclusión de extremos y admisión de límites individuales. Propuesta: extremos inclusivos, permitir uno o ambos y rechazar mínimo mayor que máximo. Ubicación se compara de forma exacta. No modifica los esquemas de publicación/edición ni el listado de publicaciones de una fundación.
+**Alcance:** contrato de query de `GET /api/adopciones/catalogo`, validación de `especieId`, enum de tamaño, `edadMinMeses`/`edadMaxMeses` y texto de ubicación. Decisión confirmada: extremos inclusivos, permitir uno o ambos y rechazar mínimo mayor que máximo. Ubicación se compara de forma exacta y sin normalización. No modifica los esquemas de publicación/edición ni el listado de publicaciones de una fundación.
 
-**Componentes involucrados:** nuevo esquema propuesto en `packages/shared/src/adopcion.ts`; `packages/shared/src/enums.ts` (`TAMANOS_MASCOTA`); `apps/api/src/modules/adopcion/adopcion.controller.ts`.
+**Componentes involucrados:** esquema compartido en `packages/shared/src/adopcion.ts`; `packages/shared/src/enums.ts` (`TAMANOS_MASCOTA`); `apps/api/src/modules/adopcion/adopcion.controller.ts`.
 
-**Resultado esperado:** contrato validado que representa únicamente las reglas aprobadas y conserva la consulta sin filtros.
+**Resultado esperado:** contrato compartido validado que representa las reglas confirmadas y conserva la consulta sin filtros. La tarea está implementada.
 
-**Criterios de verificación:** parámetros inválidos producen `400`; límites se validan conforme a la regla de extremos y admisión de límite individual que se apruebe; ubicación no acepta semántica parcial; el endpoint permanece público y no cambia el contrato de publicación.
+**Criterios de verificación:** parámetros inválidos producen `400`; límites inclusivos permiten mínimo, máximo o ambos y rechazan un rango invertido; ubicación no acepta semántica parcial; el endpoint permanece público y no cambia el contrato de publicación.
 
-**Dependencias:** confirmar si los límites son inclusivos y si se admite un solo límite.
+**Dependencias:** ninguna; las reglas de edad quedaron confirmadas.
 
 **Estimación desglosada por tarea:** 2 puntos. UX 0, Diseño 0, Frontend 0, Backend 2.
 
-### Tarea 2: Aplicar filtros combinables al catálogo público anónimo
+### Tarea 2: Aplicar filtros combinables al catálogo público anónimo — Completada
 
 **Descripción:** pasar los filtros validados por el controlador y servicio al repositorio, y filtrar la consulta del catálogo usando condiciones parametrizadas que se combinan con AND.
 
@@ -42,17 +42,17 @@
 
 **Estimación desglosada por tarea:** 3 puntos. UX 0, Diseño 0, Frontend 0, Backend 3.
 
-### Tarea 3: Probar y documentar el contrato filtrado
+### Tarea 3: Probar y documentar el contrato filtrado — Completada
 
 **Descripción:** añadir cobertura de integración para filtros, combinaciones, validación, lista vacía y regresiones de anonimato/disponibilidad; documentar los query params aprobados en Swagger/OpenAPI.
 
 **Alcance:** pruebas del catálogo público de adopción y documentación del endpoint. No duplicar las pruebas de publicación/edición ni generar pruebas de interfaz.
 
-**Componentes involucrados:** `apps/api/test/hu080-adopcion.spec.ts` (extender o extraer casos sin duplicación); anotaciones Swagger en `apps/api/src/modules/adopcion/adopcion.controller.ts`.
+**Componentes involucrados:** `apps/api/test/hu088-filtros-adopcion.spec.ts` para los casos del filtro; `apps/api/test/hu080-adopcion.spec.ts` conserva los escenarios existentes de publicación/disponibilidad; anotaciones Swagger en `apps/api/src/modules/adopcion/adopcion.controller.ts`.
 
 **Resultado esperado:** comportamiento del filtro verificable en integración y contrato visible en la documentación API.
 
-**Criterios de verificación:** pruebas de especie, límites de edad individuales y combinados según la semántica aprobada, tamaño, ubicación por igualdad exacta, combinaciones, sin filtros, filtros inválidos, cero resultados y ausencia de campos de fundación; Swagger documenta parámetros y semántica aprobados.
+**Criterios de verificación:** pruebas de especie, límites inclusivos individuales y combinados, tamaño, ubicación por igualdad exacta, combinaciones, sin filtros, filtros inválidos, cero resultados y ausencia de campos de fundación; Swagger documenta parámetros y semántica confirmada.
 
 **Dependencias:** Tareas 1 y 2.
 
@@ -68,4 +68,4 @@
 
 ## Consistencia y cobertura
 
-Las tareas cubren el contrato validado, la consulta combinada y la comprobación/documentación. Los endpoints existentes de catálogo y especie se reutilizan. No se proponen tablas, migraciones, rutas nuevas, interfaz, ni filtros fuera de la HU. El rango de edad en meses y la ubicación exacta están confirmados. Antes de cerrar el contrato queda por confirmar si los extremos son inclusivos y si se admite un solo límite; la tarea 1 depende de esa definición.
+Las tareas cubren el contrato validado, la consulta combinada y la comprobación/documentación. Los endpoints existentes de catálogo y especie se reutilizan. No se proponen tablas, migraciones, rutas nuevas, interfaz, ni filtros fuera de la HU. El rango inclusivo de edad en meses (mínimo, máximo o ambos) y la ubicación exacta están confirmados. Las tres tareas están implementadas y verificadas. No se requirió migración ni se añadieron endpoints nuevos.

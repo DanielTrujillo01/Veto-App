@@ -8,6 +8,7 @@ import type { PoolClient } from 'pg';
 import type {
   CambiarEstadoMascotaAdopcion,
   EditarMascotaAdopcion,
+  FiltrosCatalogoAdopcion,
   MascotaAdopcion,
   MascotaAdopcionPublica,
   ListarMascotasAdopcion,
@@ -94,8 +95,8 @@ export class AdopcionService {
     });
   }
 
-  listarCatalogo(): Promise<MascotaAdopcionPublica[]> {
-    return this.repository.listarPublicas(this.database);
+  listarCatalogo(filtros: FiltrosCatalogoAdopcion = {}): Promise<MascotaAdopcionPublica[]> {
+    return this.repository.listarPublicas(this.database, filtros);
   }
 
   async obtenerPublica(mascotaId: string): Promise<MascotaAdopcionPublica> {

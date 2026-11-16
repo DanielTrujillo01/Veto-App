@@ -30,7 +30,7 @@ No leas ni reescribas documentos sin relación con la HU.
 3. **Determina qué documentación cambia.** Actualiza únicamente los documentos de `docs/` afectados por el comportamiento implementado. Por ejemplo:
    - Endpoints o contratos: `docs/context/api-backend.md`.
    - Tablas, columnas, relaciones o restricciones: `docs/modelo-de-datos.md` y, si aplica, `docs/diagramas_er.md`.
-   - Arquitectura o convenciones vigentes: el documento correspondiente de `docs/context/`.
+   - Arquitectura o convenciones vigentes: el documento correspondiente de `docs/prompts/context/`.
    - Decisión arquitectónica que deba conservarse: un ADR nuevo en `docs/adr/`, siguiendo `docs/adr/0001-arquitectura.md`.
    - Documento específico de la HU: actualiza su estado o resultado si existe y corresponde.
 4. **Mantén el alcance preciso.** No copies la implementación entera a la documentación, no dupliques inventarios y no registres como disponible lo que solo está propuesto, pendiente o no se pudo verificar. Conserva el idioma, estructura y convenciones del documento que editas.

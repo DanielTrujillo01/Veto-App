@@ -44,6 +44,35 @@ export const listarMascotasAdopcionSchema = z.object({
 });
 export type ListarMascotasAdopcion = z.infer<typeof listarMascotasAdopcionSchema>;
 
+const enteroQueryAdopcionSchema = z
+  .string()
+  .regex(/^\d+$/, 'Debe ser un entero no negativo')
+  .transform(Number)
+  .pipe(z.number().int().min(0).max(32_767));
+
+export const filtrarCatalogoAdopcionSchema = z
+  .object({
+    especieId: enteroQueryAdopcionSchema.pipe(z.number().min(1)).optional(),
+    edadMinMeses: enteroQueryAdopcionSchema.optional(),
+    edadMaxMeses: enteroQueryAdopcionSchema.optional(),
+    tamano: z.enum(TAMANOS_MASCOTA, { error: 'El tamaño no es válido' }).optional(),
+    ubicacion: z
+      .string()
+      .min(1, 'La ubicación no puede estar vacía')
+      .max(160, 'La ubicación no puede superar 160 caracteres')
+      .refine((valor) => valor.trim().length > 0, 'La ubicación no puede estar vacía')
+      .optional(),
+  })
+  .refine(
+    ({ edadMinMeses, edadMaxMeses }) =>
+      edadMinMeses === undefined || edadMaxMeses === undefined || edadMinMeses <= edadMaxMeses,
+    {
+      message: 'La edad mínima no puede superar la edad máxima',
+      path: ['edadMaxMeses'],
+    },
+  );
+export type FiltrosCatalogoAdopcion = z.infer<typeof filtrarCatalogoAdopcionSchema>;
+
 export type MascotaAdopcion = Omit<
   PublicarMascotaAdopcion,
   'descripcion' | 'fotos' | 'videoUrl'
