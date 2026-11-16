@@ -283,3 +283,11 @@ Los cierres solo admiten citas `AGENDADA` y cuya hora de inicio ya llegó (hora 
 | Método y ruta        | Acceso  | Entrada y respuesta                                       |
 | -------------------- | ------- | --------------------------------------------------------- |
 | `GET /api/productos` | Público | Lista productos disponibles. Query opcional `orden=nombre | precio_asc | precio_desc`; se ordena el catálogo completo. |
+
+### Búsqueda general por palabra clave (HU-025)
+
+| Método y ruta                      | Acceso            | Entrada y respuesta                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/busqueda?nombre={texto}` | Tutor autenticado | Busca parcialmente por nombre en clínicas, aliados veterinarios independientes, tiendas, perfiles veterinarios activos, productos publicados y servicios disponibles. Ignora mayúsculas, acentos y espacios redundantes. Devuelve `{ resultadosPorCategoria: [{ categoria, resultados: [{ id, nombre }] }] }`, con máximo 10 resultados por categoría. Sin coincidencias devuelve `{ resultadosPorCategoria: [] }`. Adopción queda excluida. |
+
+La búsqueda usa SQL parametrizado, normaliza la consulta y los nombres en lectura, y no modifica los datos almacenados. El endpoint exacto de HU-024 permanece sin cambios. La extensión PostgreSQL `unaccent` se habilita mediante la migración `0015_hu025_busqueda_unaccent.sql`.

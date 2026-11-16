@@ -68,6 +68,21 @@ JOIN aliado a ON a.id = '00000000-0000-4000-8000-000000000103'
 JOIN categoria_producto c ON c.nombre = x.categoria
 ON CONFLICT (id) DO NOTHING;
 
+-- HU-025: 11 resultados locales para comprobar el límite independiente de 10 por categoría.
+INSERT INTO producto (id, aliado_id, categoria_id, nombre, descripcion, precio, stock, activo, moderacion)
+SELECT md5('hu025-producto-' || n::text)::uuid,
+       '00000000-0000-4000-8000-000000000103'::uuid,
+       c.id,
+       'HU025 Límite Producto ' || lpad(n::text, 2, '0'),
+       'Dato local para validar búsqueda por nombre y límite por categoría.',
+       1000,
+       10,
+       true,
+       'PUBLICADO'
+  FROM generate_series(1, 11) AS n
+  JOIN categoria_producto c ON c.nombre = 'Accesorios'
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO mascota (id, tutor_id, nombre, especie_id, sexo, raza, edad_meses, color, peso_kg)
 SELECT x.id, '00000000-0000-4000-8000-000000000001'::uuid, x.nombre, e.id, x.sexo, x.raza, x.edad_meses, x.color, x.peso
 FROM (VALUES
