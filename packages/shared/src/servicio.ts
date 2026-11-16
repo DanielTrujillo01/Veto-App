@@ -109,3 +109,21 @@ export const ordenServiciosSchema = z.object({
   orden: z.enum(['nombre', 'precio_asc', 'precio_desc']).default('nombre'),
 });
 export type OrdenServicios = z.infer<typeof ordenServiciosSchema>['orden'];
+
+/** HU-026: filtros opcionales del catálogo global de servicios. */
+export const catalogoServiciosSchema = ordenServiciosSchema.extend({
+  especieId: z.coerce
+    .number({ error: 'La especie debe ser un número' })
+    .int('La especie debe ser un número entero')
+    .positive('La especie debe ser un número positivo')
+    .max(32_767, 'La especie no existe')
+    .optional(),
+  tipoServicioId: z.coerce
+    .number({ error: 'El tipo de servicio debe ser un número' })
+    .int('El tipo de servicio debe ser un número entero')
+    .positive('El tipo de servicio debe ser un número positivo')
+    .max(32_767, 'El tipo de servicio no existe')
+    .optional(),
+  modalidad: z.enum(MODALIDADES_SERVICIO).optional(),
+});
+export type FiltrosCatalogoServicios = z.infer<typeof catalogoServiciosSchema>;

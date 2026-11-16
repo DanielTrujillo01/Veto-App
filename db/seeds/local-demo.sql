@@ -32,7 +32,8 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO sede (id, aliado_id, nombre, direccion, ciudad, activa)
 VALUES
   ('00000000-0000-4000-8000-000000000301', '00000000-0000-4000-8000-000000000101', 'Sede Principal', 'Carrera 7 # 60-10', 'Bogotá', true),
-  ('00000000-0000-4000-8000-000000000302', '00000000-0000-4000-8000-000000000102', 'Consultorio Demo', 'Calle 45 # 15-20', 'Bogotá', true)
+  ('00000000-0000-4000-8000-000000000302', '00000000-0000-4000-8000-000000000102', 'Consultorio Demo', 'Calle 45 # 15-20', 'Bogotá', true),
+  ('00000000-0000-4000-8000-000000000303', '00000000-0000-4000-8000-000000000101', 'Sede inactiva Demo', 'Carrera 8 # 61-10', 'Bogotá', false)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO aliado_especie (aliado_id, especie_id)
@@ -50,6 +51,18 @@ FROM (VALUES
   ('00000000-0000-4000-8000-000000000402'::uuid, '00000000-0000-4000-8000-000000000102'::uuid, '00000000-0000-4000-8000-000000000302'::uuid, 'Consulta independiente demo', 'Consulta con veterinario independiente.', 55000::numeric)
 ) AS x(id, aliado_id, sede_id, nombre, descripcion, precio)
 JOIN tipo_servicio ts ON ts.nombre = 'Consulta general'
+ON CONFLICT (id) DO NOTHING;
+
+-- HU-026: casos locales para verificar modalidad y exclusión de servicios no disponibles.
+INSERT INTO servicio (id, aliado_id, tipo_servicio_id, nombre, descripcion, modalidad, sede_id, duracion_min, precio_base, activo, moderacion)
+SELECT x.id, x.aliado_id, ts.id, x.nombre, x.descripcion, x.modalidad, x.sede_id, 30, x.precio, x.activo, x.moderacion
+FROM (VALUES
+  ('00000000-0000-4000-8000-000000000411'::uuid, '00000000-0000-4000-8000-000000000101'::uuid, NULL::uuid, 'Baño y peluquería demo', 'Servicio demo a domicilio para validar filtros HU-026.', 'A_DOMICILIO'::modalidad_servicio, 'Baño y peluquería', 40000::numeric, true, 'PUBLICADO'::estado_moderacion),
+  ('00000000-0000-4000-8000-000000000412'::uuid, '00000000-0000-4000-8000-000000000101'::uuid, '00000000-0000-4000-8000-000000000301'::uuid, 'Servicio inactivo QA HU-026', 'Fixture local inactivo para verificar disponibilidad.', 'EN_SEDE'::modalidad_servicio, 'Consulta general', 20000::numeric, false, 'PUBLICADO'::estado_moderacion),
+  ('00000000-0000-4000-8000-000000000413'::uuid, '00000000-0000-4000-8000-000000000101'::uuid, NULL::uuid, 'Servicio oculto QA HU-026', 'Fixture local oculto para verificar disponibilidad.', 'A_DOMICILIO'::modalidad_servicio, 'Consulta general', 20000::numeric, true, 'OCULTO'::estado_moderacion),
+  ('00000000-0000-4000-8000-000000000414'::uuid, '00000000-0000-4000-8000-000000000101'::uuid, '00000000-0000-4000-8000-000000000303'::uuid, 'Servicio sede inactiva QA HU-026', 'Fixture local con sede inactiva para verificar disponibilidad.', 'EN_SEDE'::modalidad_servicio, 'Consulta general', 20000::numeric, true, 'PUBLICADO'::estado_moderacion)
+) AS x(id, aliado_id, sede_id, nombre, descripcion, modalidad, tipo, precio, activo, moderacion)
+JOIN tipo_servicio ts ON ts.nombre = x.tipo
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO servicio_regla_precio (id, servicio_id, especie_id, peso_min_kg, precio, prioridad)

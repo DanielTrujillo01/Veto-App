@@ -7,6 +7,7 @@ import type {
   Servicio,
   OrdenServicios,
   ServicioConReglas,
+  FiltrosCatalogoServicios,
 } from '@veto/shared';
 import type { Consultor } from '../../database/database.service';
 
@@ -207,13 +208,20 @@ export class ServiciosRepository {
   /** Todos los servicios disponibles de todos los aliados, cada uno con sus reglas de precio. */
   async listarTodosDisponibles(
     client: Consultor,
-    orden: OrdenServicios = 'nombre',
+    filtros: FiltrosCatalogoServicios,
   ): Promise<ServicioConReglas[]> {
+    const { especieId, tipoServicioId, modalidad, orden } = filtros;
     const r = await client.query<ServicioRow & { precio_desde: number }>(
       `WITH disponibles AS (
         ${SELECT_SERVICIO}
         JOIN aliado a ON a.id = s.aliado_id
         WHERE ${CONDICION_DISPONIBLE}
+          AND ($1::smallint IS NULL OR EXISTS (
+            SELECT 1 FROM aliado_especie ae
+             WHERE ae.aliado_id = s.aliado_id AND ae.especie_id = $1
+          ))
+          AND ($2::smallint IS NULL OR s.tipo_servicio_id = $2)
+          AND ($3::modalidad_servicio IS NULL OR s.modalidad = $3)
       )
       SELECT d.*,
               LEAST(d.precio_base,
@@ -222,6 +230,7 @@ export class ServiciosRepository {
                               WHERE r.servicio_id = d.id), d.precio_base)) AS precio_desde
         FROM disponibles d
         ORDER BY ${ORDENES[orden]}`,
+      [especieId ?? null, tipoServicioId ?? null, modalidad ?? null],
     );
     if (r.rows.length === 0) return [];
 
