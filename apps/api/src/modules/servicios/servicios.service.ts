@@ -15,7 +15,7 @@ import type {
   OrdenServicios,
   ServicioConReglas,
 } from '@veto/shared';
-import { DatabaseService } from '../../database/database.service';
+import { DatabaseService, type Consultor } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { AliadoEspeciesService } from '../aliados/aliado-especies.service';
 import { AliadosService } from '../aliados/aliados.service';
@@ -193,6 +193,14 @@ export class ServiciosService {
       return [];
     }
     return this.repo.listar(this.db, aliadoId, true);
+  }
+
+  /**
+   * Para el flujo de reserva (HU-029, HU-031): el servicio si sigue disponible para nuevas
+   * reservas, o `null`. Usa el `client` de la transacción abierta.
+   */
+  buscarDisponibleParaReservar(client: Consultor, servicioId: string): Promise<Servicio | null> {
+    return this.repo.buscarDisponible(client, servicioId);
   }
 
   /** Detalle público de un servicio disponible. */

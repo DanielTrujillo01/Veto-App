@@ -16,3 +16,4 @@ export * from './agenda';
 export * from './adopcion';
 export * from './google';
 export * from './producto';
+export * from './reserva';

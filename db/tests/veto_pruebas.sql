@@ -678,6 +678,83 @@ BEGIN
             AND EXISTS (SELECT 1 FROM seleccion_horario WHERE tutor_id = u_tutor));
     END;
 
+    -- ---------- HU-030 y HU-031 · Motivo de la cita y reserva ----------
+    DECLARE
+        c_motivo uuid; c_vacia uuid; m_tmp uuid;
+        slot timestamptz := date_trunc('hour', now()) + interval '300 days';
+    BEGIN
+        PERFORM set_config('app.usuario_id', u_tutor::text, true);
+
+        -- Motivo de la cita: de 1 a 500 caracteres (se cuentan caracteres, no bytes)
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio, motivo)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, slot, slot + interval '30 minutes', 60000, repeat('a', 500))
+            RETURNING id INTO c_motivo;
+        PERFORM pg_temp.debe_pasar('una cita guarda un motivo de 500 caracteres',
+            (SELECT char_length(motivo) FROM cita WHERE id = c_motivo) = 500);
+        PERFORM pg_temp.debe_fallar('un motivo de 501 caracteres se rechaza',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio, motivo)
+                      VALUES (%L,%L,%L,%L,%L,%L,%L,1,repeat('a', 501))$q$,
+                   u_tutor, masc, a_clinica, srv, vet1, slot + interval '1 day', slot + interval '1 day 30 minutes'), '23514');
+        PERFORM pg_temp.debe_fallar('un motivo vacío se rechaza (sin motivo es NULL)',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio, motivo)
+                      VALUES (%L,%L,%L,%L,%L,%L,%L,1,'')$q$,
+                   u_tutor, masc, a_clinica, srv, vet1, slot + interval '1 day', slot + interval '1 day 30 minutes'), '23514');
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio, motivo)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, slot + interval '1 day', slot + interval '1 day 30 minutes', 60000, repeat(chr(128512), 500))
+            RETURNING id INTO c_vacia;
+        PERFORM pg_temp.debe_pasar('los caracteres se cuentan como los ve la persona: 500 emojis caben',
+            (SELECT char_length(motivo) FROM cita WHERE id = c_vacia) = 500);
+        UPDATE cita SET estado = 'CANCELADA' WHERE id = c_vacia;
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, slot + interval '2 days', slot + interval '2 days 30 minutes', 60000)
+            RETURNING id INTO c_vacia;
+        PERFORM pg_temp.debe_pasar('una cita sin motivo guarda NULL',
+            (SELECT motivo IS NULL FROM cita WHERE id = c_vacia));
+
+        -- La reserva no se duplica: la misma mascota, servicio y hora vigentes no se repiten
+        PERFORM pg_temp.debe_fallar('la misma reserva dos veces no se duplica',
+            format($q$INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+                      VALUES (%L,%L,%L,%L,%L,%L,%L,1)$q$, u_tutor, masc, a_clinica, srv, vet1, slot, slot + interval '30 minutes'), '23P01');
+        UPDATE cita SET estado = 'CANCELADA' WHERE id = c_vacia;
+        INSERT INTO cita (tutor_id, mascota_id, aliado_id, servicio_id, veterinario_id, inicio, fin, precio)
+            VALUES (u_tutor, masc, a_clinica, srv, vet1, slot + interval '2 days', slot + interval '2 days 30 minutes', 60000);
+        PERFORM pg_temp.debe_pasar('una cita cancelada no impide reservar de nuevo el mismo horario',
+            (SELECT count(*) FROM cita WHERE tutor_id = u_tutor AND inicio = slot + interval '2 days'
+                AND estado IN ('PENDIENTE','AGENDADA')) = 1);
+
+        -- Detalle de la cita para quien tiene permiso de verla
+        PERFORM pg_temp.debe_pasar('v_cita_detalle trae los nombres y el motivo',
+            (SELECT count(*) FROM v_cita_detalle
+              WHERE id = c_motivo AND motivo = repeat('a', 500) AND tutor_id = u_tutor AND mascota_nombre = 'Firulais'
+                AND especie = 'Perro' AND aliado_id = a_clinica AND aliado_usuario_id = u_clinica
+                AND servicio_nombre = 'Consulta general' AND veterinario_nombre = 'Dra. Vet') = 1);
+
+        -- El borrador de la reserva (HU-029) guarda mascota, motivo y la cita en que terminó
+        DELETE FROM seleccion_horario;
+        INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en, mascota_id, motivo)
+            VALUES (u_tutor, a_clinica, srv, vet1, slot + interval '3 days', slot + interval '3 days 30 minutes', now() + interval '1 hour', masc, 'Vómito desde ayer');
+        PERFORM pg_temp.debe_pasar('el borrador guarda la mascota y el motivo',
+            (SELECT motivo FROM seleccion_horario WHERE tutor_id = u_tutor) = 'Vómito desde ayer'
+            AND (SELECT mascota_id FROM seleccion_horario WHERE tutor_id = u_tutor) = masc);
+        PERFORM pg_temp.debe_fallar('el motivo del borrador también admite máximo 500 caracteres',
+            $q$UPDATE seleccion_horario SET motivo = repeat('a', 501)$q$, '23514');
+        PERFORM pg_temp.debe_fallar('la mascota del borrador debe ser del mismo tutor',
+            format($q$INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en, mascota_id)
+                      VALUES (%L,%L,%L,%L, now() + interval '2 days', now() + interval '2 days 30 minutes', now() + interval '1 hour', %L)$q$,
+                   u_tutor2, a_clinica, srv, vet1, masc), '23503');
+        UPDATE seleccion_horario SET cita_id = c_motivo WHERE tutor_id = u_tutor;
+        PERFORM pg_temp.debe_pasar('el borrador queda apuntando a la cita que creó',
+            (SELECT cita_id FROM seleccion_horario WHERE tutor_id = u_tutor) = c_motivo);
+
+        -- Si la mascota se borra, el borrador se queda y solo la suelta
+        INSERT INTO mascota (tutor_id, nombre, especie_id, sexo) VALUES (u_tutor2, 'Temporal', perro, 'MACHO') RETURNING id INTO m_tmp;
+        INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en, mascota_id)
+            VALUES (u_tutor2, a_clinica, srv, vet1, slot + interval '4 days', slot + interval '4 days 30 minutes', now() + interval '1 hour', m_tmp);
+        DELETE FROM mascota WHERE id = m_tmp;
+        PERFORM pg_temp.debe_pasar('al borrar la mascota el borrador se conserva sin ella',
+            (SELECT mascota_id IS NULL FROM seleccion_horario WHERE tutor_id = u_tutor2));
+    END;
+
     -- ---------- HU-078: registro de fundaciones ----------
     DECLARE
         u_f uuid; a_f uuid;

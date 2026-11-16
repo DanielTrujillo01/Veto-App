@@ -7,6 +7,7 @@ import { AliadosModule } from './modules/aliados/aliados.module';
 import { MascotasModule } from './modules/mascotas/mascotas.module';
 import { ServiciosModule } from './modules/servicios/servicios.module';
 import { CitasModule } from './modules/citas/citas.module';
+import { ReservasModule } from './modules/reservas/reservas.module';
 import { ClinicaModule } from './modules/clinica/clinica.module';
 import { ComercioModule } from './modules/comercio/comercio.module';
 import { AdopcionModule } from './modules/adopcion/adopcion.module';
@@ -24,6 +25,7 @@ import { NotificacionesModule } from './modules/notificaciones/notificaciones.mo
     MascotasModule,
     ServiciosModule,
     CitasModule,
+    ReservasModule,
     ClinicaModule,
     ComercioModule,
     AdopcionModule,

@@ -3,19 +3,20 @@
 Cada carpeta es un módulo de dominio (monolito modular). Los módulos reflejan la división del
 modelo de datos (`docs/modelo-de-datos.md`).
 
-| Módulo           | Qué hace                                                                           | Tablas propias                                                                         | Historias                                |
-| ---------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `identidad`      | Cuentas, registro, inicio de sesión y recuperación de contraseña                   | usuario, cuenta_google, google_estado_oauth, google_pendiente, recuperacion_contrasena | HU-001–004, 006                          |
-| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                                              | HU-007, 012–016, 021, 023, 078–079       |
-| `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                                         | HU-008–011                               |
-| `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, bloqueo_agenda, tipo_servicio                | HU-016, 018–022, 024–028                 |
-| `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado, seleccion_horario                                              | HU-029, 031, 032, 034                    |
-| `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                                           | HU-014, 017, 037, 042, 043               |
-| `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto                       | HU-044–050                               |
-| `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, mascota_adopcion_media, solicitud_adopcion                           | HU-080, 082, 084, 086, 087, 090, 092–094 |
-| `admin`          | Moderación, revisión de fundaciones y estado de cuentas del Equipo Veto            | accion_admin                                                                           | HU-065–067, 079                          |
-| `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                              | v_citas_reporte, v_ventas_productos                                                    | HU-070, 073, 074                         |
-| `notificaciones` | Notificaciones internas de la aplicación                                           | notificacion                                                                           | HU-048, 052, 054                         |
+| Módulo           | Qué hace                                                                            | Tablas propias                                                                         | Historias                                |
+| ---------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `identidad`      | Cuentas, registro, inicio de sesión y recuperación de contraseña                    | usuario, cuenta_google, google_estado_oauth, google_pendiente, recuperacion_contrasena | HU-001–004, 006                          |
+| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes  | aliado, veterinario, sede, aliado_especie                                              | HU-007, 012–016, 021, 023, 078–079       |
+| `mascotas`       | Mascotas del tutor y su historial                                                   | mascota, mascota_foto, especie                                                         | HU-008–011                               |
+| `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                              | servicio, servicio_regla_precio, horario, bloqueo_agenda, tipo_servicio                | HU-016, 018–022, 024–028                 |
+| `citas`          | Agendamiento y ciclo de vida de la cita                                             | cita, historial_estado, seleccion_horario                                              | HU-029–032, 034                          |
+| `reservas`       | Flujo con que el tutor reserva una cita (fecha y hora, mascota y motivo, confirmar) | — (escribe en `citas` vía `CitasService`)                                              | HU-029, 030, 031                         |
+| `clinica`        | Registro de consulta y anotaciones de corrección                                    | consulta, consulta_anotacion                                                           | HU-014, 017, 037, 042, 043               |
+| `comercio`       | Productos y pedidos                                                                 | producto, producto_foto, pedido, pedido_item, categoria_producto                       | HU-044–050                               |
+| `adopcion`       | Mascotas en adopción y solicitudes                                                  | mascota_adopcion, mascota_adopcion_media, solicitud_adopcion                           | HU-080, 082, 084, 086, 087, 090, 092–094 |
+| `admin`          | Moderación, revisión de fundaciones y estado de cuentas del Equipo Veto             | accion_admin                                                                           | HU-065–067, 079                          |
+| `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                               | v_citas_reporte, v_ventas_productos                                                    | HU-070, 073, 074                         |
+| `notificaciones` | Notificaciones internas de la aplicación                                            | notificacion                                                                           | HU-048, 052, 054                         |
 
 ## Reglas
 
@@ -191,19 +192,49 @@ aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con 
   que devuelve el `INSERT` (la elección del tutor la guarda HU-029, abajo). Un cambio de horario o un bloqueo responde 409 si deja citas vigentes sin
   cubrir; la respuesta del bloqueo lista esas citas (`citas`). Lee las citas ocupadas solo a través de
   `CitasService.ocupadosEntre` y `vigentesEnIntervalo`.
-- **Elegir fecha y hora (HU-029):** el tutor (rol `TUTOR`) toma un espacio de la disponibilidad y lo elige con
-  `PUT /api/reservas/seleccion` y `{ servicioId, veterinarioId, inicio }` (el `inicio` con zona horaria, tal como lo
-  devolvió la disponibilidad; el `fin` lo calcula la API con la duración del servicio). Solo se acepta un espacio
-  exacto de los que ofrece el calendario de ese veterinario. Si no, responde **400** `{ motivo: "PASADO" }` si la hora
-  ya pasó, o **409** `{ motivo: "OCUPADO" }` si otra cita (pendiente o agendada) ya lo ocupa, o
-  `{ motivo: "NO_DISPONIBLE" }` si el aliado no atiende así (fuera del horario, bloqueado, a mitad de un espacio o con
-  otra duración); cada una trae `message` para mostrar. Si es válida, la conserva (una selección por tutor; elegir
-  otra la reemplaza) y devuelve la selección con los nombres del servicio y del veterinario, `venceEn` y
-  `vigente: true`. `GET /api/reservas/seleccion` la devuelve en cualquier paso posterior (motivo, confirmación,
-  recarga) **vuelta a comprobar**: si entretanto la tomó otra persona, el aliado la bloqueó o pasó la hora, responde
-  `vigente: false` con el `motivo` y la web debe pedir elegir otra; 404 si no hay o ya venció (60 minutos,
-  `MINUTOS_VIGENCIA_SELECCION`). `DELETE /api/reservas/seleccion` la descarta (204, no falla si no había).
-  **Elegir no reserva el espacio**: HU-031 debe leer la selección, crear la cita (la base valida de nuevo) y
-  descartarla; si el `INSERT` falla por solapamiento, avisar y volver al calendario. La tabla `seleccion_horario` es
-  del módulo `citas` (`CitasService.guardarSeleccion | obtenerSeleccion | eliminarSeleccion`); la validación y los
-  endpoints viven en `servicios` porque usan el cálculo de la disponibilidad.
+- **Reservar una cita (HU-029, 030, 031)** vive en el módulo `reservas`, que orquesta disponibilidad (`servicios`),
+  veterinarios y especies (`aliados`), mascotas y citas. Es un módulo aparte porque `servicios` ya depende de `citas`
+  y ponerlo en cualquiera de los dos crearía una dependencia circular. El tutor (rol `TUTOR`) arma **una reserva en
+  curso** (tabla `seleccion_horario`, del módulo `citas`; una por tutor, se conserva 60 minutos desde el último paso y
+  sobrevive a recargar la página) y al final la confirma. Los pasos:
+  1. **Fecha y hora (HU-029):** `PUT /api/reservas/seleccion` con `{ servicioId, veterinarioId, inicio }` (el `inicio` con
+     zona horaria, tal como lo devolvió `GET /api/aliados/:aliadoId/disponibilidad`; el `fin` lo calcula la API con la
+     duración del servicio). Solo se acepta un espacio exacto de los que ofrece el calendario de ese veterinario. Si
+     no: **400** `{ razon: "PASADO" }` si la hora ya pasó; **409** `{ razon: "OCUPADO" }` si otra cita (pendiente o
+     agendada) ya lo ocupa; **409** `{ razon: "NO_DISPONIBLE" }` si el aliado no atiende así (fuera del horario,
+     bloqueado, a mitad de un espacio o con otra duración). Cada una trae `message` para mostrar. Elegir otro horario
+     reemplaza el anterior y conserva la mascota y el motivo ya escritos.
+  2. **Mascota y motivo (HU-030, HU-031):** `PATCH /api/reservas/seleccion` con `{ mascotaId?, motivo? }` (al menos uno;
+     solo cambia lo que se envía). La mascota debe ser del tutor (400 `errores.mascotaId`) y de una especie que el aliado
+     atienda (409 `codigo: "ESPECIE_NO_ATENDIDA"`). El **motivo** es texto libre de **hasta 500 caracteres**
+     (`MOTIVO_CITA_MAX_CARACTERES`): se recortan los espacios de las puntas, un texto vacío o `null` lo quita, y si
+     pasa el límite responde **400** con `errores.motivo` = «El motivo admite máximo 500 caracteres (escribiste N)».
+     Los caracteres se cuentan como los ve la persona (un emoji es uno), igual que la base. Para el contador de la web
+     están `contarCaracteres` y `caracteresRestantesDelMotivo` en `@veto/shared`. El motivo es **opcional**
+     (decisión a confirmar; basta con exigirlo en `ReservaService.confirmar` si el equipo lo pide).
+  3. **Revisar (HU-031):** `GET /api/reservas/resumen` devuelve los datos principales (fecha y hora, servicio, veterinario,
+     mascota, motivo, aliado), el `precio` para esa mascota y el `estadoInicial` en que quedará la cita (`AGENDADA` o
+     `PENDIENTE`, según cómo confirma sus citas el aliado). `listo` es `true` solo si se puede confirmar; si no,
+     `pendientes` dice qué falta o ya no sirve (`campo`: `horario`, `mascotaId`, `reserva`). No crea nada.
+     `GET /api/reservas/seleccion` devuelve lo elegido en cualquier paso, **vuelto a comprobar** (`vigente: false` con la
+     `razon` si otra persona tomó el espacio, el aliado lo bloqueó o la hora pasó); `citaId` viene lleno si ya se confirmó.
+  4. **Confirmar (HU-031):** `POST /api/reservas`, sin cuerpo (todo sale de la reserva en curso; lo que llegue en el
+     cuerpo se ignora). Vuelve a validar todo dentro de una transacción y crea la cita con mascota, servicio, aliado,
+     veterinario, fecha, hora y motivo: **201** con el detalle de la cita. El **estado** (`AGENDADA` o `PENDIENTE`) y las
+     reglas de horario, bloqueos, solapamiento y especie los fija y valida la base; el `precio` es el de
+     `fn_precio_servicio` en ese momento (queda como instantánea). Errores: 404 sin reserva en curso, 400 si falta la
+     mascota (`errores.mascotaId`) o la hora ya pasó (`razon`), 409 con `razon` (`OCUPADO`, `NO_DISPONIBLE`) o con
+     `codigo` (`ESPECIE_NO_ATENDIDA`, `DUPLICADA` con `citaId`, `YA_CONFIRMADA`).
+     **Sin duplicados (doble clic o reintento):** la confirmación bloquea la reserva en curso del tutor, así que dos
+     peticiones seguidas se turnan y la segunda recibe **200** con la misma cita y `repetida: true`; el reintento tardío
+     (la reserva ya venció) también. Para reservar otra cita hay que volver a elegir fecha y hora (`PUT`): eso reinicia
+     la reserva, conserva la mascota y deja el motivo vacío. Además la base impide dos citas vigentes en el mismo espacio
+     y dos iguales (misma mascota, servicio y hora). `DELETE /api/reservas/seleccion` descarta la reserva en curso (204).
+     **Elegir no reserva el espacio**: solo la confirmación lo ocupa, y si dos tutores confirman el mismo a la vez,
+     uno recibe 409 `OCUPADO`.
+- **Ver una cita y su motivo (HU-030):** `GET /api/citas/:citaId` (roles `TUTOR`, `ALIADO`, `VETERINARIO`) devuelve la
+  cita con el motivo, el precio, la mascota, el servicio, el aliado y el veterinario. Lo ven el tutor de la cita, el
+  administrador del aliado y los veterinarios activos de ese aliado (las mismas personas que la base reconoce como «el
+  aliado» al finalizar una cita); para cualquier otra persona responde 404, igual que si no existiera. El Equipo Veto
+  no lo ve (403). Lee la vista `v_cita_detalle` (migración 0013). Las listas de citas (mis citas, agenda del aliado) no
+  existen todavía: deben mostrar el motivo leyendo de esa vista.

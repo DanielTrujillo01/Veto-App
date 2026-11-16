@@ -53,6 +53,7 @@ import { SedesService } from './sedes.service';
     SedesService,
     AliadosService,
     AliadoEspeciesService,
+    AliadoConfirmacionService,
     VeterinarioGuard,
   ],
 })

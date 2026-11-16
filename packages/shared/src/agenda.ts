@@ -103,21 +103,24 @@ export const seleccionarHorarioSchema = z.object({
 export type SeleccionarHorario = z.infer<typeof seleccionarHorarioSchema>;
 
 /**
- * Por qué un horario no se puede elegir:
+ * Por qué un horario no se puede elegir (campo `razon` de la respuesta):
  * - `PASADO`: la fecha y hora ya pasaron.
  * - `OCUPADO`: otra cita ya ocupa ese espacio.
  * - `NO_DISPONIBLE`: el aliado no atiende así (fuera del horario, bloqueado o no es uno de los espacios que ofrece).
  */
-export const MOTIVOS_HORARIO_NO_DISPONIBLE = ['PASADO', 'OCUPADO', 'NO_DISPONIBLE'] as const;
-export type MotivoHorarioNoDisponible = (typeof MOTIVOS_HORARIO_NO_DISPONIBLE)[number];
+export const RAZONES_HORARIO_NO_DISPONIBLE = ['PASADO', 'OCUPADO', 'NO_DISPONIBLE'] as const;
+export type RazonHorarioNoDisponible = (typeof RAZONES_HORARIO_NO_DISPONIBLE)[number];
 
-export const MENSAJES_HORARIO_NO_DISPONIBLE: Record<MotivoHorarioNoDisponible, string> = {
+export const MENSAJES_HORARIO_NO_DISPONIBLE: Record<RazonHorarioNoDisponible, string> = {
   PASADO: 'No puedes elegir una fecha u hora que ya pasó',
   OCUPADO: 'Ese horario ya fue tomado: elige otro',
   NO_DISPONIBLE: 'El aliado no atiende en ese horario: elige uno del calendario',
 };
 
-/** Fecha y hora elegidas en el calendario, tal como se conservan mientras avanza la reserva. */
+/**
+ * Lo que el tutor lleva elegido de su reserva: fecha y hora del calendario (HU-029) y, después,
+ * la mascota y el motivo. Se conserva mientras avanza en el flujo de reserva.
+ */
 export type SeleccionHorario = {
   aliadoId: string;
   servicioId: string;
@@ -128,6 +131,13 @@ export type SeleccionHorario = {
   fin: string;
   /** Hasta cuándo se conserva si no se vuelve a elegir. */
   venceEn: string;
+  /** Mascota elegida para la cita (HU-031); `null` mientras no se elija. */
+  mascotaId: string | null;
+  mascotaNombre: string | null;
+  /** Motivo de la cita escrito por el tutor (HU-030); `null` si no indicó. */
+  motivo: string | null;
+  /** Cita en que terminó esta reserva; `null` mientras no se confirme (HU-031). */
+  citaId: string | null;
 };
 
 /**
@@ -136,4 +146,4 @@ export type SeleccionHorario = {
  */
 export type EstadoSeleccionHorario =
   | (SeleccionHorario & { vigente: true })
-  | (SeleccionHorario & { vigente: false; motivo: MotivoHorarioNoDisponible });
+  | (SeleccionHorario & { vigente: false; razon: RazonHorarioNoDisponible });

@@ -57,18 +57,18 @@ Solo uso `jsonb` en las respuestas del formulario de adopción (HU-090), para po
 
 ## 3. Estructura
 
-| Módulo                              | Tablas                                                                  | Historias                             |
-| ----------------------------------- | ----------------------------------------------------------------------- | ------------------------------------- |
-| **Usuarios y aliados**              | `usuario`, `aliado`, `veterinario`, `sede`, `aliado_especie`            | 001, 002, 006, 007, 012–016, 021, 078 |
-| **Mascotas**                        | `mascota`, `mascota_foto` + vista `v_historial_mascota`                 | 008–011                               |
-| **Servicios y horarios**            | `servicio`, `servicio_regla_precio`, `horario`, `bloqueo_agenda` (0007) | 016, 018–022                          |
-| **Citas**                           | `cita`, `historial_estado`, `seleccion_horario` (0012)                  | 029, 031, 032, 034                    |
-| **Registro de consulta**            | `consulta`, `consulta_anotacion` + vista `v_consulta_detalle` (0003)    | 014, 017, 037, 042, 043               |
-| **Productos y pedidos**             | `producto`, `producto_foto`, `pedido`, `pedido_item`                    | 044–050                               |
-| **Adopción**                        | `mascota_adopcion`, `solicitud_adopcion` + vista `v_catalogo_adopcion`  | 078, 080, 082, 083, 087, 090, 092–094 |
-| **Notificaciones y administración** | `notificacion`, `accion_admin`                                          | 048, 052, 054, 065–067                |
-| **Reportes**                        | vistas `v_citas_reporte`, `v_ventas_productos`                          | 070, 073, 074                         |
-| **Catálogos**                       | `especie`, `tipo_servicio`, `categoria_producto`                        | 018, 026, 044                         |
+| Módulo                              | Tablas                                                                                 | Historias                             |
+| ----------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------- |
+| **Usuarios y aliados**              | `usuario`, `aliado`, `veterinario`, `sede`, `aliado_especie`                           | 001, 002, 006, 007, 012–016, 021, 078 |
+| **Mascotas**                        | `mascota`, `mascota_foto` + vista `v_historial_mascota`                                | 008–011                               |
+| **Servicios y horarios**            | `servicio`, `servicio_regla_precio`, `horario`, `bloqueo_agenda` (0007)                | 016, 018–022                          |
+| **Citas**                           | `cita`, `historial_estado`, `seleccion_horario` (0012) + vista `v_cita_detalle` (0013) | 029–032, 034                          |
+| **Registro de consulta**            | `consulta`, `consulta_anotacion` + vista `v_consulta_detalle` (0003)                   | 014, 017, 037, 042, 043               |
+| **Productos y pedidos**             | `producto`, `producto_foto`, `pedido`, `pedido_item`                                   | 044–050                               |
+| **Adopción**                        | `mascota_adopcion`, `solicitud_adopcion` + vista `v_catalogo_adopcion`                 | 078, 080, 082, 083, 087, 090, 092–094 |
+| **Notificaciones y administración** | `notificacion`, `accion_admin`                                                         | 048, 052, 054, 065–067                |
+| **Reportes**                        | vistas `v_citas_reporte`, `v_ventas_productos`                                         | 070, 073, 074                         |
+| **Catálogos**                       | `especie`, `tipo_servicio`, `categoria_producto`                                       | 018, 026, 044                         |
 
 Detalles de diseño:
 
@@ -98,6 +98,8 @@ Detalles de diseño:
 | Una cita no cae en un bloqueo del calendario; los bloqueos de un veterinario no se solapan (HU-022)                  | Trigger + `EXCLUDE`                            |
 | No se bloquea ni se recorta el horario si deja citas vigentes sin cubrir (HU-022)                                    | Triggers de bloqueo y de horario               |
 | La fecha y hora elegidas se conservan por tutor y expiran; elegir otra reemplaza la anterior, no reservan (HU-029)   | `PK` por tutor + `CHECK` + FK con `CASCADE`    |
+| El motivo de la cita es texto de 1 a 500 caracteres, o NULL si no se indica (HU-030)                                 | `CHECK` en `cita` y `seleccion_horario`        |
+| La reserva en curso apunta a la cita que creó: un reintento devuelve esa cita y no crea otra (HU-031)                | FK `seleccion_horario.cita_id`                 |
 | Precio según peso, edad o especie; sin regla o sin dato → precio base (HU-020)                                       | Función `fn_precio_servicio`                   |
 | Consulta cerrada no se edita ni se borra; se corrige con anotación (HU-042)                                          | Triggers + tabla de solo inserción             |
 | Pedido: valida producto activo, descuenta stock, lo devuelve al cancelar; no se cancela tras despachar (HU-046, 049) | Triggers `fn_pedido_item` y `fn_pedido_estado` |
@@ -199,7 +201,20 @@ ocupa el espacio es el `INSERT` de la cita, que sigue validando horario, bloqueo
 un borrador, las reglas de qué se puede elegir se comprueban en la aplicación con el mismo cálculo del calendario
 (HU-022), de modo que lo que el calendario ofrece y lo que se acepta no se contradicen: se acepta un espacio exacto de los
 que ofrece y nada más (no una hora pasada, ocupada, bloqueada, fuera del horario ni a mitad de un espacio). Al leer la selección
-se vuelve a comprobar y se avisa si dejó de servir (`vigente: false` con el motivo).
+se vuelve a comprobar y se avisa si dejó de servir (`vigente: false` con la `razon`).
+
+**Motivo de la cita y confirmación (HU-030, HU-031).** La reserva se arma en pasos y `seleccion_horario` es su borrador: además
+de fecha y hora guarda la mascota, el motivo y, al final, la cita en que terminó (`cita_id`). El motivo es texto libre de
+1 a 500 caracteres (`cita.motivo`, `seleccion_horario.motivo`): la API recorta los espacios, cuenta caracteres como los
+ve la persona (igual que `char_length`) y rechaza lo que pase el límite diciendo cuántos escribió; vacío es NULL. Al
+confirmar, la API bloquea el borrador del tutor (`SELECT … FOR UPDATE`), revisa de nuevo disponibilidad, mascota y especie
+y crea la cita con el motivo y el precio de `fn_precio_servicio` en ese momento. **El estado inicial no lo pide la API**:
+lo fija la base según `aliado.modo_confirmacion` (HU-023). Como el borrador queda apuntando a su cita, un doble clic o
+un reintento recibe esa misma cita; los índices de 0001 y 0005 siguen siendo la red de seguridad (dos citas vigentes en
+el mismo espacio o dos iguales para la misma mascota, servicio y hora). La vista `v_cita_detalle` une la cita con los
+nombres que se muestran; se consulta siempre filtrando por quien puede verla (el tutor, el administrador del aliado o un
+veterinario activo de ese aliado). Decisiones a confirmar: el motivo es **opcional**, y quien cancela una cita no borra
+su motivo (se conserva en la cita).
 
 Lo que queda en la aplicación: los permisos por rol y el envío efectivo de notificaciones.
 

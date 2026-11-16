@@ -10,8 +10,6 @@ import { DisponibilidadController } from './disponibilidad.controller';
 import { DisponibilidadService } from './disponibilidad.service';
 import { HorariosController } from './horarios.controller';
 import { HorariosService } from './horarios.service';
-import { SeleccionHorarioController } from './seleccion-horario.controller';
-import { SeleccionHorarioService } from './seleccion-horario.service';
 import {
   PublicServiciosController,
   ServiciosController,
@@ -24,7 +22,7 @@ import { ServiciosService } from './servicios.service';
  * Módulo servicios: Servicios, precios, horarios y búsqueda/descubrimiento.
  *
  * Tablas propias: servicio, servicio_regla_precio, horario, bloqueo_agenda, tipo_servicio
- * Historias:      HU-016, 018–022, 024–029
+ * Historias:      HU-016, 018–022, 024–028
  *
  * Regla: solo este módulo escribe en sus tablas. Si otro módulo necesita un dato,
  * lo pide a través de un servicio exportado por este módulo, nunca con SQL directo.
@@ -35,7 +33,6 @@ import { ServiciosService } from './servicios.service';
     HorariosController,
     BloqueosController,
     DisponibilidadController,
-    SeleccionHorarioController,
     TiposServicioController,
     PublicServiciosController,
     ServiciosController,
@@ -44,11 +41,10 @@ import { ServiciosService } from './servicios.service';
     HorariosService,
     BloqueosService,
     DisponibilidadService,
-    SeleccionHorarioService,
     AgendaRepository,
     ServiciosService,
     ServiciosRepository,
   ],
-  exports: [ServiciosService],
+  exports: [ServiciosService, DisponibilidadService],
 })
 export class ServiciosModule {}

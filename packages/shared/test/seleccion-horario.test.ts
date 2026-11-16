@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MENSAJES_HORARIO_NO_DISPONIBLE,
-  MOTIVOS_HORARIO_NO_DISPONIBLE,
+  RAZONES_HORARIO_NO_DISPONIBLE,
   seleccionarHorarioSchema,
 } from '../src';
 
@@ -42,11 +42,11 @@ describe('HU-029 · seleccionarHorarioSchema', () => {
   });
 });
 
-describe('HU-029 · motivos por los que un horario no se puede elegir', () => {
-  it('cada motivo tiene su mensaje para la persona', () => {
-    expect(MOTIVOS_HORARIO_NO_DISPONIBLE).toEqual(['PASADO', 'OCUPADO', 'NO_DISPONIBLE']);
-    for (const motivo of MOTIVOS_HORARIO_NO_DISPONIBLE) {
-      expect(MENSAJES_HORARIO_NO_DISPONIBLE[motivo].length).toBeGreaterThan(10);
+describe('HU-029 · razones por las que un horario no se puede elegir', () => {
+  it('cada razón tiene su mensaje para la persona', () => {
+    expect(RAZONES_HORARIO_NO_DISPONIBLE).toEqual(['PASADO', 'OCUPADO', 'NO_DISPONIBLE']);
+    for (const razon of RAZONES_HORARIO_NO_DISPONIBLE) {
+      expect(MENSAJES_HORARIO_NO_DISPONIBLE[razon].length).toBeGreaterThan(10);
     }
   });
 });
