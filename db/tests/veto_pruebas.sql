@@ -263,6 +263,25 @@ BEGIN
         format($q$INSERT INTO pedido_item (pedido_id, producto_id, cantidad, precio_unitario)
                   VALUES ((SELECT id FROM pedido WHERE id = %L), %L, 1, 1)$q$, ped, prod), '23514');
 
+    -- ---------- HU-044 · Gestión de productos ----------
+    PERFORM pg_temp.debe_fallar('un producto no cuesta 0',
+        format($q$INSERT INTO producto (aliado_id, categoria_id, nombre, precio) VALUES (%L,%L,'Arena',0)$q$, a_tienda, cat), '23514');
+    PERFORM pg_temp.debe_fallar('el precio de un producto no lleva decimales',
+        format($q$INSERT INTO producto (aliado_id, categoria_id, nombre, precio) VALUES (%L,%L,'Arena',1500.50)$q$, a_tienda, cat), '23514');
+    PERFORM pg_temp.debe_fallar('el nombre del producto tiene al menos 2 caracteres',
+        format($q$INSERT INTO producto (aliado_id, categoria_id, nombre, precio) VALUES (%L,%L,'A',1500)$q$, a_tienda, cat), '23514');
+    INSERT INTO producto_foto (producto_id, url, posicion) VALUES (prod, 'https://i.postimg.cc/a.jpg', 1);
+    INSERT INTO producto_foto (producto_id, url, posicion) VALUES (prod, 'https://i.postimg.cc/b.jpg', 2);
+    PERFORM pg_temp.debe_fallar('dos fotos no ocupan la misma posición',
+        format($q$INSERT INTO producto_foto (producto_id, url, posicion) VALUES (%L,'https://x.co/c.jpg',2)$q$, prod), '23505');
+    PERFORM pg_temp.debe_fallar('un producto tiene máximo 5 fotos',
+        format($q$INSERT INTO producto_foto (producto_id, url, posicion) VALUES (%L,'https://x.co/c.jpg',6)$q$, prod), '23514');
+    PERFORM pg_temp.debe_fallar('la foto del producto es un enlace web',
+        format($q$INSERT INTO producto_foto (producto_id, url, posicion) VALUES (%L,'javascript:alert(1)',3)$q$, prod), '23514');
+    UPDATE producto SET precio = 120000 WHERE id = prod;
+    PERFORM pg_temp.debe_pasar('cambiar el precio no altera los pedidos anteriores',
+        (SELECT precio_unitario FROM pedido_item WHERE pedido_id = ped2 AND producto_id = prod) = 100000);
+
     -- ---------- Adopción ----------
     PERFORM pg_temp.debe_fallar('fundación PENDIENTE no puede publicar mascotas',
         format($q$INSERT INTO mascota_adopcion (fundacion_id, nombre, especie_id, edad_meses, sexo, tamano, ubicacion)

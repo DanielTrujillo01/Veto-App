@@ -19,3 +19,4 @@ export * from './producto';
 export * from './reserva';
 export * from './texto-libre';
 export * from './gestion-cita';
+export * from './carrito';
