@@ -5030,7 +5030,10 @@
   .catalog-category {
     transition: none;
   }
+}
 
+/* Celular: estas reglas estaban por error dentro del bloque de movimiento reducido de arriba. */
+@media (max-width: 640px) {
   .auth-form-panel {
     padding: 26px 20px;
   }
@@ -5582,8 +5585,8 @@
 }
 
 @media (max-width: 640px) {
-  .auth-page,
-  .partner-shell {
+  /* El panel ya ocupa todo el ancho con su regla base (min(100vw, 1440px)). */
+  .auth-page {
     width: calc(100% + 32px);
   }
 
