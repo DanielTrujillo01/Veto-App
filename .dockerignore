@@ -1,0 +1,12 @@
+﻿# Do not put local credentials, dependencies or build output in Docker images.
+.env
+.env.*
+**/.env
+**/.env.*
+.git
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/*.tsbuildinfo
+.turbo
