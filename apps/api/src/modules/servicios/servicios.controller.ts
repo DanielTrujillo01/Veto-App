@@ -19,6 +19,7 @@ import {
   filtrarServiciosSchema,
   guardarReglasPrecioSchema,
   guardarServicioSchema,
+  ordenServiciosSchema,
 } from '@veto/shared';
 import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from '../identidad/auth.guard';
@@ -199,5 +200,17 @@ export class PublicServiciosController {
   ) {
     const datos = validar(cotizarServicioSchema, query);
     return this.servicios.cotizarParaMascota(request.usuario.id, servicioId, datos.mascotaId);
+  }
+
+  @Get()
+  @ApiOperation({
+    summary: 'Todos los servicios disponibles, con reglas de precio (público)',
+    description:
+      '?orden=nombre | precio_asc | precio_desc. El precio se ordena por precioDesde: ' +
+      'el menor entre precioBase y las reglas de precio.',
+  })
+  todos(@Query() query: unknown) {
+    const { orden } = validar(ordenServiciosSchema, query);
+    return this.servicios.listarTodosDisponibles(orden);
   }
 }

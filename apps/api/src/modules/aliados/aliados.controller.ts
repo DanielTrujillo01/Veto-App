@@ -1,4 +1,15 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { registroAliadoSchema } from '@veto/shared';
 import { validar } from '../../common/validacion';
@@ -43,5 +54,13 @@ export class AliadosController {
     return {
       fundacion: await this.aliados.estadoFundacionPropia(request.usuario.id),
     };
+  }
+
+  @Get(':aliadoId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('TUTOR')
+  @ApiOperation({ summary: 'Datos públicos de un aliado activo, sin fundaciones (tutores)' })
+  obtenerPublico(@Param('aliadoId', new ParseUUIDPipe()) aliadoId: string) {
+    return this.aliados.obtenerPublico(aliadoId);
   }
 }

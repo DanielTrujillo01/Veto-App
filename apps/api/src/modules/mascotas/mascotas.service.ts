@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import type { ActualizarMascota, CrearMascota, Mascota } from '@veto/shared';
-import { DatabaseService } from '../../database/database.service';
+import { DatabaseService, type Consultor } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { MascotasRepository } from './mascotas.repository';
 
@@ -58,6 +58,14 @@ export class MascotasService {
 
   listarEspecies() {
     return this.repo.listarEspecies(this.db);
+  }
+
+  /**
+   * Para otros módulos (la reserva de una cita): la mascota del tutor, o `null` si no existe o es
+   * de otra persona. Usa el `client` de la transacción abierta para no tomar otra conexión.
+   */
+  buscarDelTutor(client: Consultor, tutorId: string, mascotaId: string): Promise<Mascota | null> {
+    return this.repo.buscarDelTutor(client, mascotaId, tutorId);
   }
 
   /** Para otros módulos (p. ej. reservar una cita): ¿la mascota es de este tutor? */

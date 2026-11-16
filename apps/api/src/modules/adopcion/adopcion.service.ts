@@ -98,6 +98,12 @@ export class AdopcionService {
     return this.repository.listarPublicas(this.database);
   }
 
+  async obtenerPublica(mascotaId: string): Promise<MascotaAdopcionPublica> {
+    const mascota = await this.repository.buscarPublica(this.database, mascotaId);
+    if (!mascota) throw new NotFoundException('La mascota no está disponible para adopción');
+    return mascota;
+  }
+
   private async fundacionActiva(client: PoolClient, usuarioId: string): Promise<string> {
     const fundacion = await client.query<{ id: string }>(
       `SELECT id FROM aliado
