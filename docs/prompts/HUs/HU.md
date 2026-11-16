@@ -389,6 +389,10 @@ También puedes incluir otras funcionalidades que estén explícitamente fuera d
 
 No excluyas elementos necesarios para que el Backend cumpla los criterios de aceptación.
 
+**Estimación total de la HU:**
+
+La estimación se realiza mediante Puntos de Historia (Story Points) basados en la escala de Fibonacci modificada (0, 0.5, 1, 2, 3, 5, 8, 13, 20, 40, 100 y ? para indefinido), además se desglosa el esfuerzo por roles (UX, Diseño, Frontend, Backend).
+
 ## 7. Documento 2: Tareas específicas para Taiga
 
 Genera un segundo documento Markdown independiente que contenga exclusivamente las tareas necesarias para implementar la HU en el Backend.
@@ -449,7 +453,7 @@ Identifica las tareas que deben completarse previamente.
 
 Si no existen dependencias, indica: Ninguna.
 
-**Estimación:**
+**Estimación desglosada por tarea:**
 
 Indica los puntos de esfuerzo sugeridos, únicamente si el proyecto dispone de una escala de estimación identificable. en caso de no contar usa la siguiente: La estimación se realiza mediante Puntos de Historia (Story Points) basados en la escala de Fibonacci modificada (0, 0.5, 1, 2, 3, 5, 8, 13, 20, 40, 100 y ? para indefinido), además se desglosa el esfuerzo por roles (UX, Diseño, Frontend, Backend).
 

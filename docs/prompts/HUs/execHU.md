@@ -1,4 +1,4 @@
-Utiliza las instrucciones definidas en `/docs/HUs/HU.md` para realizar el análisis integral de la siguiente Historia de Usuario.
+Utiliza las instrucciones definidas en `/docs/prompts/HUs/HU.md` para realizar el análisis integral de la siguiente Historia de Usuario.
 
 Tu objetivo es preparar esta HU para su registro y gestión en Taiga, comprendiendo tanto su necesidad funcional como su contexto técnico dentro del proyecto Veto.
 
