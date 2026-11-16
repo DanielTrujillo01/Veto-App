@@ -3,20 +3,21 @@
 Cada carpeta es un módulo de dominio (monolito modular). Los módulos reflejan la división del
 modelo de datos (`docs/modelo-de-datos.md`).
 
-| Módulo           | Qué hace                                                                            | Tablas propias                                                                         | Historias                                |
-| ---------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `identidad`      | Cuentas, registro, inicio de sesión y recuperación de contraseña                    | usuario, cuenta_google, google_estado_oauth, google_pendiente, recuperacion_contrasena | HU-001–004, 006                          |
-| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes  | aliado, veterinario, sede, aliado_especie                                              | HU-007, 012–016, 021, 023, 078–079       |
-| `mascotas`       | Mascotas del tutor y su historial                                                   | mascota, mascota_foto, especie                                                         | HU-008–011                               |
-| `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                              | servicio, servicio_regla_precio, horario, bloqueo_agenda, tipo_servicio                | HU-016, 018–022, 024–028                 |
-| `citas`          | Agendamiento y ciclo de vida de la cita                                             | cita, historial_estado, seleccion_horario                                              | HU-029–032, 034                          |
-| `reservas`       | Flujo con que el tutor reserva una cita (fecha y hora, mascota y motivo, confirmar) | — (escribe en `citas` vía `CitasService`)                                              | HU-029, 030, 031                         |
-| `clinica`        | Registro de consulta y anotaciones de corrección                                    | consulta, consulta_anotacion                                                           | HU-014, 017, 037, 042, 043               |
-| `comercio`       | Productos y pedidos                                                                 | producto, producto_foto, pedido, pedido_item, categoria_producto                       | HU-044–050                               |
-| `adopcion`       | Mascotas en adopción y solicitudes                                                  | mascota_adopcion, mascota_adopcion_media, solicitud_adopcion                           | HU-080, 082, 084, 086, 087, 090, 092–094 |
-| `admin`          | Moderación, revisión de fundaciones y estado de cuentas del Equipo Veto             | accion_admin                                                                           | HU-065–067, 079                          |
-| `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                               | v_citas_reporte, v_ventas_productos                                                    | HU-070, 073, 074                         |
-| `notificaciones` | Notificaciones internas de la aplicación                                            | notificacion                                                                           | HU-048, 052, 054                         |
+| Módulo           | Qué hace                                                                                | Tablas propias                                                                         | Historias                                |
+| ---------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `identidad`      | Cuentas, registro, inicio de sesión y recuperación de contraseña                        | usuario, cuenta_google, google_estado_oauth, google_pendiente, recuperacion_contrasena | HU-001–004, 006                          |
+| `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes      | aliado, veterinario, sede, aliado_especie                                              | HU-007, 012–016, 021, 023, 078–079       |
+| `mascotas`       | Mascotas del tutor y su historial                                                       | mascota, mascota_foto, especie                                                         | HU-008–011                               |
+| `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                                  | servicio, servicio_regla_precio, horario, bloqueo_agenda, tipo_servicio                | HU-016, 018–022, 024–028                 |
+| `citas`          | Agendamiento y ciclo de vida de la cita                                                 | cita, historial_estado, seleccion_horario                                              | HU-029–034                               |
+| `gestion-citas`  | El aliado cierra la cita (finalizada o no asistió) con recomendaciones y aviso al tutor | — (escribe en `citas` y `notificaciones` vía sus servicios)                            | HU-032, 033                              |
+| `reservas`       | Flujo con que el tutor reserva una cita (fecha y hora, mascota y motivo, confirmar)     | — (escribe en `citas` vía `CitasService`)                                              | HU-029, 030, 031                         |
+| `clinica`        | Registro de consulta y anotaciones de corrección                                        | consulta, consulta_anotacion                                                           | HU-014, 017, 037, 042, 043               |
+| `comercio`       | Productos y pedidos                                                                     | producto, producto_foto, pedido, pedido_item, categoria_producto                       | HU-044–050                               |
+| `adopcion`       | Mascotas en adopción y solicitudes                                                      | mascota_adopcion, mascota_adopcion_media, solicitud_adopcion                           | HU-080, 082, 084, 086, 087, 090, 092–094 |
+| `admin`          | Moderación, revisión de fundaciones y estado de cuentas del Equipo Veto                 | accion_admin                                                                           | HU-065–067, 079                          |
+| `reportes`       | Dashboards y reportes (solo lectura sobre las vistas)                                   | v_citas_reporte, v_ventas_productos                                                    | HU-070, 073, 074                         |
+| `notificaciones` | Notificaciones internas de la aplicación                                                | notificacion                                                                           | HU-048, 052, 054 (crea las de HU-032)    |
 
 ## Reglas
 
@@ -238,3 +239,36 @@ aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con 
   aliado» al finalizar una cita); para cualquier otra persona responde 404, igual que si no existiera. El Equipo Veto
   no lo ve (403). Lee la vista `v_cita_detalle` (migración 0013). Las listas de citas (mis citas, agenda del aliado) no
   existen todavía: deben mostrar el motivo leyendo de esa vista.
+- **Cerrar una cita (HU-032, 033)** vive en el módulo `gestion-citas` (aparte de `citas` por la misma razón que
+  `reservas`: sus endpoints necesitan los guards de identidad, e identidad ya depende de `citas`). Lo hace el
+  **administrador del aliado** o uno de sus **veterinarios activos** (roles `ALIADO` y `VETERINARIO`; es la misma
+  definición de «el aliado» que usa `fn_cita_validar`), solo sobre citas de ese aliado:
+  - `PATCH /api/citas/:citaId/finalizar` con cuerpo opcional `{ recomendaciones? }`. No lleva observación (si llega, se ignora).
+  - `PATCH /api/citas/:citaId/no-asistio` con cuerpo opcional `{ observacion? }`.
+    La **observación** (solo en `no-asistio`, máx. 500 caracteres) es una nota interna: queda en `historial_estado.motivo`
+    (la columna ya existía) y solo la ve el aliado. Al finalizar no hay observación: lo clínico va en la consulta (HU-037 y
+    siguientes) y lo que el tutor debe saber, en las recomendaciones. Las **recomendaciones** (HU-033, máx. 2000, `RECOMENDACIONES_MAX_CARACTERES`) se guardan en
+    `cita.recomendaciones` **en la misma sentencia** que el cambio de estado y las ve el tutor en `GET /api/citas/:citaId`
+    (campo `recomendaciones`, `null` mientras no haya). Texto vacío o `null` significa «sin observación / sin
+    recomendaciones». Respuesta **200**: la cita ya actualizada (la misma forma de `GET /api/citas/:citaId`) más
+    `actualizadoEn` y `actualizadoPor`; no hay sobre `{ success, message, data }`, como en el resto de la API.
+    **Reglas**, en este orden: 404 `CITA_NO_ENCONTRADA` → 403 `SIN_PERMISOS_CITA` (el permiso se revisa antes que el estado,
+    para que un ajeno no sepa cómo está la cita) → 409 `ESTADO_CITA_INVALIDO` (solo se cierra una cita `AGENDADA`; no
+    `PENDIENTE`, ni las ya `FINALIZADA`, `NO_ASISTIO` o `CANCELADA`; trae `estadoActual`) → 422 `CITA_NO_FINALIZABLE` (la hora de
+    inicio de la cita todavía no llega; se compara con el reloj de la base, `inicio <= now()`, dentro de la sentencia).
+    Además 400 `DATOS_INVALIDOS` (con `errores` por campo: el aviso dice cuántos caracteres escribió), 401 `NO_AUTENTICADO` y
+    500 `ERROR_INTERNO` (mensaje genérico; el detalle solo queda en el registro del servidor). Todas las respuestas de
+    error de estos endpoints llevan `codigo` y `message` (filtro `CodigosDeErrorFilter`, reutilizable).
+    **Transacción:** todo ocurre a nombre de quien actúa (`app.usuario_id`, que ya fija `DatabaseService.withUser`): se
+    bloquea la cita (`FOR UPDATE`), se revisa todo, se actualiza —`fn_cita_validar` valida la transición sin que se
+    repita su lógica, y el trigger anota estado anterior, nuevo, responsable, fecha y observación en el historial— y por
+    último se avisa al tutor. Si algo falla, no queda nada a medias. Dos cierres simultáneos de la misma cita: uno gana y
+    el otro recibe 409.
+    **Aviso al tutor:** `NotificacionesService.crearSinRomper` crea la `notificacion` (`CITA_FINALIZADA` o
+    `CITA_NO_ASISTIO`, con `referencia_id` = la cita) **después de aplicar el cambio de estado y dentro de la misma
+    transacción, protegida por un `SAVEPOINT`**: si la notificación falla se pierde solo el aviso (queda en el registro) y
+    el cambio de estado se confirma igual; si el cambio no se confirma, tampoco queda el aviso. Leerlas y marcarlas como
+    leídas son las historias 052 y 054 (todavía no existen endpoints de lectura).
+    `GET /api/citas/:citaId/historial` (tutor, aliado, veterinarios) lista los cambios de estado de la cita; la observación
+    de una inasistencia solo la ven el aliado y sus veterinarios. `NO_ASISTIO` queda como estado final igual que `FINALIZADA` (decisión a
+    confirmar; es lo que ya hace `fn_cita_validar`).

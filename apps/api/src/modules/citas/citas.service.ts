@@ -1,5 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { MINUTOS_VIGENCIA_SELECCION, type CitaDetalle, type EstadoCita } from '@veto/shared';
+import {
+  MINUTOS_VIGENCIA_SELECCION,
+  type CambioDeEstado,
+  type CitaDetalle,
+  type EstadoCita,
+  type EstadoDeCierre,
+} from '@veto/shared';
 import type { PoolClient } from 'pg';
 import type { Consultor } from '../../database/database.service';
 
@@ -66,13 +72,14 @@ type DetalleRow = {
   servicio_nombre: string;
   veterinario_id: string | null;
   veterinario_nombre: string | null;
+  recomendaciones: string | null;
 };
 
 // La vista v_cita_detalle (migración 0013) une la cita con los nombres que se muestran.
 const SELECT_DETALLE = `SELECT d.id, d.estado, d.inicio, d.fin, d.precio, d.motivo, d.creado_en,
         d.tutor_id, d.tutor_nombre, d.mascota_id, d.mascota_nombre, d.especie,
         d.aliado_id, d.aliado_nombre, d.servicio_id, d.servicio_nombre,
-        d.veterinario_id, d.veterinario_nombre
+        d.veterinario_id, d.veterinario_nombre, d.recomendaciones
    FROM v_cita_detalle d`;
 
 function aDetalle(f: DetalleRow): CitaDetalle {
@@ -83,6 +90,7 @@ function aDetalle(f: DetalleRow): CitaDetalle {
     fin: new Date(f.fin).toISOString(),
     precio: Number(f.precio),
     motivo: f.motivo,
+    recomendaciones: f.recomendaciones ?? null,
     creadaEn: new Date(f.creado_en).toISOString(),
     tutor: { id: f.tutor_id, nombre: f.tutor_nombre },
     mascota: { id: f.mascota_id, nombre: f.mascota_nombre, especie: f.especie },
@@ -381,6 +389,113 @@ export class CitasService {
   async detalle(client: Consultor, citaId: string): Promise<CitaDetalle | null> {
     const r = await client.query<DetalleRow>(`${SELECT_DETALLE} WHERE d.id = $1`, [citaId]);
     return r.rows[0] ? aDetalle(r.rows[0]) : null;
+  }
+
+  /**
+   * HU-032: la cita bloqueada para decidir y cambiarle el estado sin que otra petición se
+   * cruce. `yaOcurrio` se calcula con el reloj de la base (la hora de inicio ya llegó).
+   */
+  async bloquearParaCierre(
+    client: PoolClient,
+    citaId: string,
+  ): Promise<{
+    id: string;
+    aliadoId: string;
+    estado: EstadoCita;
+    yaOcurrio: boolean;
+  } | null> {
+    const r = await client.query<{
+      id: string;
+      aliado_id: string;
+      estado: EstadoCita;
+      ya_ocurrio: boolean;
+    }>(
+      `SELECT id, aliado_id, estado, (inicio <= now()) AS ya_ocurrio
+         FROM cita WHERE id = $1 FOR UPDATE`,
+      [citaId],
+    );
+    const fila = r.rows[0];
+    return fila
+      ? { id: fila.id, aliadoId: fila.aliado_id, estado: fila.estado, yaOcurrio: fila.ya_ocurrio }
+      : null;
+  }
+
+  /**
+   * HU-032, HU-033: ¿`usuarioId` es el administrador del aliado o un veterinario activo de él?
+   * Es la misma definición de "el aliado" que usa fn_cita_validar al finalizar una cita.
+   */
+  async puedeGestionar(client: Consultor, aliadoId: string, usuarioId: string): Promise<boolean> {
+    const r = await client.query<{ ok: boolean }>(
+      `SELECT (EXISTS (SELECT 1 FROM aliado WHERE id = $1 AND usuario_id = $2)
+            OR EXISTS (SELECT 1 FROM veterinario
+                        WHERE aliado_id = $1 AND usuario_id = $2 AND activo)) AS ok`,
+      [aliadoId, usuarioId],
+    );
+    return Boolean(r.rows[0]?.ok);
+  }
+
+  /**
+   * HU-032, HU-033: pasa una cita AGENDADA, cuya hora ya llegó, a FINALIZADA o NO_ASISTIO. Las
+   * recomendaciones (solo al finalizar) se guardan en la misma sentencia. La observación viaja
+   * en `app.motivo` y la base la anota en `historial_estado` junto con el responsable
+   * (`app.usuario_id`, que ya dejó `DatabaseService.withUser`). La transición la valida
+   * fn_cita_validar; aquí solo se repiten las condiciones para que nada cambie si otra petición
+   * ganó antes. Devuelve null si no se actualizó nada.
+   */
+  async cerrar(
+    client: PoolClient,
+    datos: {
+      citaId: string;
+      estado: EstadoDeCierre;
+      observacion: string | null;
+      recomendaciones: string | null;
+    },
+  ): Promise<{ actualizadoEn: string; actualizadoPor: string } | null> {
+    await client.query("SELECT set_config('app.motivo', $1, true)", [datos.observacion ?? '']);
+    const r = await client.query(
+      `UPDATE cita
+          SET estado = $2::estado_cita, recomendaciones = COALESCE($3::text, recomendaciones)
+        WHERE id = $1 AND estado = 'AGENDADA' AND inicio <= now()`,
+      [datos.citaId, datos.estado, datos.recomendaciones],
+    );
+    if ((r.rowCount ?? 0) === 0) return null;
+    const h = await client.query<{ cambiado_en: Date | string; cambiado_por: string }>(
+      `SELECT cambiado_en, cambiado_por FROM historial_estado
+        WHERE entidad = 'cita' AND entidad_id = $1 ORDER BY id DESC LIMIT 1`,
+      [datos.citaId],
+    );
+    const fila = h.rows[0];
+    return {
+      actualizadoEn: new Date(fila.cambiado_en).toISOString(),
+      actualizadoPor: fila.cambiado_por,
+    };
+  }
+
+  /** HU-032: los cambios de estado de una cita, del más antiguo al más reciente. */
+  async historial(
+    client: Consultor,
+    citaId: string,
+    conObservacion: boolean,
+  ): Promise<CambioDeEstado[]> {
+    const r = await client.query<{
+      estado_anterior: EstadoCita | null;
+      estado_nuevo: EstadoCita;
+      cambiado_por: string | null;
+      motivo: string | null;
+      cambiado_en: Date | string;
+    }>(
+      `SELECT estado_anterior, estado_nuevo, cambiado_por, motivo, cambiado_en
+         FROM historial_estado
+        WHERE entidad = 'cita' AND entidad_id = $1 ORDER BY id`,
+      [citaId],
+    );
+    return r.rows.map((h) => ({
+      estadoAnterior: h.estado_anterior,
+      estadoNuevo: h.estado_nuevo,
+      cambiadoEn: new Date(h.cambiado_en).toISOString(),
+      cambiadoPor: h.cambiado_por,
+      observacion: conObservacion ? h.motivo : null,
+    }));
   }
 
   /** HU-018: indica si un servicio ya tiene citas (de cualquier estado). */

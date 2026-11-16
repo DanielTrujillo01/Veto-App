@@ -373,6 +373,41 @@ describe('HU-030 · el motivo se muestra al usuario autorizado', () => {
     await app.close();
   });
 
+  it('el tutor y el aliado ven las recomendaciones que dejó el aliado al finalizar (HU-033)', async () => {
+    const conRecomendaciones = cita({
+      estado: 'FINALIZADA',
+      recomendaciones: 'Dieta blanda por 3 días y control en una semana.',
+    });
+    for (const usuario of [TUTOR, ALIADO]) {
+      const { db } = bdReservas({
+        usuario,
+        citas: [conRecomendaciones],
+        autorizadosAVer: [usuario.id],
+      });
+      const app = await crearApp([ReservasModule], db);
+      const r = await request(app.getHttpServer())
+        .get(`/api/citas/${CITA_EXISTENTE}`)
+        .set('Cookie', COOKIE)
+        .expect(200);
+      expect(r.body).toMatchObject({
+        estado: 'FINALIZADA',
+        recomendaciones: 'Dieta blanda por 3 días y control en una semana.',
+      });
+      await app.close();
+    }
+  });
+
+  it('mientras el aliado no las escriba, las recomendaciones son null', async () => {
+    const { db } = bdReservas({ citas: [cita()] });
+    const app = await crearApp([ReservasModule], db);
+    const r = await request(app.getHttpServer())
+      .get(`/api/citas/${CITA_EXISTENTE}`)
+      .set('Cookie', COOKIE)
+      .expect(200);
+    expect(r.body.recomendaciones).toBeNull();
+    await app.close();
+  });
+
   it.each([
     ['el administrador del aliado', ALIADO],
     ['un veterinario del aliado', VETERINARIO],

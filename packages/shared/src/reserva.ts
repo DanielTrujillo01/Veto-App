@@ -1,27 +1,10 @@
 import { z } from 'zod';
 import type { EstadoSeleccionHorario } from './agenda';
 import type { EstadoCita } from './enums';
+import { contarCaracteres, textoLibreSchema } from './texto-libre';
 
 /** Límite de caracteres del motivo de la cita (HU-030). La base lo exige igual (`cita.motivo`). */
 export const MOTIVO_CITA_MAX_CARACTERES = 500;
-
-/** true si hay caracteres de control que no son un salto de línea ni una tabulación (la base rechaza el NUL). */
-function tieneCaracteresDeControl(texto: string): boolean {
-  for (const caracter of texto) {
-    const codigo = caracter.codePointAt(0) ?? 0;
-    const esControl = codigo < 0x20 || codigo === 0x7f;
-    if (esControl && codigo !== 0x09 && codigo !== 0x0a) return true;
-  }
-  return false;
-}
-
-/**
- * Cuenta los caracteres como los ve la persona (un emoji cuenta como uno), igual que
- * `char_length` en la base. Sirve para mostrar el contador "120 / 500" mientras se escribe.
- */
-export function contarCaracteres(texto: string): number {
-  return Array.from(texto).length;
-}
 
 /** Cuántos caracteres le quedan al motivo; 0 cuando ya se alcanzó el límite. */
 export function caracteresRestantesDelMotivo(texto: string): number {
@@ -33,24 +16,13 @@ export function caracteresRestantesDelMotivo(texto: string): number {
  * de línea de Windows pasan a `\n` y un texto vacío significa "sin motivo" (`null`). Si pasa
  * el límite, el mensaje dice cuántos caracteres escribió la persona.
  */
-export const motivoCitaSchema = z
-  .string({ error: 'El motivo debe ser un texto' })
-  .transform((texto, ctx) => {
-    const limpio = texto.replace(/\r\n?/g, '\n').trim();
-    if (tieneCaracteresDeControl(limpio)) {
-      ctx.addIssue({ code: 'custom', message: 'El motivo tiene caracteres que no se permiten' });
-      return z.NEVER;
-    }
-    const cantidad = contarCaracteres(limpio);
-    if (cantidad > MOTIVO_CITA_MAX_CARACTERES) {
-      ctx.addIssue({
-        code: 'custom',
-        message: `El motivo admite máximo ${MOTIVO_CITA_MAX_CARACTERES} caracteres (escribiste ${cantidad})`,
-      });
-      return z.NEVER;
-    }
-    return limpio === '' ? null : limpio;
-  });
+export const motivoCitaSchema = textoLibreSchema({
+  maximo: MOTIVO_CITA_MAX_CARACTERES,
+  noEsTexto: 'El motivo debe ser un texto',
+  conControl: 'El motivo tiene caracteres que no se permiten',
+  demasiadoLargo: (escritos) =>
+    `El motivo admite máximo ${MOTIVO_CITA_MAX_CARACTERES} caracteres (escribiste ${escritos})`,
+});
 
 /**
  * HU-030 y HU-031: lo que el tutor completa después de elegir fecha y hora, antes de confirmar.
@@ -87,6 +59,8 @@ export type CitaDetalle = {
   precio: number;
   /** Lo que el tutor escribió al reservar; `null` si no indicó motivo. */
   motivo: string | null;
+  /** Lo que el aliado recomienda al cerrar la cita (HU-033); `null` mientras no haya. */
+  recomendaciones: string | null;
   creadaEn: string;
   tutor: NombreConId;
   mascota: NombreConId & { especie: string };

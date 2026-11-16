@@ -62,7 +62,7 @@ Solo uso `jsonb` en las respuestas del formulario de adopción (HU-090), para po
 | **Usuarios y aliados**              | `usuario`, `aliado`, `veterinario`, `sede`, `aliado_especie`                           | 001, 002, 006, 007, 012–016, 021, 078 |
 | **Mascotas**                        | `mascota`, `mascota_foto` + vista `v_historial_mascota`                                | 008–011                               |
 | **Servicios y horarios**            | `servicio`, `servicio_regla_precio`, `horario`, `bloqueo_agenda` (0007)                | 016, 018–022                          |
-| **Citas**                           | `cita`, `historial_estado`, `seleccion_horario` (0012) + vista `v_cita_detalle` (0013) | 029–032, 034                          |
+| **Citas**                           | `cita`, `historial_estado`, `seleccion_horario` (0012) + vista `v_cita_detalle` (0013) | 029–034                               |
 | **Registro de consulta**            | `consulta`, `consulta_anotacion` + vista `v_consulta_detalle` (0003)                   | 014, 017, 037, 042, 043               |
 | **Productos y pedidos**             | `producto`, `producto_foto`, `pedido`, `pedido_item`                                   | 044–050                               |
 | **Adopción**                        | `mascota_adopcion`, `solicitud_adopcion` + vista `v_catalogo_adopcion`                 | 078, 080, 082, 083, 087, 090, 092–094 |
@@ -99,6 +99,7 @@ Detalles de diseño:
 | No se bloquea ni se recorta el horario si deja citas vigentes sin cubrir (HU-022)                                    | Triggers de bloqueo y de horario               |
 | La fecha y hora elegidas se conservan por tutor y expiran; elegir otra reemplaza la anterior, no reservan (HU-029)   | `PK` por tutor + `CHECK` + FK con `CASCADE`    |
 | El motivo de la cita es texto de 1 a 500 caracteres, o NULL si no se indica (HU-030)                                 | `CHECK` en `cita` y `seleccion_horario`        |
+| Las recomendaciones del aliado son texto de 1 a 2000 caracteres, o NULL si no hay (HU-033)                           | `CHECK` en `cita`                              |
 | La reserva en curso apunta a la cita que creó: un reintento devuelve esa cita y no crea otra (HU-031)                | FK `seleccion_horario.cita_id`                 |
 | Precio según peso, edad o especie; sin regla o sin dato → precio base (HU-020)                                       | Función `fn_precio_servicio`                   |
 | Consulta cerrada no se edita ni se borra; se corrige con anotación (HU-042)                                          | Triggers + tabla de solo inserción             |
@@ -215,6 +216,20 @@ el mismo espacio o dos iguales para la misma mascota, servicio y hora). La vista
 nombres que se muestran; se consulta siempre filtrando por quien puede verla (el tutor, el administrador del aliado o un
 veterinario activo de ese aliado). Decisiones a confirmar: el motivo es **opcional**, y quien cancela una cita no borra
 su motivo (se conserva en la cita).
+
+**Cerrar la cita (HU-032, HU-033).** El modelo ya traía casi todo y no se duplicó: `fn_cita_validar` (0005) exige que solo
+el aliado (su administrador o un veterinario activo) pase una cita `AGENDADA` a `FINALIZADA` o `NO_ASISTIO`, rechaza
+hacerlo desde `PENDIENTE` y deja `FINALIZADA`, `NO_ASISTIO` y `CANCELADA` como estados finales; el trigger
+`trg_cita_historial` anota cada cambio en `historial_estado` (estado anterior, nuevo, fecha, responsable y, en la columna
+`motivo`, la observación que la API deja en `app.motivo`, que hoy solo usa la inasistencia); y esa tabla es de solo inserción. La migración 0014 solo agrega
+el `CHECK` de las recomendaciones y la columna `recomendaciones` a `v_cita_detalle`. **La hora** (la cita ya empezó) la
+comprueba la API contra el reloj de la base y no un trigger: un trigger impediría cargar o probar datos con citas
+futuras ya cerradas, y la descripción pide reforzar con restricciones existentes, no crear otras. El aviso al tutor usa la
+tabla `notificacion` tal cual (tipos `CITA_FINALIZADA` y `CITA_NO_ASISTIO`). Decisiones a confirmar: se puede cerrar desde la
+hora de **inicio** (no hace falta esperar a la hora de fin); `NO_ASISTIO` es definitivo; la observación existe solo
+al marcar una inasistencia (al finalizar no hay: lo clínico va en la consulta y lo del tutor, en las recomendaciones), se guarda en
+`historial_estado.motivo` (sin migración) y no la ve el tutor; solo el administrador y los veterinarios del aliado cierran
+citas (no existe otro tipo de empleado en el modelo).
 
 Lo que queda en la aplicación: los permisos por rol y el envío efectivo de notificaciones.
 

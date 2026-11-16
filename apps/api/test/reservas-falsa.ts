@@ -35,6 +35,7 @@ export type CitaFalsa = {
   estado: 'PENDIENTE' | 'AGENDADA' | 'CANCELADA';
   precio: number;
   motivo: string | null;
+  recomendaciones?: string | null;
 };
 
 export type BorradorFalso = {
@@ -350,6 +351,7 @@ export function bdReservas(o: OpcionesReserva = {}) {
               fin: new Date(c.fin),
               precio: String(c.precio),
               motivo: c.motivo,
+              recomendaciones: c.recomendaciones ?? null,
               creado_en: new Date('2099-01-01T00:00:00Z'),
               tutor_id: c.tutor_id,
               tutor_nombre: 'Ana Tutor',
