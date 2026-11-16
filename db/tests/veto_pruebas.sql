@@ -620,6 +620,64 @@ BEGIN
         UPDATE aliado SET modo_confirmacion = 'AUTOMATICA' WHERE id = a_iv;
     END;
 
+    -- ---------- HU-029 · Selección de fecha y hora del calendario ----------
+    DECLARE
+        srv_borrar uuid;
+    BEGIN
+        INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en)
+            VALUES (u_tutor, a_clinica, srv, vet1, now() + interval '2 days', now() + interval '2 days 30 minutes', now() + interval '1 hour');
+        PERFORM pg_temp.debe_pasar('se guarda la fecha y hora elegida',
+            EXISTS (SELECT 1 FROM seleccion_horario WHERE tutor_id = u_tutor AND veterinario_id = vet1));
+        PERFORM pg_temp.debe_fallar('un tutor tiene una sola selección a la vez',
+            format($q$INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en)
+                      VALUES (%L,%L,%L,%L, now() + interval '3 days', now() + interval '3 days 30 minutes', now() + interval '1 hour')$q$,
+                   u_tutor, a_clinica, srv, vet1), '23505');
+        -- Elegir otra fecha reemplaza la anterior (así lo hace la API con ON CONFLICT)
+        INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en)
+            VALUES (u_tutor, a_clinica, srv, vet1, now() + interval '3 days', now() + interval '3 days 30 minutes', now() + interval '1 hour')
+            ON CONFLICT (tutor_id) DO UPDATE SET inicio = EXCLUDED.inicio, fin = EXCLUDED.fin, expira_en = EXCLUDED.expira_en;
+        PERFORM pg_temp.debe_pasar('elegir otra fecha reemplaza la anterior',
+            (SELECT count(*) FROM seleccion_horario WHERE tutor_id = u_tutor) = 1
+            AND (SELECT inicio FROM seleccion_horario WHERE tutor_id = u_tutor) > now() + interval '2 days 12 hours');
+
+        PERFORM pg_temp.debe_fallar('el fin debe ser posterior al inicio',
+            format($q$INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en)
+                      VALUES (%L,%L,%L,%L, now() + interval '2 days', now() + interval '2 days', now() + interval '1 hour')$q$,
+                   u_tutor2, a_clinica, srv, vet1), '23514');
+        PERFORM pg_temp.debe_fallar('la selección debe vencer después de guardarse',
+            format($q$INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, actualizado_en, expira_en)
+                      VALUES (%L,%L,%L,%L, now() + interval '2 days', now() + interval '2 days 30 minutes', now(), now() - interval '1 minute')$q$,
+                   u_tutor2, a_clinica, srv, vet1), '23514');
+        PERFORM pg_temp.debe_fallar('el servicio debe ser del aliado elegido',
+            format($q$INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en)
+                      VALUES (%L,%L,%L,%L, now() + interval '2 days', now() + interval '2 days 30 minutes', now() + interval '1 hour')$q$,
+                   u_tutor2, a_clinica2, srv, vet2), '23503');
+        PERFORM pg_temp.debe_fallar('el veterinario debe ser del aliado elegido',
+            format($q$INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en)
+                      VALUES (%L,%L,%L,%L, now() + interval '2 days', now() + interval '2 days 30 minutes', now() + interval '1 hour')$q$,
+                   u_tutor2, a_clinica, srv, vet2), '23503');
+        PERFORM pg_temp.debe_fallar('la selección es de una cuenta real',
+            format($q$INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en)
+                      VALUES (gen_random_uuid(),%L,%L,%L, now() + interval '2 days', now() + interval '2 days 30 minutes', now() + interval '1 hour')$q$,
+                   a_clinica, srv, vet1), '23503');
+
+        -- Elegir un espacio no lo reserva: otro tutor puede tener elegido el mismo
+        INSERT INTO seleccion_horario (tutor_id, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en)
+            SELECT u_tutor2, aliado_id, servicio_id, veterinario_id, inicio, fin, expira_en
+              FROM seleccion_horario WHERE tutor_id = u_tutor;
+        PERFORM pg_temp.debe_pasar('dos tutores pueden tener elegido el mismo espacio (no se reserva)',
+            (SELECT count(DISTINCT tutor_id) FROM seleccion_horario WHERE inicio = (SELECT inicio FROM seleccion_horario WHERE tutor_id = u_tutor)) = 2);
+
+        -- Si el servicio se borra, la elección desaparece con él
+        INSERT INTO servicio (aliado_id, tipo_servicio_id, nombre, modalidad, sede_id, precio_base)
+            VALUES (a_clinica, t_cons, 'Servicio temporal', 'EN_SEDE', sede1, 1000) RETURNING id INTO srv_borrar;
+        UPDATE seleccion_horario SET servicio_id = srv_borrar WHERE tutor_id = u_tutor2;
+        DELETE FROM servicio WHERE id = srv_borrar;
+        PERFORM pg_temp.debe_pasar('al borrar el servicio se descarta la selección que lo usaba',
+            NOT EXISTS (SELECT 1 FROM seleccion_horario WHERE tutor_id = u_tutor2)
+            AND EXISTS (SELECT 1 FROM seleccion_horario WHERE tutor_id = u_tutor));
+    END;
+
     -- ---------- HU-078: registro de fundaciones ----------
     DECLARE
         u_f uuid; a_f uuid;

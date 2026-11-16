@@ -9,7 +9,7 @@ modelo de datos (`docs/modelo-de-datos.md`).
 | `aliados`        | Clínicas, veterinarios independientes, tiendas y fundaciones; veterinarios y sedes | aliado, veterinario, sede, aliado_especie                                              | HU-007, 012–016, 021, 023, 078–079       |
 | `mascotas`       | Mascotas del tutor y su historial                                                  | mascota, mascota_foto, especie                                                         | HU-008–011                               |
 | `servicios`      | Servicios, precios, horarios y búsqueda/descubrimiento                             | servicio, servicio_regla_precio, horario, bloqueo_agenda, tipo_servicio                | HU-016, 018–022, 024–028                 |
-| `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado                                                                 | HU-029, 031, 032, 034                    |
+| `citas`          | Agendamiento y ciclo de vida de la cita                                            | cita, historial_estado, seleccion_horario                                              | HU-029, 031, 032, 034                    |
 | `clinica`        | Registro de consulta y anotaciones de corrección                                   | consulta, consulta_anotacion                                                           | HU-014, 017, 037, 042, 043               |
 | `comercio`       | Productos y pedidos                                                                | producto, producto_foto, pedido, pedido_item, categoria_producto                       | HU-044–050                               |
 | `adopcion`       | Mascotas en adopción y solicitudes                                                 | mascota_adopcion, mascota_adopcion_media, solicitud_adopcion                           | HU-080, 082, 084, 086, 087, 090, 092–094 |
@@ -187,7 +187,23 @@ aliadoId, especieId)` (un aliado sin especies configuradas no es compatible con 
   bloqueos: `POST | GET /api/aliados/:aliadoId/veterinarios/:veterinarioId/bloqueos` y `DELETE .../:bloqueoId`.
   El tutor consulta `GET /api/aliados/:aliadoId/disponibilidad?servicioId=&desde=&hasta=[&veterinarioId=]`
   (público, máximo 31 días): devuelve los espacios en que el servicio cabe completo, cada uno con su
-  `veterinarioId`. **HU-029 debe reservar uno de esos espacios con su `veterinarioId`** y mostrar el `estado`
-  que devuelve el `INSERT`. Un cambio de horario o un bloqueo responde 409 si deja citas vigentes sin
+  `veterinarioId`. **HU-031 debe reservar uno de esos espacios con su `veterinarioId`** y mostrar el `estado`
+  que devuelve el `INSERT` (la elección del tutor la guarda HU-029, abajo). Un cambio de horario o un bloqueo responde 409 si deja citas vigentes sin
   cubrir; la respuesta del bloqueo lista esas citas (`citas`). Lee las citas ocupadas solo a través de
   `CitasService.ocupadosEntre` y `vigentesEnIntervalo`.
+- **Elegir fecha y hora (HU-029):** el tutor (rol `TUTOR`) toma un espacio de la disponibilidad y lo elige con
+  `PUT /api/reservas/seleccion` y `{ servicioId, veterinarioId, inicio }` (el `inicio` con zona horaria, tal como lo
+  devolvió la disponibilidad; el `fin` lo calcula la API con la duración del servicio). Solo se acepta un espacio
+  exacto de los que ofrece el calendario de ese veterinario. Si no, responde **400** `{ motivo: "PASADO" }` si la hora
+  ya pasó, o **409** `{ motivo: "OCUPADO" }` si otra cita (pendiente o agendada) ya lo ocupa, o
+  `{ motivo: "NO_DISPONIBLE" }` si el aliado no atiende así (fuera del horario, bloqueado, a mitad de un espacio o con
+  otra duración); cada una trae `message` para mostrar. Si es válida, la conserva (una selección por tutor; elegir
+  otra la reemplaza) y devuelve la selección con los nombres del servicio y del veterinario, `venceEn` y
+  `vigente: true`. `GET /api/reservas/seleccion` la devuelve en cualquier paso posterior (motivo, confirmación,
+  recarga) **vuelta a comprobar**: si entretanto la tomó otra persona, el aliado la bloqueó o pasó la hora, responde
+  `vigente: false` con el `motivo` y la web debe pedir elegir otra; 404 si no hay o ya venció (60 minutos,
+  `MINUTOS_VIGENCIA_SELECCION`). `DELETE /api/reservas/seleccion` la descarta (204, no falla si no había).
+  **Elegir no reserva el espacio**: HU-031 debe leer la selección, crear la cita (la base valida de nuevo) y
+  descartarla; si el `INSERT` falla por solapamiento, avisar y volver al calendario. La tabla `seleccion_horario` es
+  del módulo `citas` (`CitasService.guardarSeleccion | obtenerSeleccion | eliminarSeleccion`); la validación y los
+  endpoints viven en `servicios` porque usan el cálculo de la disponibilidad.

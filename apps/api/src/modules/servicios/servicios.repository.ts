@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
-import type { GuardarReglasPrecio, GuardarServicio, ReglaPrecio, Servicio, OrdenServicios, ServicioConReglas } from '@veto/shared';
+import type {
+  GuardarReglasPrecio,
+  GuardarServicio,
+  ReglaPrecio,
+  Servicio,
+  OrdenServicios,
+  ServicioConReglas,
+} from '@veto/shared';
 import type { Consultor } from '../../database/database.service';
 
 interface ServicioRow extends QueryResultRow {
@@ -40,7 +47,7 @@ const ORDENES: Record<OrdenServicios, string> = {
   nombre: 'd.nombre, d.id',
   precio_asc: 'precio_desde ASC, d.nombre, d.id',
   precio_desc: 'precio_desde DESC, d.nombre, d.id',
-};  
+};
 
 // Misma condición de disponibilidad que usa buscarDisponible / listar(soloDisponibles)
 const CONDICION_DISPONIBLE = `
@@ -49,8 +56,6 @@ const CONDICION_DISPONIBLE = `
     SELECT 1 FROM sede se
      WHERE se.id = s.sede_id AND se.aliado_id = s.aliado_id AND se.activa
   ))`;
-
-
 
 /** Orden de los parámetros $3..$9 en INSERT y UPDATE. */
 function columnas(datos: GuardarServicio): unknown[] {

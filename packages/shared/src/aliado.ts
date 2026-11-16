@@ -61,4 +61,3 @@ export type AliadoPublico = {
   ciudad: string | null;
   ubicacion: string | null;
 };
-

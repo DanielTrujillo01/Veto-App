@@ -62,7 +62,7 @@ Solo uso `jsonb` en las respuestas del formulario de adopción (HU-090), para po
 | **Usuarios y aliados**              | `usuario`, `aliado`, `veterinario`, `sede`, `aliado_especie`            | 001, 002, 006, 007, 012–016, 021, 078 |
 | **Mascotas**                        | `mascota`, `mascota_foto` + vista `v_historial_mascota`                 | 008–011                               |
 | **Servicios y horarios**            | `servicio`, `servicio_regla_precio`, `horario`, `bloqueo_agenda` (0007) | 016, 018–022                          |
-| **Citas**                           | `cita`, `historial_estado`                                              | 029, 031, 032, 034                    |
+| **Citas**                           | `cita`, `historial_estado`, `seleccion_horario` (0012)                  | 029, 031, 032, 034                    |
 | **Registro de consulta**            | `consulta`, `consulta_anotacion` + vista `v_consulta_detalle` (0003)    | 014, 017, 037, 042, 043               |
 | **Productos y pedidos**             | `producto`, `producto_foto`, `pedido`, `pedido_item`                    | 044–050                               |
 | **Adopción**                        | `mascota_adopcion`, `solicitud_adopcion` + vista `v_catalogo_adopcion`  | 078, 080, 082, 083, 087, 090, 092–094 |
@@ -97,6 +97,7 @@ Detalles de diseño:
 | Una cita pendiente también ocupa el espacio; solo el aliado la acepta (→ AGENDADA) o la rechaza (→ CANCELADA)        | Trigger + `EXCLUDE` e índice                   |
 | Una cita no cae en un bloqueo del calendario; los bloqueos de un veterinario no se solapan (HU-022)                  | Trigger + `EXCLUDE`                            |
 | No se bloquea ni se recorta el horario si deja citas vigentes sin cubrir (HU-022)                                    | Triggers de bloqueo y de horario               |
+| La fecha y hora elegidas se conservan por tutor y expiran; elegir otra reemplaza la anterior, no reservan (HU-029)   | `PK` por tutor + `CHECK` + FK con `CASCADE`    |
 | Precio según peso, edad o especie; sin regla o sin dato → precio base (HU-020)                                       | Función `fn_precio_servicio`                   |
 | Consulta cerrada no se edita ni se borra; se corrige con anotación (HU-042)                                          | Triggers + tabla de solo inserción             |
 | Pedido: valida producto activo, descuenta stock, lo devuelve al cancelar; no se cancela tras despachar (HU-046, 049) | Triggers `fn_pedido_item` y `fn_pedido_estado` |
@@ -189,6 +190,16 @@ las reservas se validan contra el horario de cada veterinario. Reglas que hace c
 El calendario que ve el tutor no se guarda: se calcula en cada consulta (horario menos bloqueos menos citas vigentes,
 en espacios consecutivos de la duración del servicio) y por eso refleja los cambios al instante. Las horas del horario
 son "hora de pared" y se interpretan en la zona horaria de la base, igual que la regla que valida las reservas.
+
+**Elegir fecha y hora (HU-029).** El tutor elige un espacio del calendario y la API lo conserva en `seleccion_horario`,
+una fila por tutor (elegir otro espacio reemplaza el anterior) que vence a los 60 minutos. Existe para que la elección
+sobreviva a avanzar en la reserva o a recargar la página, y para que el paso que crea la cita (HU-031) parta de lo que el
+calendario ofreció. **No reserva el espacio**: dos tutores pueden tener elegido el mismo y solo uno lo logra, porque lo que
+ocupa el espacio es el `INSERT` de la cita, que sigue validando horario, bloqueos y solapamientos. Como la elección es
+un borrador, las reglas de qué se puede elegir se comprueban en la aplicación con el mismo cálculo del calendario
+(HU-022), de modo que lo que el calendario ofrece y lo que se acepta no se contradicen: se acepta un espacio exacto de los
+que ofrece y nada más (no una hora pasada, ocupada, bloqueada, fuera del horario ni a mitad de un espacio). Al leer la selección
+se vuelve a comprobar y se avisa si dejó de servir (`vigente: false` con el motivo).
 
 Lo que queda en la aplicación: los permisos por rol y el envío efectivo de notificaciones.
 

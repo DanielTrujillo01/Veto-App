@@ -5,7 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import type { EstadoAliado, PerfilUsuario, RegistroAliado, TipoAliado, AliadoPublico } from '@veto/shared';
+import type {
+  EstadoAliado,
+  PerfilUsuario,
+  RegistroAliado,
+  TipoAliado,
+  AliadoPublico,
+} from '@veto/shared';
 import { DatabaseService, type Consultor } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { IdentidadService } from '../identidad/identidad.service';
@@ -164,7 +170,6 @@ export class AliadosService {
       creadoEn: new Date(fila.creado_en).toISOString(),
     };
   }
-
 
   /** HU público: detalle de un aliado activo para los tutores. Las fundaciones no se exponen. */
   async obtenerPublico(aliadoId: string): Promise<AliadoPublico> {

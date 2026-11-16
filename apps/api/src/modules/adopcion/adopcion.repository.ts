@@ -159,21 +159,21 @@ export class AdopcionRepository {
     return r.rows.map((row) => aMascotaAdopcion(row));
   }
 
-async listarPublicas(client: Consultor): Promise<MascotaAdopcionPublica[]> {
-  const r = await client.query<MascotaAdopcionPublicaRow>(
-    `SELECT ${COLUMNAS_PUBLICAS} FROM v_catalogo_adopcion ORDER BY id`,
-  );
-  return r.rows.map(aMascotaPublica);
-}
+  async listarPublicas(client: Consultor): Promise<MascotaAdopcionPublica[]> {
+    const r = await client.query<MascotaAdopcionPublicaRow>(
+      `SELECT ${COLUMNAS_PUBLICAS} FROM v_catalogo_adopcion ORDER BY id`,
+    );
+    return r.rows.map(aMascotaPublica);
+  }
 
-/** Detalle público: solo mascotas DISPONIBLES de fundaciones activas, sin datos de la fundación. */
-async buscarPublica(client: Consultor, id: string): Promise<MascotaAdopcionPublica | null> {
-  const r = await client.query<MascotaAdopcionPublicaRow>(
-    `SELECT ${COLUMNAS_PUBLICAS} FROM v_catalogo_adopcion WHERE id = $1`,
-    [id],
-  );
-  return r.rows[0] ? aMascotaPublica(r.rows[0]) : null;
-}
+  /** Detalle público: solo mascotas DISPONIBLES de fundaciones activas, sin datos de la fundación. */
+  async buscarPublica(client: Consultor, id: string): Promise<MascotaAdopcionPublica | null> {
+    const r = await client.query<MascotaAdopcionPublicaRow>(
+      `SELECT ${COLUMNAS_PUBLICAS} FROM v_catalogo_adopcion WHERE id = $1`,
+      [id],
+    );
+    return r.rows[0] ? aMascotaPublica(r.rows[0]) : null;
+  }
 
   private async reemplazarMedios(
     client: PoolClient,

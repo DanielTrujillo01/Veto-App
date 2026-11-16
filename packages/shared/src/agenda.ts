@@ -87,3 +87,53 @@ export type Disponibilidad = {
   duracionMin: number;
   espacios: EspacioDisponible[];
 };
+
+/** Minutos que se conserva la selección de fecha y hora si la persona no la cambia ni la confirma. */
+export const MINUTOS_VIGENCIA_SELECCION = 60;
+
+/**
+ * HU-029: el tutor elige un espacio del calendario del aliado. Solo se envía lo que el calendario
+ * le mostró (servicio, veterinario e inicio): el fin lo calcula la API con la duración del servicio.
+ */
+export const seleccionarHorarioSchema = z.object({
+  servicioId: z.uuid('El servicio no es válido'),
+  veterinarioId: z.uuid('El veterinario no es válido'),
+  inicio: instanteSchema,
+});
+export type SeleccionarHorario = z.infer<typeof seleccionarHorarioSchema>;
+
+/**
+ * Por qué un horario no se puede elegir:
+ * - `PASADO`: la fecha y hora ya pasaron.
+ * - `OCUPADO`: otra cita ya ocupa ese espacio.
+ * - `NO_DISPONIBLE`: el aliado no atiende así (fuera del horario, bloqueado o no es uno de los espacios que ofrece).
+ */
+export const MOTIVOS_HORARIO_NO_DISPONIBLE = ['PASADO', 'OCUPADO', 'NO_DISPONIBLE'] as const;
+export type MotivoHorarioNoDisponible = (typeof MOTIVOS_HORARIO_NO_DISPONIBLE)[number];
+
+export const MENSAJES_HORARIO_NO_DISPONIBLE: Record<MotivoHorarioNoDisponible, string> = {
+  PASADO: 'No puedes elegir una fecha u hora que ya pasó',
+  OCUPADO: 'Ese horario ya fue tomado: elige otro',
+  NO_DISPONIBLE: 'El aliado no atiende en ese horario: elige uno del calendario',
+};
+
+/** Fecha y hora elegidas en el calendario, tal como se conservan mientras avanza la reserva. */
+export type SeleccionHorario = {
+  aliadoId: string;
+  servicioId: string;
+  servicioNombre: string;
+  veterinarioId: string;
+  veterinarioNombre: string;
+  inicio: string;
+  fin: string;
+  /** Hasta cuándo se conserva si no se vuelve a elegir. */
+  venceEn: string;
+};
+
+/**
+ * La selección guardada y si todavía se puede reservar: otra persona pudo tomar el espacio, el
+ * aliado pudo bloquearlo o la hora pudo pasar desde que se eligió.
+ */
+export type EstadoSeleccionHorario =
+  | (SeleccionHorario & { vigente: true })
+  | (SeleccionHorario & { vigente: false; motivo: MotivoHorarioNoDisponible });

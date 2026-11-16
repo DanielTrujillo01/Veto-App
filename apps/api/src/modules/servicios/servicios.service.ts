@@ -21,13 +21,11 @@ import { AliadoEspeciesService } from '../aliados/aliado-especies.service';
 import { AliadosService } from '../aliados/aliados.service';
 import { CitasService } from '../citas/citas.service';
 import { MascotasService } from '../mascotas/mascotas.service';
-import { ServiciosRepository} from './servicios.repository';
+import { ServiciosRepository } from './servicios.repository';
 
 /** Solo clínicas y veterinarios independientes ofrecen servicios (la BD también lo exige). */
 const TIPOS_CON_SERVICIOS: TipoAliado[] = ['CLINICA', 'VET_INDEPENDIENTE'];
 const NO_ENCONTRADO = 'El servicio no existe o no pertenece a este aliado';
-
-
 
 function errorDeCampo(campo: string, mensaje: string) {
   return new BadRequestException({
@@ -205,7 +203,7 @@ export class ServiciosService {
   }
   /** Listar todos los servicios publicos con sus reglas de negocio*/
   async listarTodosDisponibles(orden: OrdenServicios): Promise<ServicioConReglas[]> {
-  return this.repo.listarTodosDisponibles(this.db, orden);
+    return this.repo.listarTodosDisponibles(this.db, orden);
   }
 
   listarTipos() {
