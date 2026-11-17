@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { CategoriaProducto, FiltrosCatalogoProductos, OrdenProductos, ProductoCatalogo } from '@veto/shared';
+import type { CategoriaProducto, FiltrosCatalogoProductos, ProductoCatalogo } from '@veto/shared';
 import { DatabaseService } from '../../database/database.service';
 import { ProductosRepository } from './productos.repository';
 

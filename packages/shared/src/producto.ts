@@ -110,9 +110,6 @@ export const filtrarProductosGestionSchema = z.object({
 });
 export type FiltrarProductosGestion = z.infer<typeof filtrarProductosGestionSchema>;
 
-/** Categoría de producto (catálogo del sistema: Alimentos, Accesorios, Higiene...). */
-export type CategoriaProducto = { id: number; nombre: string };
-
 /** Producto tal como lo ve la tienda que lo administra (HU-044). */
 export type ProductoGestion = {
   id: string;

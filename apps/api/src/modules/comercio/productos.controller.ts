@@ -1,6 +1,6 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { ordenProductosSchema, catalogoProductosSchema } from '@veto/shared';
+import { catalogoProductosSchema } from '@veto/shared';
 import { validar } from '../../common/validacion';
 import { ProductosGestionService } from './productos-gestion.service';
 import { ProductosService } from './productos.service';
@@ -14,14 +14,8 @@ export class ProductosController {
   ) {}
 
   @Get('categorias')
-  @ApiOperation({ summary: 'Categorías de producto del sistema (público, HU-044)' })
-  categorias() {
-    return this.gestion.listarCategorias();
-  }
-
-  @Get('categorias')
   @ApiOperation({
-    summary: 'Listar categorías persistidas de productos (público)',
+    summary: 'Categorías de producto del sistema (público, HU-044)',
     description: 'Devuelve los identificadores y nombres de categoria_producto ordenados por id.',
   })
   @ApiResponse({

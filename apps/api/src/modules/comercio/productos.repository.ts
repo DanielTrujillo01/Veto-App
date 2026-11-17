@@ -70,6 +70,14 @@ export class ProductosRepository {
         ORDER BY ${ORDENES[orden]}`,
       [categoriaId ?? null, nombre ?? null],
     );
+    if (r.rows.length === 0) return [];
+    const porProducto = await this.fotos(
+      client,
+      r.rows.map((fila) => fila.id),
+    );
+    return r.rows.map((fila) => aProducto(fila, porProducto.get(fila.id) ?? []));
+  }
+
   /** HU-046: un producto visible, o null si no existe o ya no está visible. */
   async buscarVisible(client: Consultor, id: string): Promise<ProductoCatalogo | null> {
     const r = await client.query<ProductoRow>(`${SELECT_VISIBLE} AND p.id = $1`, [id]);
@@ -77,17 +85,6 @@ export class ProductosRepository {
     if (!fila) return null;
     const fotos = await this.fotos(client, [fila.id]);
     return aProducto(fila, fotos.get(fila.id) ?? []);
-  }
-
-  /** Productos disponibles de tiendas activas, ordenados sobre todo el catálogo. */
-  async listarDisponibles(client: Consultor, orden: OrdenProductos): Promise<ProductoCatalogo[]> {
-    const r = await client.query<ProductoRow>(`${SELECT_VISIBLE} ORDER BY ${ORDENES[orden]}`);
-    if (r.rows.length === 0) return [];
-    const porProducto = await this.fotos(
-      client,
-      r.rows.map((fila) => fila.id),
-    );
-    return r.rows.map((fila) => aProducto(fila, porProducto.get(fila.id) ?? []));
   }
 
   /** Fotos publicadas de cada producto, en su orden: la primera es la portada (HU-044). */
