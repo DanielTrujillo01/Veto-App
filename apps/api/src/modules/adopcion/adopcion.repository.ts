@@ -5,6 +5,7 @@ import type {
   MascotaAdopcion,
   MascotaAdopcionPublica,
   EditarMascotaAdopcion,
+  FiltrosCatalogoAdopcion,
   PublicarMascotaAdopcion,
 } from '@veto/shared';
 import type { Consultor } from '../../database/database.service';
@@ -159,9 +160,27 @@ export class AdopcionRepository {
     return r.rows.map((row) => aMascotaAdopcion(row));
   }
 
-  async listarPublicas(client: Consultor): Promise<MascotaAdopcionPublica[]> {
+  async listarPublicas(
+    client: Consultor,
+    filtros: FiltrosCatalogoAdopcion = {},
+  ): Promise<MascotaAdopcionPublica[]> {
+    const condiciones: string[] = [];
+    const valores: (number | string)[] = [];
+    const agregar = (condicion: string, valor: number | string) => {
+      valores.push(valor);
+      condiciones.push(condicion.replace('?', `$${valores.length}`));
+    };
+
+    if (filtros.especieId !== undefined) agregar('especie_id = ?', filtros.especieId);
+    if (filtros.edadMinMeses !== undefined) agregar('edad_meses >= ?', filtros.edadMinMeses);
+    if (filtros.edadMaxMeses !== undefined) agregar('edad_meses <= ?', filtros.edadMaxMeses);
+    if (filtros.tamano !== undefined) agregar('tamano = ?', filtros.tamano);
+    if (filtros.ubicacion !== undefined) agregar('ubicacion = ?', filtros.ubicacion);
+
+    const where = condiciones.length > 0 ? ` WHERE ${condiciones.join(' AND ')}` : '';
     const r = await client.query<MascotaAdopcionPublicaRow>(
-      `SELECT ${COLUMNAS_PUBLICAS} FROM v_catalogo_adopcion ORDER BY id`,
+      `SELECT ${COLUMNAS_PUBLICAS} FROM v_catalogo_adopcion${where} ORDER BY id`,
+      valores,
     );
     return r.rows.map(aMascotaPublica);
   }

@@ -13,12 +13,14 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import {
   cambiarEstadoMascotaAdopcionSchema,
   editarMascotaAdopcionSchema,
+  filtrarCatalogoAdopcionSchema,
   listarMascotasAdopcionSchema,
   publicarMascotaAdopcionSchema,
+  TAMANOS_MASCOTA,
 } from '@veto/shared';
 import { validar } from '../../common/validacion';
 import { AuthGuard, type RequestAutenticada } from '../identidad/auth.guard';
@@ -45,9 +47,45 @@ export class AdopcionController {
   }
 
   @Get('catalogo')
-  @ApiOperation({ summary: 'Consultar el catálogo público de mascotas en adopción (HU-080)' })
-  catalogo() {
-    return this.adopcion.listarCatalogo();
+  @ApiOperation({
+    summary: 'Consultar el catálogo público de mascotas en adopción (HU-080, HU-088)',
+    description:
+      'Filtros opcionales por especie, rango inclusivo de edad en meses, tamaño y ubicación exacta. ' +
+      'Se admite cualquiera de los límites de edad o ambos; las publicaciones siguen siendo anónimas.',
+  })
+  @ApiQuery({
+    name: 'especieId',
+    required: false,
+    type: Number,
+    description: 'ID positivo del catálogo de especies.',
+  })
+  @ApiQuery({
+    name: 'edadMinMeses',
+    required: false,
+    type: Number,
+    description: 'Límite inferior inclusivo (0–32767). Puede enviarse solo.',
+  })
+  @ApiQuery({
+    name: 'edadMaxMeses',
+    required: false,
+    type: Number,
+    description: 'Límite superior inclusivo (0–32767). Puede enviarse solo.',
+  })
+  @ApiQuery({ name: 'tamano', required: false, enum: TAMANOS_MASCOTA })
+  @ApiQuery({
+    name: 'ubicacion',
+    required: false,
+    type: String,
+    description: 'Coincidencia textual exacta, sin normalización.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista anónima de publicaciones disponibles; puede estar vacía.',
+  })
+  @ApiResponse({ status: 400, description: 'Uno o más filtros no son válidos.' })
+  @ApiResponse({ status: 500, description: 'Error interno al consultar el catálogo.' })
+  catalogo(@Query() query: unknown) {
+    return this.adopcion.listarCatalogo(validar(filtrarCatalogoAdopcionSchema, query));
   }
 
   @Get('mis-publicaciones')

@@ -1,6 +1,6 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ordenProductosSchema } from '@veto/shared';
+import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { catalogoProductosSchema } from '@veto/shared';
 import { validar } from '../../common/validacion';
 import { ProductosGestionService } from './productos-gestion.service';
 import { ProductosService } from './productos.service';
@@ -14,19 +14,57 @@ export class ProductosController {
   ) {}
 
   @Get('categorias')
-  @ApiOperation({ summary: 'Categorías de producto del sistema (público, HU-044)' })
+  @ApiOperation({
+    summary: 'Categorías de producto del sistema (público, HU-044)',
+    description: 'Devuelve los identificadores y nombres de categoria_producto ordenados por id.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Categorías de producto.',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { id: { type: 'integer' }, nombre: { type: 'string' } },
+      },
+    },
+  })
   categorias() {
-    return this.gestion.listarCategorias();
+    return this.productos.listarCategorias();
   }
 
   @Get()
   @ApiOperation({
-    summary: 'Todos los productos disponibles (público)',
-    description: '?orden=nombre | precio_asc | precio_desc. El orden se aplica a todo el catálogo.',
+    summary: 'Productos disponibles con filtros opcionales (público)',
+    description:
+      'Filtros combinables categoriaId y nombre (coincidencia parcial sin distinguir mayúsculas ' +
+      'ni acentos). El orden se aplica al catálogo completo y conserva las opciones existentes.',
   })
+  @ApiQuery({
+    name: 'categoriaId',
+    required: false,
+    type: Number,
+    description: 'ID positivo de categoria_producto (1–32767).',
+  })
+  @ApiQuery({
+    name: 'nombre',
+    required: false,
+    type: String,
+    description: 'Texto opcional buscado parcialmente solo en el nombre del producto.',
+  })
+  @ApiQuery({
+    name: 'orden',
+    required: false,
+    enum: ['nombre', 'precio_asc', 'precio_desc'],
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Productos disponibles; lista vacía si no hay coincidencias.',
+  })
+  @ApiResponse({ status: 400, description: 'categoriaId u orden no válidos.' })
+  @ApiResponse({ status: 500, description: 'Error interno al consultar el catálogo.' })
   todos(@Query() query: unknown) {
-    const { orden } = validar(ordenProductosSchema, query);
-    return this.productos.listarDisponibles(orden);
+    return this.productos.listarDisponibles(validar(catalogoProductosSchema, query));
   }
 
   @Get(':productoId')

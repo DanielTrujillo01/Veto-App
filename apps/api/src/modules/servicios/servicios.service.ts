@@ -7,12 +7,12 @@ import {
 import type { PoolClient } from 'pg';
 import type {
   FiltrarServicios,
+  FiltrosCatalogoServicios,
   GuardarReglasPrecio,
   GuardarServicio,
   ReglaPrecio,
   Servicio,
   TipoAliado,
-  OrdenServicios,
   ServicioConReglas,
 } from '@veto/shared';
 import { DatabaseService, type Consultor } from '../../database/database.service';
@@ -210,8 +210,8 @@ export class ServiciosService {
     return servicio;
   }
   /** Listar todos los servicios publicos con sus reglas de negocio*/
-  async listarTodosDisponibles(orden: OrdenServicios): Promise<ServicioConReglas[]> {
-    return this.repo.listarTodosDisponibles(this.db, orden);
+  async listarTodosDisponibles(filtros: FiltrosCatalogoServicios): Promise<ServicioConReglas[]> {
+    return this.repo.listarTodosDisponibles(this.db, filtros);
   }
 
   listarTipos() {

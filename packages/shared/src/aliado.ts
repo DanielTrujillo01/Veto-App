@@ -50,6 +50,15 @@ export const registroAliadoSchema = z
   }));
 export type RegistroAliado = z.infer<typeof registroAliadoSchema>;
 
+/** HU-024: criterios del buscador de aliados para tutores. */
+export const BUSQUEDA_ALIADOS_MAX_RESULTADOS = 10;
+export const buscarAliadosSchema = z.object({
+  nombre: z
+    .string()
+    .min(1, 'El nombre es obligatorio')
+    .refine((nombre) => nombre.trim().length > 0, 'El nombre es obligatorio'),
+});
+export type BuscarAliados = z.infer<typeof buscarAliadosSchema>;
 /** Datos públicos de un aliado, visibles para los tutores. Nunca una fundación. */
 export type AliadoPublico = {
   id: string;
@@ -61,3 +70,5 @@ export type AliadoPublico = {
   ciudad: string | null;
   ubicacion: string | null;
 };
+
+export type AliadoBusqueda = Pick<AliadoPublico, 'id' | 'nombre' | 'tipo'>;
