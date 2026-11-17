@@ -30,7 +30,6 @@ import { SedesService } from './sedes.service';
 @Module({
   imports: [IdentidadModule, MascotasModule],
   controllers: [
-    AliadosController,
     RegistroFundacionController,
     VeterinariosController,
     VeterinarioPerfilController,

@@ -20,7 +20,7 @@ La entrada inválida se rechaza con 400 según el contrato común de validación
 
 La respuesta no expone datos de contacto ni información privada que no sea necesaria para identificar el aliado.
 
-La búsqueda distingue mayúsculas y acentos, conforme a la definición de esta HU.
+La búsqueda acepta coincidencias parciales dentro del nombre del aliado. No es necesario ingresar el nombre completo. La comparación ignora diferencias de mayúsculas y acentos, y normaliza espacios redundantes, conforme al comportamiento de la búsqueda general de HU-025.
 
 Reutilización de catálogos y anonimato de adopción
 
@@ -30,8 +30,8 @@ La búsqueda de aliados no busca ni devuelve fundaciones o resultados del catál
 
 Definiciones confirmadas
 
-La coincidencia es exacta y sensible a mayúsculas y acentos.
-La API devuelve como máximo 10 coincidencias; no requiere paginación.
+La coincidencia es parcial dentro del nombre y no requiere ingresar el nombre completo. La comparación ignora mayúsculas, acentos y espacios redundantes.
+La búsqueda general devuelve hasta 10 coincidencias por categoría; una categoría no reduce los resultados disponibles de otra. No requiere paginación.
 El debounce de 300 ms corresponde al Frontend; el Backend procesa cada solicitud que recibe, sin añadir esa espera.
 
 3. Endpoints propuestos
@@ -88,23 +88,24 @@ Errores esperados: 500 ante un fallo inesperado. Una lista vacía es una respues
 
 Buscar aliados por nombre
 
-GET /api/aliados/busqueda?nombre={texto}
+GET /api/busqueda?nombre={texto}
 
-Estado: Endpoint nuevo propuesto; no existe actualmente una búsqueda común por nombre. Se propone la ruta de dos segmentos para no colisionar con GET /api/aliados/:aliadoId.
+Estado: Endpoint general existente de HU-025, consumido por el buscador del Frontend para permitir coincidencias parciales. GET /api/aliados/busqueda/nombre permanece como endpoint legado de HU-024 y conserva su contrato exacto para clientes existentes.
 Acceso: Sesión autenticada con rol TUTOR (AuthGuard y RolesGuard).
 Parámetros: nombre requerido, texto.
 Cuerpo: Ninguno.
-Validaciones propuestas: Rechazar valor ausente o vacío después de recortar espacios con 400 y el formato común de validación. La búsqueda distingue mayúsculas y acentos. La coincidencia es exacta y se limita la respuesta a un máximo de 10 resultados, sin paginación. La consulta debe usar SQL parametrizado. Solo se consideran aliados ACTIVO de tipo CLINICA, VET_INDEPENDIENTE o TIENDA; se excluyen FUNDACION y los datos de contacto.
+Validaciones: Rechazar valor ausente o vacío después de recortar espacios con 400 y el formato común de validación. La coincidencia es parcial, ignora mayúsculas y acentos y normaliza espacios. La búsqueda general devuelve hasta 10 coincidencias por categoría. Para resultados de aliados solo se consideran registros ACTIVO de tipo CLINICA, VET_INDEPENDIENTE o TIENDA; se excluyen FUNDACION y los datos de contacto. El buscador general también cubre perfiles veterinarios, productos y servicios según HU-025.
 
-Respuesta exitosa propuesta (contrato ilustrativo, aún no implementado):
+Respuesta exitosa de la búsqueda general:
 
-[
-{
-"id": "uuid",
-"nombre": "Aliado Ejemplo",
-"tipo": "CLINICA"
-}
-]
+    {
+      "resultadosPorCategoria": [
+        {
+          "categoria": "CLINICA",
+          "resultados": [{ "id": "uuid", "nombre": "Clínica Ejemplo" }]
+        }
+      ]
+    }
 
 Errores esperados: 400 si falta o es inválido nombre; 500 ante un fallo inesperado. Sin resultados: 200 []. 401 si falta una sesión válida; 403 si la sesión no corresponde al rol TUTOR.
 
@@ -116,7 +117,7 @@ Situación
 
 400
 
-Parámetro orden inválido en el catálogo de productos o parámetro nombre ausente/inválido en el endpoint propuesto. La búsqueda requiere un nombre no vacío y usa coincidencia exacta.
+Parámetro orden inválido en el catálogo de productos o parámetro nombre ausente/inválido en la búsqueda. La búsqueda requiere un texto no vacío y admite coincidencias parciales sin exigir el nombre completo.
 
 401
 
@@ -134,7 +135,7 @@ La API usa errores de validación 400 con { "message": "Revisa los datos ingresa
 
 5. Definition of Done (DoD)
 
-El endpoint realiza coincidencia exacta sensible a mayúsculas y acentos, devuelve como máximo 10 resultados y no implementa paginación.
+El buscador del Frontend consume la búsqueda general de HU-025, que encuentra coincidencias parciales sin requerir el nombre completo e ignora mayúsculas, acentos y espacios redundantes. Devuelve como máximo 10 resultados por categoría y no implementa paginación.
 
 Existe el endpoint de búsqueda acordado, documentado en Swagger y validado con esquema compartido; filtra por nombre y por tipos de aliado aprobados, excluye fundaciones y no expone datos de contacto.
 
@@ -166,7 +167,7 @@ No se requiere entidad, tabla o migración nueva; índice por nombre solo se pro
 
 Definiciones funcionales aplicadas
 
-Búsqueda exacta, sensible a mayúsculas y acentos.
+Búsqueda parcial dentro del nombre, insensible a mayúsculas y acentos, con normalización de espacios.
 Máximo de 10 coincidencias, sin paginación.
 Acceso restringido al rol TUTOR, indicado explícitamente por la HU.
 
