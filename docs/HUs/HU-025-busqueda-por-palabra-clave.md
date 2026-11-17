@@ -78,7 +78,7 @@ Parámetros: Query requerido nombre.
 
 Comportamiento actual: Coincidencia exacta sensible a mayúsculas y acentos; busca aliados activos CLINICA, VET_INDEPENDIENTE y TIENDA, devuelve hasta 10 objetos {id,nombre,tipo} y no devuelve fundaciones.
 
-No se modifica en HU-025. La aplicación podrá consumir la nueva operación general para los apartados cubiertos cuando se integre el Frontend; esa integración queda fuera del alcance Backend de esta especificación.
+No se modifica en HU-025. El Frontend consume la operación general desde Inicio y los formularios de búsqueda que llevan a /buscar; el endpoint legado permanece disponible para conservar su contrato.
 
 ### 4. Errores HTTP esperados
 
@@ -118,7 +118,7 @@ La API usa para validación { "message": "Revisa los datos ingresados", "errores
 - apps/api/src/modules/aliados/veterinarios.service.ts ya obtiene los nombres de perfiles de veterinario desde usuario.nombre al consultar fichas públicas de clínicas. La búsqueda general debe filtrar perfiles activos y cuentas activas, y conservar la relación con el aliado.
 - GET /api/aliados/clinicas, GET /api/productos, GET /api/servicios y GET /api/adopciones/catalogo son catálogos existentes. No aceptan una query común de búsqueda por nombre. Adopción permanece fuera de la nueva operación.
 - La tabla aliado también contiene fundaciones; estas no deben incluirse en resultados de esta HU. El catálogo de adopción las mantiene anónimas.
-- frontend/web/src/app/page.tsx, frontend/web/src/components/SiteChrome.tsx y páginas de catálogo envían búsquedas a /buscar. frontend/web/src/app/buscar/page.tsx no consume actualmente la API de búsqueda. La integración con formularios o navegación es Frontend y queda excluida de este análisis Backend.
+- frontend/web/src/app/page.tsx, frontend/web/src/components/SiteChrome.tsx y páginas de catálogo envían búsquedas a /buscar. frontend/web/src/app/buscar/BuscarResultados.tsx consume GET /api/busqueda?nombre=..., aplica un debounce de 300 ms y presenta resultados agrupados y estados de carga, error, sesión requerida y lista vacía.
 
 #### Propuesta de implementación Backend
 
