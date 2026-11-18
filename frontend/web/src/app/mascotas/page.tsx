@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { Mascota } from '@veto/shared';
-import { crearMascotaSchema } from '@veto/shared';
+import { crearMascotaSchema, MAX_FOTOS_MASCOTA } from '@veto/shared';
 import { AlertBox, Avatar, VetoButton } from '@/components/ui/veto-components';
 import { api, ApiError } from '@/lib/api';
 import { erroresPorCampo } from '@/lib/errores';
+import { separarEnlaces, urlDeImagen } from '@/lib/fotos';
+import { FotosEditor } from '@/components/FotosEditor';
 
 type Especie = { id: number; nombre: string };
 type Formulario = {
@@ -36,35 +38,6 @@ const formularioVacio: Formulario = {
   chip: '',
   fotos: '',
 };
-
-type FotoPreview = {
-  original: string;
-  url: string;
-  estado: 'cargando' | 'lista' | 'error';
-  mensaje?: string;
-};
-
-async function urlDeImagen(url: string) {
-  const parsedUrl = new URL(url);
-  if (['postimg.cc', 'www.postimg.cc'].includes(parsedUrl.hostname)) {
-    const response = await fetch(`/api/photos/resolve?url=${encodeURIComponent(url)}`);
-    const resultado = (await response.json()) as { url?: string; error?: string };
-    if (!response.ok || !resultado.url) {
-      throw new Error(resultado.error || 'No pudimos encontrar la imagen en Postimg.');
-    }
-    return resultado.url;
-  }
-
-  if (['drive.google.com', 'www.drive.google.com'].includes(parsedUrl.hostname)) {
-    const id =
-      parsedUrl.pathname.match(/\/file\/d\/([^/]+)/)?.[1] ?? parsedUrl.searchParams.get('id');
-    if (!id)
-      throw new Error('Usa un enlace compartido de Google Drive que incluya el ID del archivo.');
-    return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(id)}`;
-  }
-
-  return url;
-}
 
 function FotoMascota({ nombre, url }: { nombre: string; url: string }) {
   const [fallida, setFallida] = useState(false);
@@ -144,7 +117,6 @@ export default function MisMascotas() {
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState(false);
   const [exito, setExito] = useState('');
-  const [fotosPreview, setFotosPreview] = useState<FotoPreview[]>([]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -171,45 +143,6 @@ export default function MisMascotas() {
     void cargar();
   }, [cargar]);
 
-  useEffect(() => {
-    if (!modal) {
-      setFotosPreview([]);
-      return;
-    }
-
-    let vigente = true;
-    const fotos = formulario.fotos
-      .split(/\n|,/)
-      .map((foto) => foto.trim())
-      .filter(Boolean)
-      .slice(0, 5);
-    setFotosPreview(fotos.map((original) => ({ original, url: '', estado: 'cargando' as const })));
-
-    void Promise.all(
-      fotos.map(async (original) => {
-        try {
-          return { original, url: await urlDeImagen(original), estado: 'lista' as const };
-        } catch (causa) {
-          return {
-            original,
-            url: '',
-            estado: 'error' as const,
-            mensaje:
-              causa instanceof Error
-                ? causa.message
-                : 'No pudimos leer este enlace. Conservamos la URL para que puedas corregirla.',
-          };
-        }
-      }),
-    ).then((previews) => {
-      if (vigente) setFotosPreview(previews);
-    });
-
-    return () => {
-      vigente = false;
-    };
-  }, [formulario.fotos, modal]);
-
   function abrir(mascota?: Mascota) {
     setEditando(mascota ?? null);
     setFormulario(mascota ? desdeMascota(mascota) : formularioVacio);
@@ -234,10 +167,7 @@ export default function MisMascotas() {
       color: formulario.color || undefined,
       pesoKg: formulario.pesoKg === '' ? undefined : Number(formulario.pesoKg),
       chip: formulario.chip || undefined,
-      fotos: formulario.fotos
-        .split(/\n|,/)
-        .map((foto) => foto.trim())
-        .filter(Boolean),
+      fotos: separarEnlaces(formulario.fotos),
     };
     const validacion = crearMascotaSchema.safeParse(datos);
     if (!validacion.success) {
@@ -543,63 +473,13 @@ export default function MisMascotas() {
                   {errores.chip && <small className="field-error">{errores.chip}</small>}
                 </label>
               </div>
-              <label className="field">
-                <span>Fotos (opcional)</span>
-                <textarea
-                  className="control textarea"
-                  onChange={(event) => setFormulario({ ...formulario, fotos: event.target.value })}
-                  placeholder="Pega una URL por línea (máximo 5)"
-                  rows={3}
-                  value={formulario.fotos}
-                />
-                <small className="field__hint">
-                  Pega el enlace de la imagen o el enlace compartido de Postimg/Drive. En Drive,
-                  habilita el acceso para cualquier persona con el enlace.
-                </small>
-                {errores.fotos && <small className="field-error">{errores.fotos}</small>}
-                {fotosPreview.length > 0 && (
-                  <div aria-live="polite" className="pet-photo-previews">
-                    {fotosPreview.map((foto) => (
-                      <div className="pet-photo-preview" key={foto.original}>
-                        {foto.estado === 'cargando' ? (
-                          <span aria-label="Cargando vista previa" className="skeleton" />
-                        ) : foto.estado === 'error' ? (
-                          <span aria-hidden="true" className="pet-photo-preview__fallback">
-                            ♡
-                          </span>
-                        ) : (
-                          <img
-                            alt="Vista previa de la foto de la mascota"
-                            onError={() =>
-                              setFotosPreview((actuales) =>
-                                actuales.map((item) =>
-                                  item.original === foto.original
-                                    ? {
-                                        ...item,
-                                        estado: 'error',
-                                        mensaje:
-                                          'No se pudo cargar la imagen. Verifica que el enlace sea público y apunte a una imagen.',
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                            src={foto.url}
-                          />
-                        )}
-                        <span>
-                          {foto.estado === 'error'
-                            ? (foto.mensaje ??
-                              'No se pudo cargar la imagen; conservamos el enlace.')
-                            : foto.estado === 'cargando'
-                              ? 'Preparando vista previa…'
-                              : 'Vista previa'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </label>
+              <FotosEditor
+                descripcionImagen="foto de la mascota"
+                error={errores.fotos}
+                maximo={MAX_FOTOS_MASCOTA}
+                onChange={(fotos) => setFormulario({ ...formulario, fotos })}
+                valor={formulario.fotos}
+              />
               <div className="form-actions">
                 <VetoButton onClick={() => setModal(false)} variant="secondary">
                   Cancelar

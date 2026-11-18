@@ -13,8 +13,9 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import {
+  catalogoServiciosSchema,
   cotizarServicioSchema,
   filtrarServiciosSchema,
   guardarReglasPrecioSchema,
@@ -199,5 +200,31 @@ export class PublicServiciosController {
   ) {
     const datos = validar(cotizarServicioSchema, query);
     return this.servicios.cotizarParaMascota(request.usuario.id, servicioId, datos.mascotaId);
+  }
+
+  @Get()
+  @ApiOperation({
+    summary: 'Todos los servicios disponibles, con reglas de precio (público)',
+    description:
+      'Filtros opcionales combinables: especie atendida por el aliado, tipo de servicio y ' +
+      'modalidad. ?orden=nombre | precio_asc | precio_desc ordena por precioDesde ' +
+      '(el menor entre precioBase y las reglas de precio).',
+  })
+  @ApiQuery({
+    name: 'especieId',
+    required: false,
+    type: Number,
+    description: 'Especie atendida por el aliado (1–32767).',
+  })
+  @ApiQuery({
+    name: 'tipoServicioId',
+    required: false,
+    type: Number,
+    description: 'Tipo de servicio (1–32767).',
+  })
+  @ApiQuery({ name: 'modalidad', required: false, enum: ['EN_SEDE', 'A_DOMICILIO'] })
+  @ApiQuery({ name: 'orden', required: false, enum: ['nombre', 'precio_asc', 'precio_desc'] })
+  todos(@Query() query: unknown) {
+    return this.servicios.listarTodosDisponibles(validar(catalogoServiciosSchema, query));
   }
 }

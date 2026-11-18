@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { TipoAliado } from './enums';
 import { celularSchema, correoSchema, contrasenaSchema } from './usuario';
 
 /** Tipos de aliado que se registran solos (HU-007). Las fundaciones tienen su propio flujo: `registroFundacionSchema` (HU-078). */
@@ -48,3 +49,26 @@ export const registroAliadoSchema = z
     contrasena: data.contrasena ?? data.password ?? '',
   }));
 export type RegistroAliado = z.infer<typeof registroAliadoSchema>;
+
+/** HU-024: criterios del buscador de aliados para tutores. */
+export const BUSQUEDA_ALIADOS_MAX_RESULTADOS = 10;
+export const buscarAliadosSchema = z.object({
+  nombre: z
+    .string()
+    .min(1, 'El nombre es obligatorio')
+    .refine((nombre) => nombre.trim().length > 0, 'El nombre es obligatorio'),
+});
+export type BuscarAliados = z.infer<typeof buscarAliadosSchema>;
+/** Datos públicos de un aliado, visibles para los tutores. Nunca una fundación. */
+export type AliadoPublico = {
+  id: string;
+  tipo: Exclude<TipoAliado, 'FUNDACION'>;
+  nombre: string;
+  descripcion: string | null;
+  logoUrl: string | null;
+  contacto: string | null;
+  ciudad: string | null;
+  ubicacion: string | null;
+};
+
+export type AliadoBusqueda = Pick<AliadoPublico, 'id' | 'nombre' | 'tipo'>;

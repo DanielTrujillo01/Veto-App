@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
-import type { GuardarReglasPrecio, GuardarServicio, ReglaPrecio, Servicio } from '@veto/shared';
+import type {
+  GuardarReglasPrecio,
+  GuardarServicio,
+  ReglaPrecio,
+  Servicio,
+  OrdenServicios,
+  ServicioConReglas,
+  FiltrosCatalogoServicios,
+} from '@veto/shared';
 import type { Consultor } from '../../database/database.service';
 
 interface ServicioRow extends QueryResultRow {
@@ -35,6 +43,20 @@ const SELECT_SERVICIO = `
          s.creado_en
     FROM servicio s
     JOIN tipo_servicio t ON t.id = s.tipo_servicio_id`;
+
+const ORDENES: Record<OrdenServicios, string> = {
+  nombre: 'd.nombre, d.id',
+  precio_asc: 'precio_desde ASC, d.nombre, d.id',
+  precio_desc: 'precio_desde DESC, d.nombre, d.id',
+};
+
+// Misma condición de disponibilidad que usa buscarDisponible / listar(soloDisponibles)
+const CONDICION_DISPONIBLE = `
+  a.estado = 'ACTIVO' AND s.activo AND s.moderacion = 'PUBLICADO'
+  AND (s.modalidad <> 'EN_SEDE' OR EXISTS (
+    SELECT 1 FROM sede se
+     WHERE se.id = s.sede_id AND se.aliado_id = s.aliado_id AND se.activa
+  ))`;
 
 /** Orden de los parámetros $3..$9 en INSERT y UPDATE. */
 function columnas(datos: GuardarServicio): unknown[] {
@@ -181,6 +203,59 @@ export class ServiciosRepository {
       'SELECT id, nombre FROM tipo_servicio ORDER BY id',
     );
     return r.rows;
+  }
+
+  /** Todos los servicios disponibles de todos los aliados, cada uno con sus reglas de precio. */
+  async listarTodosDisponibles(
+    client: Consultor,
+    filtros: FiltrosCatalogoServicios,
+  ): Promise<ServicioConReglas[]> {
+    const { especieId, tipoServicioId, modalidad, orden } = filtros;
+    const r = await client.query<ServicioRow & { precio_desde: number }>(
+      `WITH disponibles AS (
+        ${SELECT_SERVICIO}
+        JOIN aliado a ON a.id = s.aliado_id
+        WHERE ${CONDICION_DISPONIBLE}
+          AND ($1::smallint IS NULL OR EXISTS (
+            SELECT 1 FROM aliado_especie ae
+             WHERE ae.aliado_id = s.aliado_id AND ae.especie_id = $1
+          ))
+          AND ($2::smallint IS NULL OR s.tipo_servicio_id = $2)
+          AND ($3::modalidad_servicio IS NULL OR s.modalidad = $3)
+      )
+      SELECT d.*,
+              LEAST(d.precio_base,
+                    COALESCE((SELECT MIN(r.precio)::float8
+                                FROM servicio_regla_precio r
+                              WHERE r.servicio_id = d.id), d.precio_base)) AS precio_desde
+        FROM disponibles d
+        ORDER BY ${ORDENES[orden]}`,
+      [especieId ?? null, tipoServicioId ?? null, modalidad ?? null],
+    );
+    if (r.rows.length === 0) return [];
+
+    const ids = r.rows.map((fila) => fila.id);
+    const reglas = await client.query<ReglaPrecioRow & { servicio_id: string }>(
+      `SELECT servicio_id, id, especie_id, peso_min_kg, peso_max_kg, edad_min_meses,
+              edad_max_meses, precio::float8 AS precio, prioridad
+        FROM servicio_regla_precio
+        WHERE servicio_id = ANY($1::uuid[])
+        ORDER BY prioridad DESC, precio DESC, id`,
+      [ids],
+    );
+
+    const porServicio = new Map<string, ReglaPrecio[]>();
+    for (const fila of reglas.rows) {
+      const lista = porServicio.get(fila.servicio_id) ?? [];
+      lista.push(aReglaPrecio(fila));
+      porServicio.set(fila.servicio_id, lista);
+    }
+
+    return r.rows.map((fila) => ({
+      ...aServicio(fila),
+      precioDesde: Number(fila.precio_desde),
+      reglasPrecio: porServicio.get(fila.id) ?? [],
+    }));
   }
 }
 

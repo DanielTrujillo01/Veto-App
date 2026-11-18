@@ -4,9 +4,12 @@ import { DatabaseModule } from './database/database.module';
 import { HealthModule } from './health/health.module';
 import { IdentidadModule } from './modules/identidad/identidad.module';
 import { AliadosModule } from './modules/aliados/aliados.module';
+import { BusquedaModule } from './modules/busqueda/busqueda.module';
 import { MascotasModule } from './modules/mascotas/mascotas.module';
 import { ServiciosModule } from './modules/servicios/servicios.module';
 import { CitasModule } from './modules/citas/citas.module';
+import { ReservasModule } from './modules/reservas/reservas.module';
+import { GestionCitasModule } from './modules/gestion-citas/gestion-citas.module';
 import { ClinicaModule } from './modules/clinica/clinica.module';
 import { ComercioModule } from './modules/comercio/comercio.module';
 import { AdopcionModule } from './modules/adopcion/adopcion.module';
@@ -21,9 +24,12 @@ import { NotificacionesModule } from './modules/notificaciones/notificaciones.mo
     HealthModule,
     IdentidadModule,
     AliadosModule,
+    BusquedaModule,
     MascotasModule,
     ServiciosModule,
     CitasModule,
+    ReservasModule,
+    GestionCitasModule,
     ClinicaModule,
     ComercioModule,
     AdopcionModule,

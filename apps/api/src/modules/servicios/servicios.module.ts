@@ -45,6 +45,6 @@ import { ServiciosService } from './servicios.service';
     ServiciosService,
     ServiciosRepository,
   ],
-  exports: [ServiciosService],
+  exports: [ServiciosService, DisponibilidadService],
 })
 export class ServiciosModule {}

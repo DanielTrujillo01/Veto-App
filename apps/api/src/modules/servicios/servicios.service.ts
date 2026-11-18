@@ -7,13 +7,15 @@ import {
 import type { PoolClient } from 'pg';
 import type {
   FiltrarServicios,
+  FiltrosCatalogoServicios,
   GuardarReglasPrecio,
   GuardarServicio,
   ReglaPrecio,
   Servicio,
   TipoAliado,
+  ServicioConReglas,
 } from '@veto/shared';
-import { DatabaseService } from '../../database/database.service';
+import { DatabaseService, type Consultor } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { AliadoEspeciesService } from '../aliados/aliado-especies.service';
 import { AliadosService } from '../aliados/aliados.service';
@@ -193,11 +195,23 @@ export class ServiciosService {
     return this.repo.listar(this.db, aliadoId, true);
   }
 
+  /**
+   * Para el flujo de reserva (HU-029, HU-031): el servicio si sigue disponible para nuevas
+   * reservas, o `null`. Usa el `client` de la transacción abierta.
+   */
+  buscarDisponibleParaReservar(client: Consultor, servicioId: string): Promise<Servicio | null> {
+    return this.repo.buscarDisponible(client, servicioId);
+  }
+
   /** Detalle público de un servicio disponible. */
   async obtenerDisponible(servicioId: string): Promise<Servicio> {
     const servicio = await this.repo.buscarDisponible(this.db, servicioId);
     if (!servicio) throw new NotFoundException('No se encontró un servicio disponible.');
     return servicio;
+  }
+  /** Listar todos los servicios publicos con sus reglas de negocio*/
+  async listarTodosDisponibles(filtros: FiltrosCatalogoServicios): Promise<ServicioConReglas[]> {
+    return this.repo.listarTodosDisponibles(this.db, filtros);
   }
 
   listarTipos() {

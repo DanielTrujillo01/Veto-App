@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  Inject,
   Injectable,
   Logger,
   ServiceUnavailableException,
@@ -10,8 +9,6 @@ import { DatabaseService } from '../../database/database.service';
 import { hashSesion, hashContrasena, verificarContrasena } from './seguridad';
 import { CorreoService } from './correo.service';
 
-const DURACION_CODIGO_MS = 10 * 60 * 1000;
-const ESPERA_REENVIO_MS = 60 * 1000;
 const MAX_INTENTOS_CODIGO = 5;
 
 type CuentaRecuperable = { id: string; correo: string; nombre: string };

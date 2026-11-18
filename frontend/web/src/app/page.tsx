@@ -66,7 +66,7 @@ export default function Inicio() {
                 <input
                   aria-label="Servicio, veterinario o clínica"
                   name="q"
-                  placeholder="Servicio, veterinario o clínica"
+                  placeholder="Ej. Norte, consulta o alimento"
                 />
               </span>
             </label>

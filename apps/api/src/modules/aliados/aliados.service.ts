@@ -5,11 +5,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { PoolClient } from 'pg';
-import type { EstadoAliado, PerfilUsuario, RegistroAliado, TipoAliado } from '@veto/shared';
+import type {
+  EstadoAliado,
+  PerfilUsuario,
+  RegistroAliado,
+  TipoAliado,
+  AliadoBusqueda,
+  AliadoPublico,
+} from '@veto/shared';
 import { DatabaseService, type Consultor } from '../../database/database.service';
 import { esErrorPg, PG } from '../../common/validacion';
 import { IdentidadService } from '../identidad/identidad.service';
 import { hashContrasena } from '../identidad/seguridad';
+import { BUSQUEDA_ALIADOS_MAX_RESULTADOS } from '@veto/shared';
 
 /** Aliado recién registrado o consultado (HU-007), en camelCase como el resto de la API. */
 export type AliadoRegistrado = {
@@ -133,6 +141,27 @@ export class AliadosService {
     }
   }
 
+  /** HU-024: coincidencia exacta por nombre para tutores; se excluyen fundaciones. */
+  async buscarPorNombre(nombre: string): Promise<AliadoBusqueda[]> {
+    const consulta =
+      'SELECT id, nombre, tipo ' +
+      'FROM aliado ' +
+      'WHERE nombre COLLATE "C" = ($1::text) COLLATE "C" ' +
+      'AND estado = $2 ' +
+      'AND tipo IN ($3, $4, $5) ' +
+      'ORDER BY nombre COLLATE "C", tipo, id ' +
+      'LIMIT $6';
+    const resultado = await this.database.query<AliadoBusqueda>(consulta, [
+      nombre,
+      'ACTIVO',
+      'CLINICA',
+      'VET_INDEPENDIENTE',
+      'TIENDA',
+      BUSQUEDA_ALIADOS_MAX_RESULTADOS,
+    ]);
+    return resultado.rows;
+  }
+
   async obtenerDeUsuario(usuarioId: string): Promise<AliadoRegistrado> {
     const resultado = await this.database.query<{
       id: string;
@@ -162,6 +191,37 @@ export class AliadosService {
       ubicacion: fila.ubicacion,
       estado: fila.estado,
       creadoEn: new Date(fila.creado_en).toISOString(),
+    };
+  }
+
+  /** HU público: detalle de un aliado activo para los tutores. Las fundaciones no se exponen. */
+  async obtenerPublico(aliadoId: string): Promise<AliadoPublico> {
+    const r = await this.database.query<{
+      id: string;
+      tipo: AliadoPublico['tipo'];
+      nombre: string;
+      descripcion: string | null;
+      logo_url: string | null;
+      contacto: string | null;
+      ciudad: string | null;
+      ubicacion: string | null;
+    }>(
+      `SELECT id, tipo, nombre, descripcion, logo_url, contacto, ciudad, ubicacion
+        FROM aliado
+        WHERE id = $1 AND estado = 'ACTIVO' AND tipo <> 'FUNDACION'`,
+      [aliadoId],
+    );
+    const fila = r.rows[0];
+    if (!fila) throw new NotFoundException('El aliado no existe');
+    return {
+      id: fila.id,
+      tipo: fila.tipo,
+      nombre: fila.nombre,
+      descripcion: fila.descripcion,
+      logoUrl: fila.logo_url,
+      contacto: fila.contacto,
+      ciudad: fila.ciudad,
+      ubicacion: fila.ubicacion,
     };
   }
 
