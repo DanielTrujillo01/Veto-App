@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { registroAliadoSchema, registroFundacionSchema } from '@veto/shared';
-import { AlertBox, VetoButton } from '@/components/ui/veto-components';
+import { AlertBox, CelularField, VetoButton } from '@/components/ui/veto-components';
 import { api, ApiError } from '@/lib/api';
 import { erroresPorCampo } from '@/lib/errores';
 
@@ -19,13 +19,6 @@ type RespuestaRegistro = {
   aliado?: PerfilRegistrado;
   fundacion?: PerfilRegistrado;
 };
-
-function formatearCelular(valor: string) {
-  const digitos = valor.replace(/\D/g, '').slice(0, 10);
-  if (digitos.length <= 3) return digitos;
-  if (digitos.length <= 6) return `${digitos.slice(0, 3)} ${digitos.slice(3)}`;
-  return `${digitos.slice(0, 3)} ${digitos.slice(3, 6)} ${digitos.slice(6)}`;
-}
 
 const opciones: { tipo: TipoAliado; nombre: string; detalle: string; icono: string }[] = [
   {
@@ -270,30 +263,14 @@ export default function RegistroAliado() {
                 <small className="field-error">{errores.nombreAliado}</small>
               )}
             </label>
-            <label className="field">
-              <span>Celular de contacto *</span>
-              <span className={`phone-control${errores.celular ? ' phone-control--error' : ''}`}>
-                <span className="phone-prefix">+57</span>
-                <input
-                  aria-invalid={Boolean(errores.celular)}
-                  aria-describedby="aliado-celular-hint"
-                  autoComplete="tel-national"
-                  className={`control${errores.celular ? ' control--error' : ''}`}
-                  inputMode="numeric"
-                  maxLength={12}
-                  onChange={(event) =>
-                    cambiarDato('celular', event.target.value.replace(/\D/g, '').slice(0, 10))
-                  }
-                  placeholder="300 123 4567"
-                  required
-                  value={formatearCelular(datos.celular)}
-                />
-              </span>
-              <small className="field__hint" id="aliado-celular-hint">
-                Ingresa los 10 dígitos de tu celular ({datos.celular.length}/10).
-              </small>
-              {errores.celular && <small className="field-error">{errores.celular}</small>}
-            </label>
+            <CelularField
+              error={errores.celular}
+              id="aliado-celular"
+              label="Celular de contacto *"
+              onChange={(celular) => cambiarDato('celular', celular)}
+              required
+              value={datos.celular}
+            />
             <label className="field">
               <span>Correo electrónico *</span>
               <input

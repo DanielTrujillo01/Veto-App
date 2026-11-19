@@ -385,6 +385,29 @@ export class CitasService {
     return r.rows[0] ? aDetalle(r.rows[0]) : null;
   }
 
+  /**
+   * Agenda de citas para quien atiende o administra (no para el tutor): el administrador del
+   * aliado ve todas las citas del aliado; un veterinario activo, solo las asignadas a él. Las
+   * mismas personas que pueden abrir el detalle y cerrar la cita (HU-032, HU-033).
+   */
+  async agendaPara(
+    client: Consultor,
+    usuarioId: string,
+    filtros: { estado: EstadoCita | null; limite: number },
+  ): Promise<CitaDetalle[]> {
+    const r = await client.query<DetalleRow>(
+      `${SELECT_DETALLE}
+        WHERE (d.aliado_usuario_id = $1
+               OR EXISTS (SELECT 1 FROM veterinario v
+                           WHERE v.id = d.veterinario_id AND v.usuario_id = $1 AND v.activo))
+          AND ($2::estado_cita IS NULL OR d.estado = $2::estado_cita)
+        ORDER BY d.inicio DESC, d.id
+        LIMIT $3`,
+      [usuarioId, filtros.estado, filtros.limite],
+    );
+    return r.rows.map(aDetalle);
+  }
+
   /** Para quien ya comprobó el permiso (por ejemplo, el tutor que acaba de crear la cita). */
   async detalle(client: Consultor, citaId: string): Promise<CitaDetalle | null> {
     const r = await client.query<DetalleRow>(`${SELECT_DETALLE} WHERE d.id = $1`, [citaId]);

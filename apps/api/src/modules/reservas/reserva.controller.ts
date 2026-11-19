@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -63,6 +64,19 @@ export class ReservaController {
 @Roles('TUTOR', 'ALIADO', 'VETERINARIO')
 export class CitaDetalleController {
   constructor(private readonly reserva: ReservaService) {}
+
+  @Get()
+  @Roles('ALIADO', 'VETERINARIO')
+  @ApiOperation({
+    summary: 'Agenda de citas del aliado o del veterinario (HU-032)',
+    description:
+      'El administrador del aliado ve todas las citas de su aliado; un veterinario activo, las ' +
+      'asignadas a él. Más recientes primero. Filtros opcionales: ?estado=PENDIENTE|AGENDADA|' +
+      'FINALIZADA|NO_ASISTIO|CANCELADA y ?limite=1..200 (100 por defecto).',
+  })
+  agenda(@Req() request: RequestAutenticada, @Query() query: unknown) {
+    return this.reserva.agenda(request.usuario.id, query);
+  }
 
   @Get(':citaId')
   @ApiOperation({

@@ -4,6 +4,8 @@ import { crearMascotaSchema, loginSchema, registroUsuarioSchema } from '../src';
 describe('registroUsuarioSchema (HU-001)', () => {
   const valido = {
     nombre: 'Ana Pérez',
+    tipoDocumento: 'CC',
+    numeroDocumento: '1023456789',
     celular: '3001112233',
     correo: 'ana@mail.com',
     contrasena: 'clave-segura-1',
@@ -11,6 +13,33 @@ describe('registroUsuarioSchema (HU-001)', () => {
 
   it('acepta datos válidos', () => {
     expect(registroUsuarioSchema.safeParse(valido).success).toBe(true);
+  });
+
+  it('exige el documento', () => {
+    const { numeroDocumento: _numero, ...sinDocumento } = valido;
+    expect(registroUsuarioSchema.safeParse(sinDocumento).success).toBe(false);
+  });
+
+  it('la cédula solo admite números', () => {
+    const r = registroUsuarioSchema.safeParse({ ...valido, numeroDocumento: 'AB12345' });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0].path).toEqual(['numeroDocumento']);
+  });
+
+  it('el pasaporte admite letras y lo guarda en mayúsculas', () => {
+    const r = registroUsuarioSchema.safeParse({
+      ...valido,
+      tipoDocumento: 'PA',
+      numeroDocumento: 'ab123456',
+    });
+    expect(r.success).toBe(true);
+    expect(r.data?.numeroDocumento).toBe('AB123456');
+  });
+
+  it('rechaza un tipo de documento desconocido', () => {
+    expect(registroUsuarioSchema.safeParse({ ...valido, tipoDocumento: 'NIT' }).success).toBe(
+      false,
+    );
   });
 
   it('rechaza un celular que no tiene 10 dígitos', () => {
@@ -100,6 +129,8 @@ describe('mensajes de campos obligatorios en español', () => {
     );
     expect(mensajes).toEqual({
       nombre: 'El nombre es obligatorio',
+      tipoDocumento: 'Selecciona el tipo de documento',
+      numeroDocumento: 'El número de documento es obligatorio',
       celular: 'El celular es obligatorio',
       correo: 'El correo es obligatorio',
       contrasena: 'La contraseña es obligatoria',

@@ -192,7 +192,8 @@ export class RegistroUsuariosController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Registrar tutor (HU-001)',
-    description: 'Body { nombre, celular, correo, contrasena }. Correo repetido → 409.',
+    description:
+      'Body { nombre, tipoDocumento, numeroDocumento, celular, correo, contrasena }. Correo repetido → 409.',
   })
   @ApiCreatedResponse({
     description: 'Cuenta creada: { usuario }. La contraseña nunca se devuelve.',

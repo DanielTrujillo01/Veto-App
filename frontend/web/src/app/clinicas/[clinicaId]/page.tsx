@@ -1,8 +1,13 @@
 import Link from 'next/link';
-import { AlertBox, StatusBadge } from '@/components/ui/veto-components';
+import { Avatar, StatusBadge } from '@/components/ui/veto-components';
 import { notFound } from 'next/navigation';
-import { VeterinarioCard } from '@/components/VeterinarioCard';
+import { Paginacion } from '@/components/Paginacion';
 import { api, ApiError } from '@/lib/api';
+import { formatoPrecio } from '@/lib/formato';
+import { hrefConPagina, leerPagina, paginar } from '@/lib/paginacion';
+import { NOMBRE_MODALIDAD } from '@/lib/servicios';
+
+const SERVICIOS_POR_PAGINA = 6;
 
 type FichaClinica = {
   id: string;
@@ -23,6 +28,7 @@ type Servicio = {
   tipoServicio: string;
   descripcion: string | null;
   modalidad: 'EN_SEDE' | 'A_DOMICILIO';
+  sedeId: string | null;
   duracionMin: number;
   precioBase: number;
 };
@@ -32,7 +38,7 @@ export default async function FichaClinica({
   searchParams,
 }: {
   params: Promise<{ clinicaId: string }>;
-  searchParams: Promise<{ especieId?: string }>;
+  searchParams: Promise<{ especieId?: string; pagina?: string }>;
 }) {
   const [{ clinicaId }, query] = await Promise.all([params, searchParams]);
   let ficha: FichaClinica;
@@ -68,6 +74,9 @@ export default async function FichaClinica({
     if (error instanceof ApiError && error.status === 404) notFound();
     throw error;
   }
+  const paginaServicios = paginar(servicios, leerPagina(query.pagina), SERVICIOS_POR_PAGINA);
+  const hrefPaginaServicios = (numero: number) =>
+    `${hrefConPagina(`/clinicas/${clinicaId}`, { especieId: especieIdSeleccionada }, numero)}#servicios`;
 
   return (
     <div className="clinic-profile">
@@ -88,8 +97,9 @@ export default async function FichaClinica({
           <span className="eyebrow eyebrow--dark">AGENDA TU VISITA</span>
           <strong>Encuentra el cuidado que buscas</strong>
           <p>
-            {servicios.length} servicios disponibles en {sedes.length}{' '}
-            {sedes.length === 1 ? 'sede' : 'sedes'}.
+            {servicios.length}{' '}
+            {servicios.length === 1 ? 'servicio disponible' : 'servicios disponibles'} en{' '}
+            {sedes.length} {sedes.length === 1 ? 'sede' : 'sedes'}.
           </p>
           <a className="veto-button veto-button--primary" href="#servicios">
             Ver servicios y agendar
@@ -101,122 +111,138 @@ export default async function FichaClinica({
           </small>
         </aside>
       </div>
-      <div className="clinic-profile__body">
-        <div className="clinic-profile__main">
-          <section aria-labelledby="team-title" className="clinic-section">
-            <div className="clinic-section__heading">
-              <div>
-                <p className="eyebrow eyebrow--dark">CONOCE A QUIENES TE ATIENDEN</p>
-                <h2 id="team-title">Equipo veterinario</h2>
-              </div>
-              <StatusBadge tone="neutral">{ficha.veterinarios.length} profesionales</StatusBadge>
+      <div className="detail-columns">
+        <section aria-labelledby="services-title" className="detail-panel" id="servicios">
+          <div className="detail-panel__head">
+            <div>
+              <p className="eyebrow eyebrow--dark">CUIDADO A TU MEDIDA</p>
+              <h2 id="services-title">Servicios</h2>
             </div>
-            {ficha.veterinarios.length ? (
-              <div className="clinic-vet-grid">
-                {ficha.veterinarios.map((veterinario) => (
-                  <VeterinarioCard key={veterinario.id} {...veterinario} />
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state empty-state--compact">
-                <h3>Esta clínica aún no ha registrado veterinarios</h3>
-                <p>Vuelve pronto para conocer a su equipo.</p>
-              </div>
-            )}
-          </section>
-          <section aria-labelledby="branches-title" className="clinic-section">
-            <p className="eyebrow eyebrow--dark">DÓNDE ENCONTRARNOS</p>
-            <h2 id="branches-title">Sedes</h2>
-            {sedes.length ? (
-              <div className="branch-grid">
-                {sedes.map((sede) => (
-                  <article className="branch-card" key={sede.id}>
-                    <span aria-hidden="true">⌖</span>
-                    <div>
-                      <h3>{sede.nombre}</h3>
-                      <p>{sede.direccion}</p>
-                      <small>{sede.ciudad}</small>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <AlertBox tone="info" title="Consulta las opciones disponibles">
-                La clínica aún no ha publicado sedes.
-              </AlertBox>
-            )}
-          </section>
-          <section aria-labelledby="services-title" className="clinic-section" id="servicios">
-            <p className="eyebrow eyebrow--dark">CUIDADO A TU MEDIDA</p>
-            <h2 id="services-title">Servicios disponibles</h2>
-            <form action={`/clinicas/${clinicaId}`} className="clinic-species-filter">
-              <label className="field">
-                <span>Filtrar por especie</span>
-                <select className="control" defaultValue={especieIdSeleccionada} name="especieId">
-                  <option value="">Todas las especies</option>
-                  {especies.map((especie) => (
-                    <option key={especie.id} value={especie.id}>
-                      {especie.nombre}
-                    </option>
-                  ))}
-                </select>
+            <form action={`/clinicas/${clinicaId}`} className="detail-filter">
+              <label className="sr-only" htmlFor="clinica-especie">
+                Filtrar por especie
               </label>
+              <select
+                className="control"
+                defaultValue={especieIdSeleccionada}
+                id="clinica-especie"
+                name="especieId"
+              >
+                <option value="">Todas las especies</option>
+                {especies.map((especie) => (
+                  <option key={especie.id} value={especie.id}>
+                    {especie.nombre}
+                  </option>
+                ))}
+              </select>
               <button className="veto-button veto-button--secondary" type="submit">
-                Aplicar filtro
+                Filtrar
               </button>
             </form>
-            {servicios.length ? (
+          </div>
+          {servicios.length ? (
+            <>
               <div className="service-public-list">
-                {servicios.map((servicio) => (
-                  <article className="service-public-card" key={servicio.id}>
-                    <div>
-                      <StatusBadge tone="info">{servicio.tipoServicio}</StatusBadge>
-                      <h3>{servicio.nombre}</h3>
-                      <p>{servicio.descripcion || 'Atención profesional para tu mascota.'}</p>
-                      <small>
-                        {servicio.modalidad === 'EN_SEDE' ? 'En sede' : 'A domicilio'} ·{' '}
-                        {servicio.duracionMin} min
-                      </small>
-                    </div>
-                    <strong>
-                      {new Intl.NumberFormat('es-CO', {
-                        style: 'currency',
-                        currency: 'COP',
-                        maximumFractionDigits: 0,
-                      }).format(servicio.precioBase)}
-                    </strong>
-                  </article>
-                ))}
+                {paginaServicios.items.map((servicio) => {
+                  const sede = sedes.find((s) => s.id === servicio.sedeId);
+                  return (
+                    <Link
+                      className="service-public-card service-public-card--link"
+                      href={`/servicios/${servicio.id}`}
+                      key={servicio.id}
+                    >
+                      <div>
+                        <StatusBadge tone="info">{servicio.tipoServicio}</StatusBadge>
+                        <h3>{servicio.nombre}</h3>
+                        <small>
+                          {NOMBRE_MODALIDAD[servicio.modalidad]}
+                          {sede ? ` en ${sede.nombre}` : ''} · {servicio.duracionMin} min
+                        </small>
+                      </div>
+                      <span className="service-public-card__price">
+                        <strong>{formatoPrecio(servicio.precioBase)}</strong>
+                        <span className="text-action">Ver y reservar →</span>
+                      </span>
+                    </Link>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="empty-state empty-state--compact">
-                <h3>
-                  {especieIdSeleccionada
-                    ? 'Aún no hay servicios para esta especie'
-                    : 'Servicios próximamente'}
-                </h3>
-                <p>
-                  {especieIdSeleccionada
-                    ? 'Prueba con otra especie o consulta los servicios para todas las mascotas.'
-                    : 'Esta clínica todavía no ha publicado servicios.'}
+              <div className="detail-panel__foot">
+                <p className="catalog-results__count">
+                  {paginaServicios.desde}–{paginaServicios.hasta} de {paginaServicios.total}{' '}
+                  {paginaServicios.total === 1 ? 'servicio' : 'servicios'}
                 </p>
+                <Paginacion
+                  etiqueta="servicios de la clínica"
+                  hrefDe={hrefPaginaServicios}
+                  pagina={paginaServicios.pagina}
+                  totalPaginas={paginaServicios.totalPaginas}
+                />
               </div>
+            </>
+          ) : (
+            <div className="empty-state empty-state--compact">
+              <h3>
+                {especieIdSeleccionada
+                  ? 'Aún no hay servicios para esta especie'
+                  : 'Servicios próximamente'}
+              </h3>
+              <p>
+                {especieIdSeleccionada
+                  ? 'Prueba con otra especie o mira todos los servicios.'
+                  : 'Esta clínica todavía no ha publicado servicios.'}
+              </p>
+            </div>
+          )}
+        </section>
+
+        <div className="detail-side">
+          <section aria-labelledby="team-title" className="detail-panel">
+            <div className="detail-panel__head">
+              <h2 id="team-title">Equipo veterinario</h2>
+              <span className="detail-count">{ficha.veterinarios.length}</span>
+            </div>
+            {ficha.veterinarios.length ? (
+              <ul className="detail-people">
+                {ficha.veterinarios.map((veterinario) => (
+                  <li key={veterinario.id}>
+                    <Avatar image={veterinario.fotoUrl ?? undefined} name={veterinario.nombre} />
+                    <span>
+                      <strong>{veterinario.nombre}</strong>
+                      <small>{veterinario.descripcion || 'Médico veterinario'}</small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="detail-empty">Esta clínica aún no ha registrado veterinarios.</p>
+            )}
+          </section>
+
+          <section aria-labelledby="branches-title" className="detail-panel">
+            <div className="detail-panel__head">
+              <h2 id="branches-title">Sedes</h2>
+              <span className="detail-count">{sedes.length}</span>
+            </div>
+            {sedes.length ? (
+              <ul className="detail-places">
+                {sedes.map((sede) => (
+                  <li key={sede.id}>
+                    <span aria-hidden="true">⌖</span>
+                    <span>
+                      <strong>{sede.nombre}</strong>
+                      <small>
+                        {sede.direccion} · {sede.ciudad}
+                      </small>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="detail-empty">La clínica aún no ha publicado sedes.</p>
             )}
           </section>
         </div>
-        <aside className="clinic-profile__sticky">
-          <div className="clinic-booking-card">
-            <span className="eyebrow eyebrow--dark">AGENDA TU VISITA</span>
-            <strong>¿Listo para agendar?</strong>
-            <p>Elige un servicio y encuentra el momento ideal para tu mascota.</p>
-            <Link
-              className="veto-button veto-button--primary"
-              href={`/ingresar?returnTo=${encodeURIComponent(`/clinicas/${clinicaId}`)}`}
-            >
-              Ver servicios y agendar
-            </Link>
-          </div>
-        </aside>
       </div>
       <Link className="workspace-back" href="/clinicas">
         Volver a clínicas

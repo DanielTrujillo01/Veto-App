@@ -46,6 +46,61 @@ export function FieldError({ id, children }: { id?: string; children: ReactNode 
   );
 }
 
+/** Agrupa los 10 dígitos de un celular colombiano como "300 123 4567". */
+export function formatearCelular(valor: string) {
+  const digitos = valor.replace(/\D/g, '').slice(0, 10);
+  if (digitos.length <= 3) return digitos;
+  if (digitos.length <= 6) return `${digitos.slice(0, 3)} ${digitos.slice(3)}`;
+  return `${digitos.slice(0, 3)} ${digitos.slice(3, 6)} ${digitos.slice(6)}`;
+}
+
+type CelularFieldProps = {
+  id: string;
+  label: string;
+  /** Solo dígitos, sin espacios. */
+  value: string;
+  onChange: (digitos: string) => void;
+  error?: string;
+  required?: boolean;
+};
+
+/** Campo de celular con prefijo +57, formato "300 123 4567" y contador de dígitos. */
+export function CelularField({
+  id,
+  label,
+  value,
+  onChange,
+  error,
+  required = false,
+}: CelularFieldProps) {
+  const pistaId = `${id}-hint`;
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <span className={`phone-control${error ? ' phone-control--error' : ''}`}>
+        <span className="phone-prefix">+57</span>
+        <input
+          aria-describedby={pistaId}
+          aria-invalid={Boolean(error)}
+          autoComplete="tel-national"
+          className={`control${error ? ' control--error' : ''}`}
+          id={id}
+          inputMode="numeric"
+          maxLength={12}
+          onChange={(event) => onChange(event.target.value.replace(/\D/g, '').slice(0, 10))}
+          placeholder="300 123 4567"
+          required={required}
+          value={formatearCelular(value)}
+        />
+      </span>
+      <small className="field__hint" id={pistaId}>
+        Ingresa los 10 dígitos de tu celular ({value.length}/10).
+      </small>
+      {error && <small className="field-error">{error}</small>}
+    </label>
+  );
+}
+
 export function StatusBadge({
   tone,
   children,

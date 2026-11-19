@@ -3,7 +3,9 @@ import Link from 'next/link';
 export default function Veterinarios() {
   return (
     <div className="catalog-page vet-page">
-      <section className="catalog-hero catalog-hero--vets">
+      <section className="catalog-hero catalog-hero--adoption catalog-hero--marca hero-forma--ventana">
+        {/* Forma de la ficha detrás del título: va transparente. */}
+        <span aria-hidden="true" className="home-blob home-blob--texto" />
         <div className="catalog-hero__copy">
           <span className="eyebrow eyebrow--dark">CUIDADO CON EXPERIENCIA</span>
           <h1>
@@ -24,12 +26,17 @@ export default function Veterinarios() {
             <span>Otras mascotas</span>
           </div>
         </div>
-        <div className="catalog-hero__image catalog-hero__image--vets">
+        <div className="catalog-hero__image catalog-hero__image--adoption">
+          {/* Detrás de la foto no hay texto: colores sólidos de la ficha. */}
+          <span aria-hidden="true" className="adoption-blob adoption-blob--burgundy" />
+          <span aria-hidden="true" className="adoption-blob adoption-blob--peach" />
+          <span aria-hidden="true" className="adoption-blob adoption-blob--sage" />
+          <span aria-hidden="true" className="adoption-blob adoption-blob--miel" />
           <img
-            alt="Veterinaria brindando cuidado cercano a un perro"
-            src="https://images.unsplash.com/photo-1551739440-5dd934d3a94a?auto=format&fit=crop&w=1000&q=85"
+            alt="Dos veterinarios sosteniendo con cariño a un cachorro"
+            src="https://images.unsplash.com/photo-1700665537650-1bf37979aae0?auto=format&fit=crop&w=1100&q=85"
           />
-          <span className="catalog-image-sticker">
+          <span className="catalog-image-sticker catalog-image-sticker--adoption">
             <i>✚</i>
             <span>
               Confianza en

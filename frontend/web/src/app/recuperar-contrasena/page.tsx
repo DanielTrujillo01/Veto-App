@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState, type FormEvent } from 'react';
 import { AlertBox, VetoButton } from '@/components/ui/veto-components';
+import { HuellaPaso } from '@/components/ui/iconos';
 import { api } from '@/lib/api';
 
 const pasos = ['Tu correo', 'Código de verificación', 'Nueva contraseña'];
@@ -117,17 +118,6 @@ export default function RecuperarContrasena() {
     <div className="auth-page auth-page--centered auth-page--recovery">
       <section aria-labelledby="recovery-title" className="auth-form-panel">
         <div className="auth-card">
-          <div className="auth-card__brandline auth-card__brandline--recovery">
-            <span aria-hidden="true" className="auth-card__brand-icon auth-card__brand-icon--sage">
-              <svg fill="none" viewBox="0 0 32 32">
-                <rect height="21" rx="4" width="18" x="7" y="7" />
-                <path d="M11 7V4m10 3V4M7 13h18m-14 5h4m-4 4h8" />
-                <path d="m20 20 1.5 1.5L25 18" />
-              </svg>
-            </span>
-            <span>VOLVAMOS A CONECTAR</span>
-            <i aria-hidden="true">✳</i>
-          </div>
           <p className="eyebrow eyebrow--dark">RECUPERA TU ACCESO</p>
           <h1 id="recovery-title">Restablece tu contraseña</h1>
           <p className="auth-intro">Te guiaremos paso a paso para proteger tu cuenta.</p>
@@ -143,16 +133,7 @@ export default function RecuperarContrasena() {
                   onClick={() => setPaso(index)}
                   type="button"
                 >
-                  <span className="recovery-step__mark">
-                    <svg aria-hidden="true" viewBox="0 0 64 64">
-                      <ellipse cx="19" cy="16" rx="4.6" ry="7" transform="rotate(-27 19 16)" />
-                      <ellipse cx="31.5" cy="12.5" rx="4.8" ry="7.5" />
-                      <ellipse cx="44" cy="16" rx="4.6" ry="7" transform="rotate(27 44 16)" />
-                      <ellipse cx="12.5" cy="28" rx="4.2" ry="6" transform="rotate(-38 12.5 28)" />
-                      <path d="M17 39c0-7.5 6.7-12 15-12s15 4.5 15 12c0 6.7-4.8 12-15 12S17 45.7 17 39Z" />
-                    </svg>
-                    <b>{index < paso ? '✓' : index + 1}</b>
-                  </span>
+                  <HuellaPaso hecho={index < paso} numero={index + 1} />
                   <small>{nombre}</small>
                 </button>
               </li>

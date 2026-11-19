@@ -22,6 +22,7 @@ import {
   disponibilidadProducto,
   type ProductoCatalogo,
 } from '@veto/shared';
+import { SelectorCantidad } from '@/components/ui/SelectorCantidad';
 import { AlertBox, StatusBadge, VetoButton } from '@/components/ui/veto-components';
 import { api, ApiError } from '@/lib/api';
 import { guardarCarrito, leerCarrito } from '@/lib/carrito';
@@ -128,7 +129,7 @@ export function DetalleProducto({ id }: { id: string }) {
    * alcanza el stock (contando lo que ya está en el carrito), no se agrega nada y se actualiza la
    * pantalla con los datos nuevos.
    */
-  async function agregar(vaciarOtraTienda = false) {
+  async function agregar(vaciarOtraTienda = false, unidades = cantidad) {
     setAviso('');
     setPreguntarVaciar(false);
     setAgregando(true);
@@ -146,31 +147,32 @@ export function DetalleProducto({ id }: { id: string }) {
       setEstado({ tipo: 'listo', producto: fresco });
 
       const carrito = vaciarOtraTienda ? null : leerCarrito();
-      const resultado = agregarAlCarrito(carrito, fresco, cantidad);
+      const resultado = agregarAlCarrito(carrito, fresco, unidades);
       if (resultado.tipo === 'OTRA_TIENDA') {
         setPreguntarVaciar(true);
         return;
       }
-      if (resultado.tipo === 'SIN_STOCK') {
-        setCantidad((actual) =>
-          Math.max(1, Math.min(actual, cantidadMaximaProducto(fresco.stock))),
-        );
+      if (resultado.tipo === 'SIN_STOCK' || resultado.tipo === 'MAXIMO') {
+        // Se dice cuántas se pueden agregar todavía y el selector se ajusta a eso.
+        const tope = cantidadMaximaProducto(fresco.stock);
+        const restantes = Math.max(0, tope - resultado.enCarrito);
+        if (restantes > 0) setCantidad(restantes);
+        const totalTexto =
+          resultado.tipo === 'MAXIMO'
+            ? `se pueden llevar hasta ${tope} por pedido`
+            : `hay ${fresco.stock} ${fresco.stock === 1 ? 'unidad disponible' : 'unidades disponibles'}`;
         setAviso(
-          resultado.quedan === 0
+          fresco.stock === 0
             ? 'Este producto se agotó.'
-            : `Solo quedan ${resultado.quedan} ${resultado.quedan === 1 ? 'unidad' : 'unidades'}` +
-                (resultado.enCarrito ? ` y ya tienes ${resultado.enCarrito} en tu carrito.` : '.'),
-        );
-        return;
-      }
-      if (resultado.tipo === 'MAXIMO') {
-        setAviso(
-          `Puedes llevar hasta 99 unidades; ya tienes ${resultado.enCarrito} en tu carrito.`,
+            : restantes === 0
+              ? `Ya tienes en tu carrito todas las unidades que puedes llevar (${resultado.enCarrito}).`
+              : `Solo puedes agregar ${restantes} más: ${totalTexto} y ya tienes ${resultado.enCarrito} en tu carrito.`,
         );
         return;
       }
       guardarCarrito(resultado.carrito);
-      setAgregado({ cantidad });
+      setAgregado({ cantidad: unidades });
+      setCantidad(1);
     } catch {
       setAviso('No pudimos agregar el producto. Intenta de nuevo.');
     } finally {
@@ -224,70 +226,92 @@ export function DetalleProducto({ id }: { id: string }) {
   const maximo = cantidadMaximaProducto(producto.stock);
   const agotado = disponibilidad.tipo === 'AGOTADO';
   const enCarrito = cantidadEnCarrito(leerCarrito(), producto.id);
+  /** Lo que todavía se puede agregar, descontando lo que ya está en el carrito. */
+  const puedeAgregar = Math.max(0, maximo - enCarrito);
+  const completo = !agotado && puedeAgregar === 0;
 
   return (
     <div className="clinic-profile">
       <Link className="text-action" href="/tienda">
         ← Volver a la tienda
       </Link>
-      <div className="clinic-profile__hero">
-        <div className="clinic-profile__copy">
-          <StatusBadge tone="success">{producto.categoria}</StatusBadge>
-          <h1>{producto.nombre}</h1>
-          <p>Vendido por {producto.aliado}</p>
+      <div className="detail-sheet">
+        <div className="detail-sheet__media">
+          <Galeria fotos={producto.fotos} nombre={producto.nombre} />
         </div>
-        <aside aria-label="Comprar" className="clinic-booking-card">
-          <span className="eyebrow eyebrow--dark">PRECIO</span>
-          <strong>{formatoPrecio(producto.precio)}</strong>
-          <StatusBadge tone={TONO_DISPONIBILIDAD[disponibilidad.tipo]}>
-            {disponibilidad.texto}
-          </StatusBadge>
-          {!agotado && (
-            <label className="field">
-              <span>Cantidad</span>
-              <select
-                className="control"
-                onChange={(evento) => setCantidad(Number(evento.target.value))}
-                value={Math.min(cantidad, maximo)}
-              >
-                {Array.from({ length: maximo }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+        <section aria-labelledby="producto-nombre" className="detail-sheet__info">
+          <div className="detail-panel__head">
+            <div className="detail-sheet__chips">
+              <span>{producto.categoria}</span>
+            </div>
+            <StatusBadge tone={TONO_DISPONIBILIDAD[disponibilidad.tipo]}>
+              {disponibilidad.texto}
+            </StatusBadge>
+          </div>
+          <h1 id="producto-nombre">{producto.nombre}</h1>
+          <p className="detail-sheet__meta">
+            <span>
+              <i aria-hidden="true">⌂</i> Vendido por {producto.aliado}
+            </span>
+          </p>
+          <p className="detail-sheet__price">{formatoPrecio(producto.precio)}</p>
+          <p className="detail-sheet__text">
+            {producto.descripcion || 'La tienda no agregó una descripción para este producto.'}
+          </p>
           {aviso && (
             <AlertBox tone="warning" title="No se agregó al carrito">
               {aviso}
             </AlertBox>
           )}
-          <VetoButton
-            disabled={agotado}
-            loading={agregando}
-            onClick={() => void agregar()}
-            type="button"
-          >
-            {agotado ? 'Agotado' : 'Agregar al carrito'}
-          </VetoButton>
-          <small>
-            {enCarrito > 0
-              ? `Ya tienes ${enCarrito} en tu carrito.`
-              : 'No necesitas iniciar sesión para agregar; te la pediremos al comprar.'}
-          </small>
-        </aside>
-      </div>
-
-      <div className="clinic-profile__main">
-        <section aria-labelledby="producto-fotos" className="clinic-section">
-          <h2 id="producto-fotos">Fotos</h2>
-          <Galeria fotos={producto.fotos} nombre={producto.nombre} />
-        </section>
-        <section aria-labelledby="producto-descripcion" className="clinic-section">
-          <h2 id="producto-descripcion">Descripción</h2>
-          <p className="product-description">
-            {producto.descripcion || 'La tienda no agregó una descripción para este producto.'}
+          {/* Cantidad con − / + y el botón en la misma fila. */}
+          <div className="detail-sheet__actions detail-sheet__buy">
+            {!agotado && !completo && (
+              <SelectorCantidad
+                maximo={puedeAgregar}
+                onCambiar={setCantidad}
+                valor={Math.min(cantidad, puedeAgregar)}
+              />
+            )}
+            <VetoButton
+              disabled={agotado || completo}
+              loading={agregando}
+              onClick={() => void agregar(false, Math.min(cantidad, puedeAgregar))}
+              type="button"
+            >
+              {agotado
+                ? 'Agotado'
+                : completo
+                  ? 'Ya tienes todas en tu carrito'
+                  : 'Agregar al carrito'}
+            </VetoButton>
+          </div>
+          <p className="detail-sheet__note">
+            <span aria-hidden="true">★</span>
+            <span>
+              {completo ? (
+                <>
+                  Ya tienes {enCarrito} en tu carrito: es todo lo que puedes llevar.{' '}
+                  <Link href="/carrito">Ver carrito</Link>
+                </>
+              ) : cantidad >= puedeAgregar ? (
+                <>
+                  Seleccionaste el máximo que puedes agregar ({puedeAgregar}).
+                  {enCarrito > 0 && (
+                    <>
+                      {' '}
+                      Ya tienes {enCarrito} en tu carrito. <Link href="/carrito">Ver carrito</Link>
+                    </>
+                  )}
+                </>
+              ) : enCarrito > 0 ? (
+                <>
+                  Ya tienes {enCarrito} en tu carrito; puedes agregar hasta {puedeAgregar} más.{' '}
+                  <Link href="/carrito">Ver carrito</Link>
+                </>
+              ) : (
+                'No necesitas iniciar sesión para agregar; te la pediremos al comprar.'
+              )}
+            </span>
           </p>
         </section>
       </div>

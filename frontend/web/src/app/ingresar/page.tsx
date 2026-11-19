@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { iniciales } from '@/components/PortadaCapas';
 import { useEffect, useState, type FormEvent } from 'react';
 import type { PendienteGoogle } from '@veto/shared';
-import { AlertBox, VetoButton } from '@/components/ui/veto-components';
+import { AlertBox, CelularField, VetoButton } from '@/components/ui/veto-components';
 import { GoogleAuthButton } from '@/components/GoogleAuthButton';
 import { api, ApiError } from '@/lib/api';
 import { notificarCambioSesion } from '@/lib/session';
@@ -11,13 +12,6 @@ import { notificarCambioSesion } from '@/lib/session';
 type Usuario = { id: string; nombre: string; rol: string };
 type RespuestaLogin =
   { usuario: Usuario } | { requiere2fa: true; desafio: string; expiraEn: string };
-
-function formatearCelular(valor: string) {
-  const digitos = valor.replace(/\D/g, '').slice(0, 10);
-  if (digitos.length <= 3) return digitos;
-  if (digitos.length <= 6) return `${digitos.slice(0, 3)} ${digitos.slice(3)}`;
-  return `${digitos.slice(0, 3)} ${digitos.slice(3, 6)} ${digitos.slice(6)}`;
-}
 
 const erroresGoogle: Record<string, string> = {
   cancelado: 'Cancelaste el inicio de sesión con Google.',
@@ -29,6 +23,11 @@ const erroresGoogle: Record<string, string> = {
   cuenta_distinta: 'Se inició sesión con una cuenta de Google diferente.',
   no_disponible: 'El inicio de sesión con Google no está configurado en este servidor.',
 };
+
+/** Solo rutas de esta misma web ("/reservar/…"), nunca otro sitio ("//x.com", "https://…"). */
+function rutaInternaSegura(ruta: string | null) {
+  return ruta && ruta.startsWith('/') && !ruta.startsWith('//') && !ruta.includes('\\') ? ruta : '';
+}
 
 export default function Ingresar() {
   const [correo, setCorreo] = useState('');
@@ -43,10 +42,13 @@ export default function Ingresar() {
   const [celularGoogle, setCelularGoogle] = useState('');
   const [contrasenaGoogle, setContrasenaGoogle] = useState('');
   const [codigoGoogle, setCodigoGoogle] = useState('');
+  /** A dónde volver después de ingresar (ej. la reserva que el tutor estaba haciendo). */
+  const [volverA, setVolverA] = useState('');
 
   useEffect(() => {
     let vigente = true;
     const parametros = new URLSearchParams(window.location.search);
+    setVolverA(rutaInternaSegura(parametros.get('returnTo')));
     const resultado = parametros.get('google');
     if (resultado === 'ok') {
       setCargando(true);
@@ -213,38 +215,52 @@ export default function Ingresar() {
     <div className="auth-page auth-page--centered auth-page--login">
       <section aria-labelledby="login-title" className="auth-form-panel">
         <div className="auth-card">
-          <div className="auth-card__brandline">
-            <span aria-hidden="true" className="auth-card__brand-icon">
-              <svg fill="none" viewBox="0 0 32 32">
-                <path d="M10 15.5c1.5 0 2.6-1.8 2.6-3.7S11.5 8.4 10 8.4 7.4 10 7.4 11.8s1.1 3.7 2.6 3.7Zm12 0c1.5 0 2.6-1.8 2.6-3.7S23.5 8.4 22 8.4s-2.6 1.6-2.6 3.4 1.1 3.7 2.6 3.7ZM5.4 20.2c0-2.1 1.3-3.5 3-3.5 1.2 0 2.1.8 2.8 1.7.9-1 2.2-1.8 3.6-1.8s2.7.8 3.6 1.8c.7-.9 1.6-1.7 2.8-1.7 1.7 0 3 1.4 3 3.5 0 3-3.8 5.8-9.4 5.8s-9.4-2.8-9.4-5.8Z" />
-              </svg>
-            </span>
-            <span>UN LUGAR PARA CUIDARLOS MEJOR</span>
-            <i aria-hidden="true">✳</i>
-          </div>
-          <p className="eyebrow eyebrow--dark">QUÉ BUENO TENERTE DE VUELTA</p>
-          <h1 id="login-title">Inicia sesión</h1>
-          <p className="auth-intro">Ingresa para continuar cuidando de tu mascota.</p>
-
           {usuario ? (
-            <>
-              <AlertBox tone="success" title={`¡Hola, ${usuario.nombre}!`}>
-                Iniciaste sesión correctamente. Tu sesión segura ya está activa.
-              </AlertBox>
+            // Sesión iniciada: bienvenida sencilla con la ficha (monograma peach, saludo en Sora
+            // con acento burgundy) en lugar de una alerta verde.
+            <div className="auth-welcome">
+              <span aria-hidden="true" className="auth-welcome__mono">
+                {iniciales(usuario.nombre) || 'V'}
+              </span>
+              <p className="eyebrow eyebrow--dark">SESIÓN INICIADA</p>
+              <h1 id="login-title">
+                Hola, <em>{usuario.nombre}.</em>
+              </h1>
+              <p className="auth-intro">
+                {usuario.rol === 'TUTOR'
+                  ? 'Qué bueno verte de nuevo. Tus mascotas te esperan.'
+                  : 'Qué bueno verte de nuevo. Tu panel está listo.'}
+              </p>
               <Link
                 className="veto-button veto-button--primary auth-submit"
                 href={
-                  usuario.rol === 'VETERINARIO'
+                  volverA ||
+                  (usuario.rol === 'VETERINARIO'
                     ? '/panel/veterinario'
                     : usuario.rol === 'ALIADO'
                       ? '/panel/aliado'
-                      : '/mascotas'
+                      : '/mascotas')
                 }
               >
-                Continuar
+                {volverA
+                  ? 'Continuar'
+                  : usuario.rol === 'TUTOR'
+                    ? 'Ver mis mascotas'
+                    : 'Ir a mi panel'}
               </Link>
+              <Link className="auth-welcome__home" href="/">
+                Ir al inicio
+              </Link>
+            </div>
+          ) : (
+            <>
+              <p className="eyebrow eyebrow--dark">QUÉ BUENO TENERTE DE VUELTA</p>
+              <h1 id="login-title">Inicia sesión</h1>
+              <p className="auth-intro">Ingresa para continuar cuidando de tu mascota.</p>
             </>
-          ) : googlePendiente ? (
+          )}
+
+          {usuario ? null : googlePendiente ? (
             <>
               <AlertBox
                 tone="info"
@@ -266,28 +282,13 @@ export default function Ingresar() {
               )}
               {googlePendiente.tipo === 'REGISTRO' ? (
                 <form className="form-stack" onSubmit={completarRegistroGoogle}>
-                  <label className="field">
-                    <span>Celular de contacto *</span>
-                    <span className="phone-control">
-                      <span className="phone-prefix">+57</span>
-                      <input
-                        aria-describedby="google-celular-hint"
-                        autoComplete="tel-national"
-                        className="control"
-                        inputMode="numeric"
-                        maxLength={12}
-                        onChange={(event) =>
-                          setCelularGoogle(event.target.value.replace(/\D/g, '').slice(0, 10))
-                        }
-                        placeholder="300 123 4567"
-                        required
-                        value={formatearCelular(celularGoogle)}
-                      />
-                    </span>
-                    <small className="field__hint" id="google-celular-hint">
-                      Ingresa los 10 dígitos de tu celular ({celularGoogle.length}/10).
-                    </small>
-                  </label>
+                  <CelularField
+                    id="google-celular"
+                    label="Celular de contacto *"
+                    onChange={setCelularGoogle}
+                    required
+                    value={celularGoogle}
+                  />
                   <VetoButton
                     className="auth-submit"
                     disabled={celularGoogle.length !== 10}

@@ -3,14 +3,33 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import type { PerfilUsuario } from '@veto/shared';
+import type { PerfilUsuario, TipoDocumento } from '@veto/shared';
 import { actualizarPerfilSchema, eliminarCuentaSchema } from '@veto/shared';
-import { AlertBox, Avatar, VetoButton } from '@/components/ui/veto-components';
+import { DocumentoFields } from '@/components/DocumentoFields';
+import { AlertBox, Avatar, CelularField, VetoButton } from '@/components/ui/veto-components';
 import { API_URL, api, ApiError } from '@/lib/api';
 import { erroresPorCampo } from '@/lib/errores';
 import { notificarCambioSesion } from '@/lib/session';
 
-type PerfilForm = { nombre: string; celular: string; correo: string; contrasenaActual: string };
+type PerfilForm = {
+  nombre: string;
+  tipoDocumento: TipoDocumento;
+  numeroDocumento: string;
+  celular: string;
+  correo: string;
+  contrasenaActual: string;
+};
+
+function formularioDesdePerfil(usuario: PerfilUsuario): PerfilForm {
+  return {
+    nombre: usuario.nombre,
+    tipoDocumento: usuario.tipoDocumento ?? 'CC',
+    numeroDocumento: usuario.numeroDocumento ?? '',
+    celular: usuario.celular,
+    correo: usuario.correo,
+    contrasenaActual: '',
+  };
+}
 type Estado2fa = { activado: boolean; activadoEn: string | null };
 type Configuracion2fa = { activado: false; secreto: string; uri: string };
 
@@ -18,6 +37,8 @@ export default function MiPerfil() {
   const [perfil, setPerfil] = useState<PerfilUsuario | null>(null);
   const [formulario, setFormulario] = useState<PerfilForm>({
     nombre: '',
+    tipoDocumento: 'CC',
+    numeroDocumento: '',
     celular: '',
     correo: '',
     contrasenaActual: '',
@@ -53,12 +74,7 @@ export default function MiPerfil() {
     try {
       const resultado = await api<{ usuario: PerfilUsuario }>('/identidad/me');
       setPerfil(resultado.usuario);
-      setFormulario({
-        nombre: resultado.usuario.nombre,
-        celular: resultado.usuario.celular,
-        correo: resultado.usuario.correo,
-        contrasenaActual: '',
-      });
+      setFormulario(formularioDesdePerfil(resultado.usuario));
     } catch (causa) {
       setError(
         causa instanceof ApiError
@@ -164,6 +180,15 @@ export default function MiPerfil() {
     const cambios: Record<string, string> = {};
     if (perfil && formulario.nombre.trim() !== perfil.nombre) cambios.nombre = formulario.nombre;
     if (perfil && formulario.celular !== perfil.celular) cambios.celular = formulario.celular;
+    const documentoCambio =
+      perfil &&
+      formulario.numeroDocumento !== '' &&
+      (formulario.numeroDocumento !== (perfil.numeroDocumento ?? '') ||
+        formulario.tipoDocumento !== perfil.tipoDocumento);
+    if (documentoCambio) {
+      cambios.tipoDocumento = formulario.tipoDocumento;
+      cambios.numeroDocumento = formulario.numeroDocumento;
+    }
     if (perfil && formulario.correo.trim() !== perfil.correo) cambios.correo = formulario.correo;
     if (cambios.correo) cambios.contrasenaActual = formulario.contrasenaActual;
     const validacion = actualizarPerfilSchema.safeParse(cambios);
@@ -179,12 +204,7 @@ export default function MiPerfil() {
         body: JSON.stringify(validacion.data),
       });
       setPerfil(respuesta.usuario);
-      setFormulario({
-        nombre: respuesta.usuario.nombre,
-        celular: respuesta.usuario.celular,
-        correo: respuesta.usuario.correo,
-        contrasenaActual: '',
-      });
+      setFormulario(formularioDesdePerfil(respuesta.usuario));
       setExito('Tus datos quedaron actualizados.');
     } catch (causa) {
       if (causa instanceof ApiError && Object.keys(causa.fieldErrors).length) {
@@ -401,26 +421,20 @@ export default function MiPerfil() {
               />
               {errores.nombre && <small className="field-error">{errores.nombre}</small>}
             </label>
-            <label className="field">
-              <span>Celular</span>
-              <span className="phone-control">
-                <span className="phone-prefix">+57</span>
-                <input
-                  autoComplete="tel-national"
-                  className="control"
-                  inputMode="numeric"
-                  maxLength={10}
-                  onChange={(event) =>
-                    setFormulario({
-                      ...formulario,
-                      celular: event.target.value.replace(/\D/g, ''),
-                    })
-                  }
-                  value={formulario.celular}
-                />
-              </span>
-              {errores.celular && <small className="field-error">{errores.celular}</small>}
-            </label>
+            <DocumentoFields
+              errores={errores}
+              id="perfil-documento"
+              numero={formulario.numeroDocumento}
+              onChange={(cambio) => setFormulario({ ...formulario, ...cambio })}
+              tipo={formulario.tipoDocumento}
+            />
+            <CelularField
+              error={errores.celular}
+              id="perfil-celular"
+              label="Celular"
+              onChange={(celular) => setFormulario({ ...formulario, celular })}
+              value={formulario.celular}
+            />
             <label className="field">
               <span>Correo electrónico</span>
               <input
