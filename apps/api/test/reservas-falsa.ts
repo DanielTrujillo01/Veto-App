@@ -150,6 +150,11 @@ export function bdReservas(o: OpcionesReserva = {}) {
           ],
         };
       }
+      if (
+        sql.includes("SELECT EXISTS (SELECT 1 FROM aliado WHERE id = $1 AND estado = 'ACTIVO')")
+      ) {
+        return { rows: [{ ok: true }] };
+      }
       if (sql.includes('FROM veterinario v JOIN usuario u')) {
         return { rows: o.veterinarios ?? [{ id: VET, nombre: 'Dra. Ana' }] };
       }

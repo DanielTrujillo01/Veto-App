@@ -76,8 +76,9 @@ export class AgendaRepository {
    * Parte del horario semanal vigente de cada veterinario, corta cada franja en espacios
    * consecutivos de la duración del servicio y descarta los que ya empezaron, los que se
    * cruzan con un bloqueo y los que se cruzan con una cita ocupada (`ocupados`, que entrega
-   * el módulo de citas). Las horas del horario se interpretan en la zona horaria de la base,
-   * igual que la regla que valida las reservas, así lo que se ofrece siempre se puede reservar.
+   * el módulo de citas). Las horas del horario se interpretan en la zona horaria de la sesión
+   * (hora de Colombia: ver database/sesion.ts), igual que la regla que valida las reservas, así lo
+   * que se ofrece siempre se puede reservar.
    */
   async espaciosLibres(
     client: Consultor,

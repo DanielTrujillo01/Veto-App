@@ -21,3 +21,4 @@ export * from './reserva';
 export * from './texto-libre';
 export * from './gestion-cita';
 export * from './carrito';
+export * from './zona-horaria';

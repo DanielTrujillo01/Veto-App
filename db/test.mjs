@@ -18,7 +18,14 @@ if (!url) {
   process.exit(1);
 }
 const ssl = url.includes('.supabase.co') ? { rejectUnauthorized: false } : undefined;
-const client = new pg.Client({ connectionString: url, ssl, connectionTimeoutMillis: 10_000 });
+// Hora de Colombia en la sesión, igual que la API (apps/api/src/database/sesion.ts): así las
+// pruebas no dependen de la zona con que esté instalado el servidor.
+const client = new pg.Client({
+  connectionString: url,
+  ssl,
+  connectionTimeoutMillis: 10_000,
+  options: '-c timezone=America/Bogota',
+});
 client.on('notice', (aviso) => console.log(aviso.message));
 
 await client.connect();

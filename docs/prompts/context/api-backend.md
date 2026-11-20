@@ -14,6 +14,9 @@ controladores, servicios y esquemas Zod actuales del repositorio: 89 rutas de ap
 - **Documentación interactiva:** `/api/docs` (Swagger UI) y `/api/docs-json` (documento OpenAPI
   generado). Son rutas de documentación, no forman parte del inventario de 75 controladores.
 - **Identificadores:** los parámetros de ruta UUID se validan; un UUID inválido genera `400`.
+- **Fechas y horas:** las respuestas entregan los instantes en hora de Colombia, con desfase (`2026-12-07T08:00:00.000-05:00`),
+  no en UTC. Al enviar se acepta con `-05:00` o con `Z` (es el mismo instante). Las fechas sin hora (`AAAA-MM-DD`) y las horas
+  del día (`08:00`, horarios de atención) no cambian y son siempre de Colombia.
 
 ### Errores comunes
 
