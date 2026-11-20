@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { Pool } from 'pg';
 import { ENV, type Env } from '../config/env';
 import { DatabaseService, PG_POOL } from './database.service';
+import { OPCIONES_DE_SESION } from './sesion';
 
 @Global()
 @Module({
@@ -9,7 +10,7 @@ import { DatabaseService, PG_POOL } from './database.service';
     {
       provide: PG_POOL,
       inject: [ENV],
-      // search_path: las tablas viven en el esquema "veto".
+      // search_path (esquema "veto") y zona horaria (Colombia) de cada conexión: ver ./sesion.
       useFactory: (env: Env) =>
         new Pool({
           connectionString: env.DATABASE_URL,
@@ -17,7 +18,7 @@ import { DatabaseService, PG_POOL } from './database.service';
           ssl: env.DATABASE_URL.includes('.supabase.co')
             ? { rejectUnauthorized: false }
             : undefined,
-          options: '-c search_path=veto,public',
+          options: OPCIONES_DE_SESION,
           connectionTimeoutMillis: 10_000,
           max: 10,
         }),

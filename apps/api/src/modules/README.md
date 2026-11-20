@@ -33,6 +33,17 @@ modelo de datos (`docs/modelo-de-datos.md`).
 
 ## Contrato común de la API
 
+- **Fechas y horas: hora de Colombia (UTC-5).** Las respuestas entregan los instantes con el desfase de Colombia
+  (`2026-12-07T08:00:00.000-05:00`), no en UTC (`...T13:00:00.000Z`): un interceptor global (`HoraLocalInterceptor`, en
+  `main.ts`) convierte las fechas de todas las respuestas, incluidos los cuerpos de error, así que ningún módulo tiene que
+  hacerlo. Es el mismo instante escrito de otra manera: **al enviar se acepta cualquiera de las dos formas** (con `-05:00` o
+  con `Z`) y se puede devolver tal cual lo que se recibió. Las fechas sin hora (`AAAA-MM-DD`) y las horas del día (`08:00`)
+  no cambian. Colombia no tiene horario de verano, así que el desfase es siempre -05:00 (`aHoraLocal` en `@veto/shared`).
+- **El horario de atención son horas de Colombia.** Se guarda como hora del día (`08:00`) y la base la interpreta en la zona
+  de la sesión; por eso la API abre cada conexión con `timezone=America/Bogota` (`database/sesion.ts`) y no depende de cómo
+  esté instalado el servidor (Docker y Supabase usan UTC: sin esto, un horario de 08:00 a 12:00 se ofrecería de 03:00 a
+  07:00 en Colombia). Las fechas de las citas siguen guardándose como instantes absolutos. `pnpm db:test` también corre
+  en hora de Colombia.
 - **Respuestas en camelCase**, sin envoltorio `{ data }`. Las de identidad envuelven al usuario:
   `{ usuario }` (login, `/me`, registro de tutor); el registro de aliado devuelve `{ usuario, aliado }`.
 - **Errores de validación (400):** `{ message: 'Revisa los datos ingresados', errores: { campo: mensaje } }`,

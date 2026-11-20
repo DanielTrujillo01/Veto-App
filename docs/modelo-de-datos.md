@@ -192,7 +192,11 @@ las reservas se validan contra el horario de cada veterinario. Reglas que hace c
 
 El calendario que ve el tutor no se guarda: se calcula en cada consulta (horario menos bloqueos menos citas vigentes,
 en espacios consecutivos de la duración del servicio) y por eso refleja los cambios al instante. Las horas del horario
-son "hora de pared" y se interpretan en la zona horaria de la base, igual que la regla que valida las reservas.
+son "hora de pared" y se interpretan en la zona horaria de la sesión, igual que la regla que valida las reservas. **La API
+abre cada conexión en `America/Bogota`** (UTC-5, sin horario de verano), de modo que un horario de 08:00 a 12:00 son
+horas de Colombia aunque el servidor esté instalado en UTC, como en Docker y Supabase; `pnpm db:test` hace lo mismo. Quien
+se conecte con otro cliente (psql, DBeaver) debe ejecutar `SET TIME ZONE 'America/Bogota';` para leer las horas locales.
+Las fechas (`timestamptz`) son instantes absolutos: no cambian con la zona; la API las entrega con el desfase `-05:00`.
 
 **Elegir fecha y hora (HU-029).** El tutor elige un espacio del calendario y la API lo conserva en `seleccion_horario`,
 una fila por tutor (elegir otro espacio reemplaza el anterior) que vence a los 60 minutos. Existe para que la elección

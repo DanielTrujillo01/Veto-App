@@ -1,5 +1,6 @@
 import { INestApplication, type Type } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { HoraLocalInterceptor } from '../src/common/hora-local.interceptor';
 import { ENV, type Env } from '../src/config/env';
 import { DatabaseService } from '../src/database/database.service';
 
@@ -73,6 +74,8 @@ export async function crearApp(
   modulos: Type[],
   db: unknown,
   env: Partial<Env> = {},
+  /** `horaLocal`: como en main.ts, las respuestas salen en hora de Colombia (-05:00). */
+  opciones: { horaLocal?: boolean } = {},
 ): Promise<INestApplication> {
   const modulo = await Test.createTestingModule({ imports: modulos })
     .useMocker((token) => {
@@ -82,6 +85,7 @@ export async function crearApp(
     .compile();
   const app = modulo.createNestApplication();
   app.setGlobalPrefix('api');
+  if (opciones.horaLocal) app.useGlobalInterceptors(new HoraLocalInterceptor());
   await app.init();
   return app;
 }

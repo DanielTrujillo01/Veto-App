@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { HoraLocalInterceptor } from './common/hora-local.interceptor';
 import { ENV, type Env } from './config/env';
 
 async function bootstrap() {
@@ -10,6 +11,8 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
+  // Las fechas y horas de todas las respuestas salen en hora de Colombia (-05:00), no en UTC.
+  app.useGlobalInterceptors(new HoraLocalInterceptor());
 
   // Documentación OpenAPI: es el contrato entre la API y la web.
   const documento = SwaggerModule.createDocument(
