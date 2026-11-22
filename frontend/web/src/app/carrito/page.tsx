@@ -1,6 +1,6 @@
-import { PaginaPendiente } from '@/components/PaginaPendiente';
+import { VistaCarrito } from './VistaCarrito';
 
-/** Destino provisional de "Ver carrito" (HU-046) hasta que exista la pantalla del carrito. */
+/** Carrito: ver, cambiar cantidades y quitar productos (vista previa de HU-047). */
 export default function Carrito() {
-  return <PaginaPendiente titulo="Tu carrito" historias="HU-047" />;
+  return <VistaCarrito />;
 }

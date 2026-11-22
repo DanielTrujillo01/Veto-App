@@ -2,20 +2,46 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type {
+  CitaDetalle,
   EspecieAtendida,
+  MascotaAdopcion,
   ModoConfirmacion,
+  ProductoGestion,
   ReglaPrecio,
   Servicio,
   Sede,
   TipoAliado,
 } from '@veto/shared';
 import { api, ApiError } from '@/lib/api';
-import { AlertBox, StatusBadge, VetoButton } from '@/components/ui/veto-components';
-import { BrandLogo } from '@/components/BrandLogo';
+import { AlertBox, CelularField, StatusBadge, VetoButton } from '@/components/ui/veto-components';
+import { PanelShell } from '@/components/panel/PanelShell';
+import {
+  filtrarAgenda,
+  ListaAgenda,
+  porCerrar,
+  type FiltroAgenda,
+} from '@/components/panel/AgendaCitas';
+import {
+  AccesosPanel,
+  AvisoPanel,
+  BienvenidaPanel,
+  IndicadoresPanel,
+  TarjetaPanel,
+} from '@/components/panel/PanelResumen';
+import { GestionAdopciones } from './GestionAdopciones';
 import { ProductosTienda } from './ProductosTienda';
 
 type Seccion =
-  'resumen' | 'equipo' | 'sedes' | 'servicios' | 'horarios' | 'especies' | 'citas' | 'productos';
+  | 'resumen'
+  | 'equipo'
+  | 'sedes'
+  | 'servicios'
+  | 'horarios'
+  | 'especies'
+  | 'citas'
+  | 'agenda'
+  | 'productos'
+  | 'adopciones';
 type Veterinario = {
   id: string;
   nombre: string;
@@ -54,23 +80,38 @@ const dias = [
   { numero: 6, nombre: 'Sábado' },
   { numero: 7, nombre: 'Domingo' },
 ];
-const navegacionClinica: { id: Seccion; etiqueta: string; icono: IconoPanelNombre }[] = [
+type ItemNavegacion = {
+  id: Seccion;
+  etiqueta: string;
+  icono: IconoPanelNombre;
+  /** Grupo de la barra lateral; sin grupo va en "Gestión". */
+  grupo?: string;
+};
+
+const navegacionClinica: ItemNavegacion[] = [
+  { id: 'resumen', etiqueta: 'Resumen', icono: 'home', grupo: 'Mi clínica' },
+  { id: 'sedes', etiqueta: 'Sedes', icono: 'pin', grupo: 'Mi clínica' },
+  { id: 'equipo', etiqueta: 'Veterinarios', icono: 'team', grupo: 'Mi clínica' },
+  { id: 'especies', etiqueta: 'Especies', icono: 'paw', grupo: 'Mi clínica' },
+  { id: 'agenda', etiqueta: 'Citas', icono: 'calendar', grupo: 'Atención y citas' },
+  { id: 'servicios', etiqueta: 'Servicios', icono: 'heart', grupo: 'Atención y citas' },
+  { id: 'horarios', etiqueta: 'Disponibilidad', icono: 'clock', grupo: 'Atención y citas' },
+  {
+    id: 'citas',
+    etiqueta: 'Confirmación de citas',
+    icono: 'calendar',
+    grupo: 'Atención y citas',
+  },
+];
+const navegacionVeterinario: ItemNavegacion[] = [
   { id: 'resumen', etiqueta: 'Resumen', icono: 'home' },
-  { id: 'equipo', etiqueta: 'Veterinarios', icono: 'team' },
-  { id: 'sedes', etiqueta: 'Sedes', icono: 'pin' },
+  { id: 'agenda', etiqueta: 'Citas', icono: 'calendar' },
   { id: 'servicios', etiqueta: 'Servicios', icono: 'heart' },
   { id: 'horarios', etiqueta: 'Disponibilidad', icono: 'clock' },
   { id: 'especies', etiqueta: 'Especies', icono: 'paw' },
   { id: 'citas', etiqueta: 'Confirmación de citas', icono: 'calendar' },
 ];
-const navegacionVeterinario: { id: Seccion; etiqueta: string; icono: IconoPanelNombre }[] = [
-  { id: 'resumen', etiqueta: 'Resumen', icono: 'home' },
-  { id: 'servicios', etiqueta: 'Servicios', icono: 'heart' },
-  { id: 'horarios', etiqueta: 'Disponibilidad', icono: 'clock' },
-  { id: 'especies', etiqueta: 'Especies', icono: 'paw' },
-  { id: 'citas', etiqueta: 'Confirmación de citas', icono: 'calendar' },
-];
-const navegacionTienda: { id: Seccion; etiqueta: string; icono: IconoPanelNombre }[] = [
+const navegacionTienda: ItemNavegacion[] = [
   { id: 'resumen', etiqueta: 'Resumen', icono: 'home' },
   { id: 'sedes', etiqueta: 'Sedes', icono: 'pin' },
   { id: 'horarios', etiqueta: 'Horario', icono: 'clock' },
@@ -217,6 +258,16 @@ export default function PanelAliado() {
     fotoUrl: '',
     descripcion: '',
   });
+  /** Resumen de la clínica: si algún veterinario ya tiene horarios (null = sin consultar). */
+  const [conHorarios, setConHorarios] = useState<boolean | null>(null);
+  /** Agenda de citas del aliado (GET /citas): resumen y sección "Citas". */
+  const [agenda, setAgenda] = useState<CitaDetalle[]>([]);
+  const [filtroAgenda, setFiltroAgenda] = useState<FiltroAgenda>('proximas');
+  /** Resumen de la tienda y de la fundación. */
+  const [productosResumen, setProductosResumen] = useState<ProductoGestion[]>([]);
+  const [mascotasResumen, setMascotasResumen] = useState<MascotaAdopcion[]>([]);
+  /** "Nuevo servicio" desde el encabezado: abre el formulario cuando carga la sección. */
+  const [abrirNuevoServicio, setAbrirNuevoServicio] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [filtroTipo, setFiltroTipo] = useState('todos');
 
@@ -256,21 +307,42 @@ export default function PanelAliado() {
     };
   }, []);
 
-  const navegacion = !aliadoTipo
+  const navegacion: ItemNavegacion[] = !aliadoTipo
     ? []
     : aliadoTipo === 'VET_INDEPENDIENTE'
       ? navegacionVeterinario
       : aliadoTipo === 'TIENDA'
         ? navegacionTienda
         : aliadoTipo === 'FUNDACION'
-          ? [{ id: 'resumen' as const, etiqueta: 'Resumen', icono: 'home' as const }]
+          ? [
+              { id: 'resumen' as const, etiqueta: 'Resumen', icono: 'home' as const },
+              { id: 'adopciones' as const, etiqueta: 'Adopciones', icono: 'paw' as const },
+            ]
           : navegacionClinica;
 
   const titulo = navegacion.find((item) => item.id === seccion)?.etiqueta ?? 'Resumen';
 
+  /** La barra lateral agrupa las secciones (la clínica en "Mi clínica" y "Atención y citas"). */
+  const gruposNavegacion = navegacion.reduce<[string, ItemNavegacion[]][]>((grupos, item) => {
+    const nombre = item.grupo ?? 'Gestión';
+    const existente = grupos.find(([grupo]) => grupo === nombre);
+    if (existente) existente[1].push(item);
+    else grupos.push([nombre, [item]]);
+    return grupos;
+  }, []);
+
+  /** Página que ven los tutores (solo las clínicas tienen una pública por ahora). */
+  const perfilPublico =
+    aliadoTipo === 'CLINICA' && aliadoId && aliadoEstado === 'ACTIVO'
+      ? `/clinicas/${aliadoId}`
+      : '';
+
   const cargar = useCallback(async () => {
     if (!aliadoId || aliadoEstado !== 'ACTIVO') return;
-    if (aliadoTipo === 'TIENDA' && (seccion === 'horarios' || seccion === 'productos')) {
+    if (
+      (aliadoTipo === 'TIENDA' && (seccion === 'horarios' || seccion === 'productos')) ||
+      (aliadoTipo === 'FUNDACION' && seccion !== 'resumen')
+    ) {
       setCargando(false);
       setError('');
       return;
@@ -280,14 +352,26 @@ export default function PanelAliado() {
     try {
       if (seccion === 'resumen') {
         if (aliadoTipo === 'CLINICA') {
-          const [listaServicios, listaSedes, equipo] = await Promise.all([
+          const [listaServicios, listaSedes, equipo, especiesAtendidas] = await Promise.all([
             api<Servicio[]>(`/aliados/${aliadoId}/servicios/gestion`),
             api<Sede[]>(`/aliados/${aliadoId}/sedes/gestion`),
             api<{ veterinarios: Veterinario[] }>(`/aliados/${aliadoId}/veterinarios`),
+            api<EspecieAtendida[]>(`/aliados/${aliadoId}/especies`),
           ]);
           setServicios(listaServicios);
           setSedes(listaSedes);
           setVeterinarios(equipo.veterinarios);
+          setEspeciesSeleccionadas(especiesAtendidas.map((especie) => especie.id));
+          // Paso "Horarios": basta con que un veterinario tenga franjas de atención.
+          const horariosPorVeterinario = await Promise.all(
+            equipo.veterinarios.map((veterinario) =>
+              api<unknown[]>(`/aliados/${aliadoId}/veterinarios/${veterinario.id}/horarios`).catch(
+                () => [],
+              ),
+            ),
+          );
+          setConHorarios(horariosPorVeterinario.some((lista) => lista.length > 0));
+          setAgenda(await api<CitaDetalle[]>('/citas?limite=200').catch(() => []));
         } else if (aliadoTipo === 'VET_INDEPENDIENTE') {
           const [listaServicios, perfil, especiesAtendidas] = await Promise.all([
             api<Servicio[]>(`/aliados/${aliadoId}/servicios/gestion`),
@@ -299,8 +383,20 @@ export default function PanelAliado() {
           setVeterinarios([
             { id: perfil.id, nombre: perfil.usuario.nombre, fotoUrl: null, descripcion: null },
           ]);
+          const misHorarios = await api<unknown[]>(
+            `/aliados/${aliadoId}/veterinarios/${perfil.id}/horarios`,
+          ).catch(() => []);
+          setConHorarios(misHorarios.length > 0);
+          setAgenda(await api<CitaDetalle[]>('/citas?limite=200').catch(() => []));
         } else if (aliadoTipo === 'TIENDA') {
-          setSedes(await api<Sede[]>(`/aliados/${aliadoId}/sedes/gestion`));
+          const [listaSedes, productos] = await Promise.all([
+            api<Sede[]>(`/aliados/${aliadoId}/sedes/gestion`),
+            api<ProductoGestion[]>(`/aliados/${aliadoId}/productos?estado=todos`).catch(() => []),
+          ]);
+          setSedes(listaSedes);
+          setProductosResumen(productos);
+        } else if (aliadoTipo === 'FUNDACION') {
+          setMascotasResumen(await api<MascotaAdopcion[]>('/adopciones/mis-publicaciones'));
         }
       } else if (seccion === 'equipo') {
         const equipo = await api<{ veterinarios: Veterinario[] }>(
@@ -360,6 +456,8 @@ export default function PanelAliado() {
         ]);
         setEspecies(catalogo);
         setEspeciesSeleccionadas(atendidas.map((especie) => especie.id));
+      } else if (seccion === 'agenda') {
+        setAgenda(await api<CitaDetalle[]>('/citas?limite=200'));
       } else if (seccion === 'citas') {
         const resultado = await api<{ modo: ModoConfirmacion }>(
           `/aliados/${aliadoId}/confirmacion`,
@@ -380,6 +478,18 @@ export default function PanelAliado() {
   useEffect(() => {
     void cargar();
   }, [cargar]);
+
+  useEffect(() => {
+    if (!abrirNuevoServicio || seccion !== 'servicios' || cargando) return;
+    setAbrirNuevoServicio(false);
+    abrirServicio();
+  }, [abrirNuevoServicio, seccion, cargando]);
+
+  function irA(destino: Seccion) {
+    setSeccion(destino);
+    setError('');
+    setExito('');
+  }
 
   async function guardarSede(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -733,145 +843,592 @@ export default function PanelAliado() {
       );
     }
     if (seccion === 'resumen') {
+      const icono = (nombre: IconoPanelNombre) => <IconoPanel nombre={nombre} />;
+      const saludo = `Hola, ${aliadoNombre || 'aliado'}.`;
+
       if (aliadoTipo === 'VET_INDEPENDIENTE') {
+        const activos = servicios.filter((servicio) => servicio.activo).length;
         return (
           <>
-            <div className="summary-grid">
-              <button
-                className="summary-card"
-                onClick={() => setSeccion('servicios')}
-                type="button"
+            <BienvenidaPanel
+              acento="Así va tu espacio."
+              pasos={[
+                {
+                  texto: 'Servicios publicados',
+                  hecho: activos > 0,
+                  accion: 'Publicar',
+                  alHacerClic: () => irA('servicios'),
+                },
+                {
+                  texto: 'Especies atendidas',
+                  hecho: especiesSeleccionadas.length > 0,
+                  accion: 'Elegir',
+                  alHacerClic: () => irA('especies'),
+                },
+                {
+                  texto: 'Horarios de atención',
+                  hecho: conHorarios === true,
+                  accion: 'Configurar',
+                  alHacerClic: () => irA('horarios'),
+                },
+              ]}
+              saludo={saludo}
+              textoCompleto="Tu perfil está completo: los tutores ya pueden reservar contigo."
+              textoPendiente="Completa tu perfil profesional para que los tutores reserven contigo."
+            />
+            <IndicadoresPanel
+              items={[
+                {
+                  valor: activos,
+                  texto: activos === 1 ? 'Servicio activo' : 'Servicios activos',
+                  accion: 'Gestionar',
+                  alHacerClic: () => irA('servicios'),
+                  icono: icono('heart'),
+                  tono: 'burgundy',
+                },
+                {
+                  valor: especiesSeleccionadas.length,
+                  texto:
+                    especiesSeleccionadas.length === 1 ? 'Especie atendida' : 'Especies atendidas',
+                  accion: 'Editar',
+                  alHacerClic: () => irA('especies'),
+                  icono: icono('paw'),
+                  tono: 'peach',
+                },
+                {
+                  valor: conHorarios ? 'Lista' : 'Pendiente',
+                  texto: 'Disponibilidad',
+                  accion: 'Configurar',
+                  alHacerClic: () => irA('horarios'),
+                  icono: icono('clock'),
+                  tono: 'sage',
+                },
+              ]}
+            />
+            <div className="ally-row">
+              <TarjetaPanel
+                enlace={{ texto: 'Ver todas', alHacerClic: () => irA('agenda') }}
+                id="proximas-citas"
+                titulo="Próximas citas"
               >
-                <span>Servicios</span>
-                <strong>{servicios.length}</strong>
-                <small>Servicios veterinarios ofrecidos</small>
-              </button>
-              <button className="summary-card" onClick={() => setSeccion('especies')} type="button">
-                <span>Especies</span>
-                <strong>{especiesSeleccionadas.length}</strong>
-                <small>Especies que atiendes</small>
-              </button>
-              <button className="summary-card" onClick={() => setSeccion('horarios')} type="button">
-                <span>Disponibilidad</span>
-                <strong>Configurar</strong>
-                <small>Define cuándo pueden reservar</small>
-              </button>
+                <ListaAgenda
+                  citas={filtrarAgenda(agenda, 'proximas').slice(0, 4)}
+                  vacio={{
+                    titulo: 'No hay citas próximas',
+                    texto: 'Cuando un tutor reserve contigo, la cita aparecerá aquí.',
+                  }}
+                />
+              </TarjetaPanel>
+              <TarjetaPanel id="accesos-rapidos" titulo="Accesos rápidos">
+                <AccesosPanel
+                  items={[
+                    {
+                      texto: 'Agregar servicio',
+                      detalle: 'Precio, duración y modalidad',
+                      icono: icono('heart'),
+                      tono: 'peach',
+                      alHacerClic: () => {
+                        setAbrirNuevoServicio(true);
+                        irA('servicios');
+                      },
+                    },
+                    {
+                      texto: 'Editar horarios',
+                      detalle: 'Días y franjas de atención',
+                      icono: icono('clock'),
+                      tono: 'sage',
+                      alHacerClic: () => irA('horarios'),
+                    },
+                    {
+                      texto: 'Especies que atiendes',
+                      detalle: 'Perros, gatos y más',
+                      icono: icono('paw'),
+                      tono: 'honey',
+                      alHacerClic: () => irA('especies'),
+                    },
+                  ]}
+                />
+              </TarjetaPanel>
             </div>
-            <section className="workspace-card">
-              <h2>Tu espacio profesional</h2>
-              <p className="workspace-card__intro">
-                Administra tus servicios, disponibilidad, especies atendidas y confirmación de citas
-                desde tu perfil veterinario.
-              </p>
-              <div className="quick-actions">
-                {navegacion.slice(1).map((item) => (
-                  <button key={item.id} onClick={() => setSeccion(item.id)} type="button">
-                    <span>
-                      <IconoPanel nombre={item.icono} />
-                    </span>
-                    {item.etiqueta}
-                  </button>
-                ))}
-              </div>
-            </section>
           </>
         );
       }
+
       if (aliadoTipo === 'TIENDA') {
+        const activos = productosResumen.filter((producto) => producto.activo);
+        const sinStock = activos.filter((producto) => producto.stock === 0).length;
+        const sedesActivasTienda = sedes.filter((sede) => sede.activa).length;
         return (
           <>
-            <div className="summary-grid">
-              <button className="summary-card" onClick={() => setSeccion('sedes')} type="button">
-                <span>Sedes activas</span>
-                <strong>{sedes.filter((sede) => sede.activa).length}</strong>
-                <small>Puntos de atención de tu tienda</small>
-              </button>
-              <button className="summary-card" onClick={() => setSeccion('sedes')} type="button">
-                <span>Total de sedes</span>
-                <strong>{sedes.length}</strong>
-                <small>Ubicaciones registradas</small>
-              </button>
+            <BienvenidaPanel
+              acento="Así va tu tienda."
+              pasos={[
+                {
+                  texto: 'Sedes registradas',
+                  hecho: sedesActivasTienda > 0,
+                  accion: 'Agregar',
+                  alHacerClic: () => irA('sedes'),
+                },
+                {
+                  texto: 'Productos publicados',
+                  hecho: activos.length > 0,
+                  accion: 'Publicar',
+                  alHacerClic: () => irA('productos'),
+                },
+                {
+                  texto: 'Productos con foto',
+                  hecho: activos.length > 0 && activos.every((p) => p.fotos.length > 0),
+                  accion: 'Revisar',
+                  alHacerClic: () => irA('productos'),
+                },
+              ]}
+              saludo={saludo}
+              textoCompleto="Tu tienda está lista: los tutores ya pueden encontrar tus productos."
+              textoPendiente="Completa tu tienda para que los tutores encuentren tus productos."
+            />
+            <IndicadoresPanel
+              items={[
+                {
+                  valor: activos.length,
+                  texto: activos.length === 1 ? 'Producto activo' : 'Productos activos',
+                  accion: 'Gestionar',
+                  alHacerClic: () => irA('productos'),
+                  icono: icono('store'),
+                  tono: 'burgundy',
+                },
+                {
+                  valor: sinStock,
+                  texto: sinStock === 1 ? 'Producto agotado' : 'Productos agotados',
+                  accion: 'Revisar stock',
+                  alHacerClic: () => irA('productos'),
+                  icono: icono('heart'),
+                  tono: 'peach',
+                },
+                {
+                  valor: sedesActivasTienda,
+                  texto: sedesActivasTienda === 1 ? 'Sede activa' : 'Sedes activas',
+                  accion: 'Ver sedes',
+                  alHacerClic: () => irA('sedes'),
+                  icono: icono('pin'),
+                  tono: 'sage',
+                },
+              ]}
+            />
+            <div className="ally-row">
+              <TarjetaPanel id="pedidos" titulo="Pedidos">
+                <AvisoPanel icono={icono('store')} titulo="Pronto verás aquí tus pedidos">
+                  Los tutores ya pueden agregar tus productos al carrito. El pago y los pedidos
+                  llegarán en la siguiente etapa.
+                </AvisoPanel>
+              </TarjetaPanel>
+              <TarjetaPanel id="accesos-rapidos" titulo="Accesos rápidos">
+                <AccesosPanel
+                  items={[
+                    {
+                      texto: 'Nuevo producto',
+                      detalle: 'Nombre, precio, stock y fotos',
+                      icono: icono('store'),
+                      tono: 'peach',
+                      alHacerClic: () => irA('productos'),
+                    },
+                    {
+                      texto: 'Nueva sede',
+                      detalle: 'Dirección y ciudad',
+                      icono: icono('pin'),
+                      tono: 'burgundy',
+                      alHacerClic: () => abrirSede(),
+                    },
+                    {
+                      texto: 'Horario de la tienda',
+                      detalle: 'Cuándo atiendes',
+                      icono: icono('clock'),
+                      tono: 'sage',
+                      alHacerClic: () => irA('horarios'),
+                    },
+                  ]}
+                />
+              </TarjetaPanel>
             </div>
-            <section className="workspace-card">
-              <h2>Administra los puntos de atención</h2>
-              <p className="workspace-card__intro">
-                Mantén actualizadas las sedes y sus direcciones para que tus clientes sepan dónde
-                encontrarte.
-              </p>
-              <div className="quick-actions">
-                {navegacion.slice(1).map((item) => (
-                  <button key={item.id} onClick={() => setSeccion(item.id)} type="button">
-                    <span>
-                      <IconoPanel nombre={item.icono} />
-                    </span>
-                    {item.etiqueta}
-                  </button>
-                ))}
-              </div>
-            </section>
           </>
         );
       }
+
       if (aliadoTipo === 'FUNDACION') {
+        const contar = (estado: MascotaAdopcion['estado']) =>
+          mascotasResumen.filter((mascota) => mascota.estado === estado).length;
+        const disponibles = contar('DISPONIBLE');
+        const enProceso = contar('EN_PROCESO');
+        const adoptadas = contar('ADOPTADA');
         return (
-          <section className="workspace-card">
-            <h2>Perfil de fundación</h2>
-            <p className="workspace-card__intro">
-              Tu solicitud y los datos de la fundación están asociados a esta cuenta. Las
-              herramientas para administrar publicaciones de adopción aún no están disponibles.
-            </p>
-          </section>
+          <>
+            <BienvenidaPanel
+              acento="Así va tu fundación."
+              pasos={[
+                {
+                  texto: 'Primera mascota publicada',
+                  hecho: mascotasResumen.length > 0,
+                  accion: 'Publicar',
+                  alHacerClic: () => irA('adopciones'),
+                },
+                {
+                  texto: 'Mascotas con foto',
+                  hecho:
+                    mascotasResumen.length > 0 && mascotasResumen.every((m) => m.fotos.length > 0),
+                  accion: 'Revisar',
+                  alHacerClic: () => irA('adopciones'),
+                },
+              ]}
+              saludo={saludo}
+              textoCompleto="Tus mascotas ya aparecen en el catálogo de adopción, sin revelar tu fundación."
+              textoPendiente="Publica las mascotas que buscan hogar. En el catálogo no se muestra tu fundación."
+              tituloAvance="Publicaciones"
+            />
+            <IndicadoresPanel
+              items={[
+                {
+                  valor: disponibles,
+                  texto: 'Disponibles',
+                  accion: 'Ver',
+                  alHacerClic: () => irA('adopciones'),
+                  icono: icono('paw'),
+                  tono: 'burgundy',
+                },
+                {
+                  valor: enProceso,
+                  texto: 'En proceso',
+                  accion: 'Ver',
+                  alHacerClic: () => irA('adopciones'),
+                  icono: icono('clock'),
+                  tono: 'peach',
+                },
+                {
+                  valor: adoptadas,
+                  texto: adoptadas === 1 ? 'Adoptada' : 'Adoptadas',
+                  accion: 'Ver',
+                  alHacerClic: () => irA('adopciones'),
+                  icono: icono('heart'),
+                  tono: 'sage',
+                },
+                {
+                  valor: mascotasResumen.length,
+                  texto: 'Publicadas en total',
+                  accion: 'Gestionar',
+                  alHacerClic: () => irA('adopciones'),
+                  icono: icono('home'),
+                  tono: 'honey',
+                },
+              ]}
+            />
+            <div className="ally-row">
+              <TarjetaPanel id="solicitudes" titulo="Solicitudes de adopción">
+                <AvisoPanel icono={icono('heart')} titulo="Pronto verás aquí las solicitudes">
+                  Cuando un tutor quiera adoptar, su solicitud aparecerá aquí para que la revises.
+                </AvisoPanel>
+              </TarjetaPanel>
+              <TarjetaPanel id="accesos-rapidos" titulo="Accesos rápidos">
+                <AccesosPanel
+                  items={[
+                    {
+                      texto: 'Publicar mascota',
+                      detalle: 'Datos, fotos y video',
+                      icono: icono('paw'),
+                      tono: 'peach',
+                      alHacerClic: () => irA('adopciones'),
+                    },
+                    {
+                      texto: 'Ver el catálogo público',
+                      detalle: 'Como lo ven los tutores',
+                      icono: icono('home'),
+                      tono: 'sage',
+                      alHacerClic: () => window.open('/adopcion', '_blank'),
+                    },
+                  ]}
+                />
+              </TarjetaPanel>
+            </div>
+          </>
         );
       }
+
+      // Resumen de la clínica: bienvenida con el avance del perfil, indicadores, próximas
+      // citas y accesos rápidos. Colores de la ficha en su proporción: burgundy (principal),
+      // peach (secundario), sage (acento, solo lo completado) y miel (detalle).
+      const serviciosActivos = servicios.filter((servicio) => servicio.activo).length;
+      const sedesActivas = sedes.filter((sede) => sede.activa).length;
+      const pasos: { texto: string; hecho: boolean; destino: Seccion; accion: string }[] = [
+        {
+          texto: 'Sedes registradas',
+          hecho: sedesActivas > 0,
+          destino: 'sedes',
+          accion: 'Agregar',
+        },
+        {
+          texto: 'Equipo veterinario',
+          hecho: veterinarios.length > 0,
+          destino: 'equipo',
+          accion: 'Agregar',
+        },
+        {
+          texto: 'Servicios publicados',
+          hecho: serviciosActivos > 0,
+          destino: 'servicios',
+          accion: 'Publicar',
+        },
+        {
+          texto: 'Especies atendidas',
+          hecho: especiesSeleccionadas.length > 0,
+          destino: 'especies',
+          accion: 'Elegir',
+        },
+        {
+          texto: 'Horarios de atención',
+          hecho: conHorarios === true,
+          destino: 'horarios',
+          accion: 'Configurar',
+        },
+      ];
+      const hechos = pasos.filter((paso) => paso.hecho).length;
+      const avance = Math.round((hechos / pasos.length) * 100);
+      const indicadores: {
+        valor: number;
+        texto: string;
+        accion: string;
+        destino: Seccion;
+        icono: IconoPanelNombre;
+        tono: string;
+      }[] = [
+        {
+          valor: serviciosActivos,
+          texto: serviciosActivos === 1 ? 'Servicio activo' : 'Servicios activos',
+          accion: 'Gestionar',
+          destino: 'servicios',
+          icono: 'heart',
+          tono: 'burgundy',
+        },
+        {
+          valor: sedesActivas,
+          texto: sedesActivas === 1 ? 'Sede activa' : 'Sedes activas',
+          accion: 'Ver sedes',
+          destino: 'sedes',
+          icono: 'pin',
+          tono: 'peach',
+        },
+        {
+          valor: veterinarios.length,
+          texto: veterinarios.length === 1 ? 'Veterinario' : 'Veterinarios',
+          accion: 'Ver equipo',
+          destino: 'equipo',
+          icono: 'team',
+          tono: 'sage',
+        },
+        {
+          valor: especiesSeleccionadas.length,
+          texto: especiesSeleccionadas.length === 1 ? 'Especie atendida' : 'Especies atendidas',
+          accion: 'Editar',
+          destino: 'especies',
+          icono: 'paw',
+          tono: 'honey',
+        },
+      ];
+      const accesos: {
+        texto: string;
+        detalle: string;
+        icono: IconoPanelNombre;
+        tono: string;
+        alHacerClic: () => void;
+      }[] = [
+        {
+          texto: 'Agregar servicio',
+          detalle: 'Precio, duración y modalidad',
+          icono: 'heart',
+          tono: 'peach',
+          alHacerClic: () => {
+            setAbrirNuevoServicio(true);
+            irA('servicios');
+          },
+        },
+        {
+          texto: 'Agregar veterinario',
+          detalle: 'Suma a tu equipo',
+          icono: 'team',
+          tono: 'honey',
+          alHacerClic: () => setModal('veterinario'),
+        },
+        {
+          texto: 'Editar horarios',
+          detalle: 'Días y franjas de atención',
+          icono: 'clock',
+          tono: 'sage',
+          alHacerClic: () => irA('horarios'),
+        },
+        {
+          texto: 'Nueva sede',
+          detalle: 'Dirección y ciudad',
+          icono: 'pin',
+          tono: 'burgundy',
+          alHacerClic: () => abrirSede(),
+        },
+      ];
+
       return (
         <>
-          <div className="summary-grid">
-            {[
-              ['Servicios', servicios.length, 'Gestiona precios y disponibilidad'],
-              [
-                'Sedes activas',
-                sedes.filter((sede) => sede.activa).length,
-                'Ubicaciones de atención',
-              ],
-              ['Equipo', veterinarios.length, 'Perfiles veterinarios'],
-            ].map(([label, valor, detalle]) => (
-              <button
-                className="summary-card"
-                key={label}
-                onClick={() =>
-                  setSeccion(
-                    label === 'Servicios'
-                      ? 'servicios'
-                      : label === 'Sedes activas'
-                        ? 'sedes'
-                        : 'equipo',
-                  )
-                }
-                type="button"
+          <section className="ally-welcome">
+            <span
+              aria-hidden="true"
+              className="ally-welcome__shape ally-welcome__shape--burgundy"
+            />
+            <span aria-hidden="true" className="ally-welcome__shape ally-welcome__shape--peach" />
+            <span aria-hidden="true" className="ally-welcome__shape ally-welcome__shape--sage" />
+            <span aria-hidden="true" className="ally-welcome__shape ally-welcome__shape--miel" />
+            <div className="ally-welcome__copy">
+              <span className="eyebrow eyebrow--dark">
+                <i /> BIENVENIDO DE NUEVO
+              </span>
+              <h2>
+                Hola, {aliadoNombre || 'aliado'}. <em>Así va tu clínica.</em>
+              </h2>
+              <p>
+                {hechos === pasos.length
+                  ? 'Tu perfil está completo: los tutores ya pueden encontrarte y reservar contigo.'
+                  : 'Te falta poco para que los tutores reserven contigo sin fricciones. Completa los pasos pendientes.'}
+              </p>
+            </div>
+            <div className="ally-progress">
+              <div className="ally-progress__head">
+                <strong>Perfil completo</strong>
+                <span>{avance}%</span>
+              </div>
+              <div
+                aria-label={`Perfil completo al ${avance}%`}
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={avance}
+                className="ally-progress__bar"
+                role="progressbar"
               >
-                <span>{label}</span>
-                <strong>{valor}</strong>
-                <small>{detalle}</small>
-              </button>
-            ))}
-          </div>
-          <section className="workspace-card">
-            <h2>Continúa configurando tu perfil</h2>
-            <p className="workspace-card__intro">
-              Completa la información de tu aliado para que los tutores encuentren tus servicios.
-            </p>
-            <div className="quick-actions">
-              {navegacion.slice(1).map((item) => (
-                <button key={item.id} onClick={() => setSeccion(item.id)} type="button">
-                  <span>
-                    <IconoPanel nombre={item.icono} />
-                  </span>
-                  {item.etiqueta}
-                </button>
-              ))}
+                <i style={{ width: `${avance}%` }} />
+              </div>
+              <ul className="ally-progress__steps">
+                {pasos.map((paso) => (
+                  <li className={paso.hecho ? 'is-done' : ''} key={paso.texto}>
+                    <span aria-hidden="true" className="ally-progress__check">
+                      {paso.hecho ? '✓' : ''}
+                    </span>
+                    {paso.texto}
+                    <span className="sr-only">{paso.hecho ? ' (completo)' : ' (pendiente)'}</span>
+                    {!paso.hecho && (
+                      <button onClick={() => irA(paso.destino)} type="button">
+                        {paso.accion} →
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           </section>
+
+          <div className="ally-kpis">
+            {indicadores.map((indicador) => (
+              <article className="ally-kpi" key={indicador.texto}>
+                <span className={`ally-icon ally-icon--${indicador.tono}`}>
+                  <IconoPanel nombre={indicador.icono} />
+                </span>
+                <strong>{indicador.valor}</strong>
+                <span>{indicador.texto}</span>
+                <button onClick={() => irA(indicador.destino)} type="button">
+                  {indicador.accion} →
+                </button>
+              </article>
+            ))}
+          </div>
+
+          <div className="ally-row">
+            <section aria-labelledby="proximas-citas" className="workspace-card ally-card">
+              <div className="ally-card__head">
+                <h2 id="proximas-citas">Próximas citas</h2>
+                <button onClick={() => irA('agenda')} type="button">
+                  Ver todas →
+                </button>
+              </div>
+              <ListaAgenda
+                citas={filtrarAgenda(agenda, 'proximas').slice(0, 4)}
+                mostrarVeterinario
+                vacio={{
+                  titulo: 'No hay citas próximas',
+                  texto: 'Cuando un tutor reserve, la cita aparecerá aquí.',
+                }}
+              />
+            </section>
+
+            <section aria-labelledby="accesos-rapidos" className="workspace-card ally-card">
+              <div className="ally-card__head">
+                <h2 id="accesos-rapidos">Accesos rápidos</h2>
+              </div>
+              <div className="ally-quick">
+                {accesos.map((acceso) => (
+                  <button key={acceso.texto} onClick={acceso.alHacerClic} type="button">
+                    <span className={`ally-icon ally-icon--${acceso.tono}`}>
+                      <IconoPanel nombre={acceso.icono} />
+                    </span>
+                    <span>
+                      {acceso.texto}
+                      <small>{acceso.detalle}</small>
+                    </span>
+                    <svg aria-hidden="true" className="ally-quick__arrow" viewBox="0 0 24 24">
+                      <path d="M5 12h13M13 6l6 6-6 6" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
         </>
+      );
+    }
+    if (seccion === 'agenda') {
+      const porCerrarTotal = agenda.filter((cita) => porCerrar(cita)).length;
+      return (
+        <section aria-labelledby="agenda-titulo" className="workspace-card ally-card">
+          <div className="ally-card__head">
+            <h2 id="agenda-titulo">Citas</h2>
+            <button onClick={() => irA('citas')} type="button">
+              Confirmación de citas →
+            </button>
+          </div>
+          {porCerrarTotal > 0 && (
+            <AlertBox tone="warning" title={`${porCerrarTotal} por cerrar`}>
+              Ya pasaron y siguen agendadas: márcalas como finalizadas o “no asistió”.
+            </AlertBox>
+          )}
+          <nav aria-label="Filtrar citas" className="search-result-tags">
+            {(
+              [
+                ['proximas', 'Próximas'],
+                ['por-cerrar', 'Por cerrar'],
+                ['pasadas', 'Pasadas'],
+                ['todas', 'Todas'],
+              ] as const
+            ).map(([valor, texto]) => (
+              <button
+                aria-pressed={filtroAgenda === valor}
+                className={filtroAgenda === valor ? 'is-active' : ''}
+                key={valor}
+                onClick={() => setFiltroAgenda(valor)}
+                type="button"
+              >
+                {texto}
+              </button>
+            ))}
+          </nav>
+          <ListaAgenda
+            citas={filtrarAgenda(agenda, filtroAgenda)}
+            mostrarVeterinario={aliadoTipo === 'CLINICA'}
+            vacio={{
+              titulo: 'No hay citas en esta vista',
+              texto: 'Cuando los tutores reserven, sus citas aparecerán aquí.',
+            }}
+          />
+        </section>
       );
     }
     if (seccion === 'equipo') {
@@ -1000,6 +1557,10 @@ export default function PanelAliado() {
           </div>
         </section>
       );
+    }
+    if (seccion === 'adopciones' && aliadoTipo === 'FUNDACION') {
+      // HU-080 a HU-085: la sección vive en su propio componente y carga sus propios datos.
+      return <GestionAdopciones />;
     }
     if (seccion === 'productos' && aliadoTipo === 'TIENDA') {
       // HU-044: la sección vive en su propio componente y carga sus propios datos.
@@ -1362,87 +1923,87 @@ export default function PanelAliado() {
   };
 
   return (
-    <div className="partner-shell">
-      <aside className="partner-sidebar">
-        <a aria-label="Veto" className="partner-logo" href="/">
-          <BrandLogo className="brand-logo" />
-        </a>
-        <p className="partner-sidebar__label">GESTIÓN DEL ALIADO</p>
-        <nav aria-label="Módulos del aliado">
-          {navegacion.map((item) => (
-            <button
-              aria-current={seccion === item.id ? 'page' : undefined}
-              className={seccion === item.id ? 'is-active' : ''}
-              key={item.id}
-              onClick={() => {
-                setSeccion(item.id);
-                setError('');
-                setExito('');
-              }}
-              type="button"
-            >
-              <span aria-hidden="true">
-                <IconoPanel nombre={item.icono} />
-              </span>
-              {item.etiqueta}
-            </button>
-          ))}
-        </nav>
-        <a className="partner-sidebar__back" href="/">
-          Volver a Veto
-        </a>
-      </aside>
-      <div className="partner-main">
-        <header className="partner-topbar">
-          <div>
-            <span className="partner-topbar__caption">Panel del aliado</span>
-            <h1>{titulo}</h1>
+    <PanelShell
+      acciones={
+        <>
+          {perfilPublico && (
+            <a className="veto-button veto-button--secondary" href={perfilPublico}>
+              Ver como tutor
+            </a>
+          )}
+          {(aliadoTipo === 'CLINICA' || aliadoTipo === 'VET_INDEPENDIENTE') &&
+            aliadoEstado === 'ACTIVO' && (
+              <VetoButton
+                onClick={() => {
+                  setAbrirNuevoServicio(true);
+                  irA('servicios');
+                }}
+              >
+                ＋ Nuevo servicio
+              </VetoButton>
+            )}
+        </>
+      }
+      ficha={
+        aliadoNombre
+          ? {
+              nombre: aliadoNombre,
+              detalle: aliadoEstado === 'ACTIVO' ? '✓ Aliado verificado' : 'En revisión',
+              verificado: aliadoEstado === 'ACTIVO',
+            }
+          : undefined
+      }
+      grupos={gruposNavegacion.map(([nombre, items]) => ({
+        nombre,
+        items: items.map((item) => ({
+          id: item.id,
+          etiqueta: item.etiqueta,
+          icono: <IconoPanel nombre={item.icono} />,
+          activo: seccion === item.id,
+          alHacerClic: () => irA(item.id),
+        })),
+      }))}
+      leyenda="Panel del aliado"
+      perfilPublico={perfilPublico || undefined}
+      titulo={titulo}
+    >
+      {error && (
+        <AlertBox tone="error" title="No se pudo completar la solicitud">
+          {error}
+        </AlertBox>
+      )}
+      {exito && (
+        <AlertBox tone="success" title="Cambios guardados">
+          {exito}
+        </AlertBox>
+      )}
+      {aliadoId && aliadoEstado !== 'ACTIVO' && (
+        <AlertBox tone="warning" title="Perfil pendiente de activación">
+          {aliadoEstado === 'PENDIENTE'
+            ? 'El equipo de Veto debe activar tu aliado antes de que puedas gestionar sus datos.'
+            : 'Este perfil no está activo. Contacta al equipo de Veto para obtener ayuda.'}
+        </AlertBox>
+      )}
+      {cargando && !aliadoId ? (
+        <div className="empty-state empty-state--card" aria-live="polite">
+          <h2>Cargando tu perfil de aliado…</h2>
+        </div>
+      ) : !aliadoId ? (
+        error ? null : (
+          <div className="empty-state empty-state--card">
+            <span className="empty-state__illustration" aria-hidden="true">
+              ⌖
+            </span>
+            <h2>No encontramos tu perfil de aliado</h2>
+            <p>
+              El perfil se carga desde la cuenta con la que iniciaste sesión. Si ya registraste tu
+              aliado, contacta al equipo de Veto para revisar la asociación de tu cuenta.
+            </p>
           </div>
-          <div className="partner-user">
-            <span className="avatar">V</span>
-            <span>{aliadoNombre || 'Mi aliado'}</span>
-          </div>
-        </header>
-        <section className="partner-content">
-          {error && (
-            <AlertBox tone="error" title="No se pudo completar la solicitud">
-              {error}
-            </AlertBox>
-          )}
-          {exito && (
-            <AlertBox tone="success" title="Cambios guardados">
-              {exito}
-            </AlertBox>
-          )}
-          {aliadoId && aliadoEstado !== 'ACTIVO' && (
-            <AlertBox tone="warning" title="Perfil pendiente de activación">
-              {aliadoEstado === 'PENDIENTE'
-                ? 'El equipo de Veto debe activar tu aliado antes de que puedas gestionar sus datos.'
-                : 'Este perfil no está activo. Contacta al equipo de Veto para obtener ayuda.'}
-            </AlertBox>
-          )}
-          {cargando && !aliadoId ? (
-            <div className="empty-state empty-state--card" aria-live="polite">
-              <h2>Cargando tu perfil de aliado…</h2>
-            </div>
-          ) : !aliadoId ? (
-            error ? null : (
-              <div className="empty-state empty-state--card">
-                <span className="empty-state__illustration" aria-hidden="true">
-                  ⌖
-                </span>
-                <h2>No encontramos tu perfil de aliado</h2>
-                <p>
-                  El perfil se carga desde la cuenta con la que iniciaste sesión. Si ya registraste
-                  tu aliado, contacta al equipo de Veto para revisar la asociación de tu cuenta.
-                </p>
-              </div>
-            )
-          ) : aliadoEstado !== 'ACTIVO' ? null : (
-            contenido()
-          )}
-        </section>
-      </div>
+        )
+      ) : aliadoEstado !== 'ACTIVO' ? null : (
+        contenido()
+      )}
 
       {modal && (
         <div className="modal-backdrop" role="presentation">
@@ -1921,22 +2482,13 @@ export default function PanelAliado() {
                       value={veterinarioForm.nombre}
                     />
                   </label>
-                  <label className="field">
-                    <span>Celular</span>
-                    <input
-                      className="control"
-                      inputMode="numeric"
-                      maxLength={10}
-                      onChange={(event) =>
-                        setVeterinarioForm({
-                          ...veterinarioForm,
-                          celular: event.target.value.replace(/\D/g, ''),
-                        })
-                      }
-                      required
-                      value={veterinarioForm.celular}
-                    />
-                  </label>
+                  <CelularField
+                    id="veterinario-celular"
+                    label="Celular"
+                    onChange={(celular) => setVeterinarioForm({ ...veterinarioForm, celular })}
+                    required
+                    value={veterinarioForm.celular}
+                  />
                   <label className="field">
                     <span>Correo</span>
                     <input
@@ -2040,6 +2592,6 @@ export default function PanelAliado() {
           </section>
         </div>
       )}
-    </div>
+    </PanelShell>
   );
 }

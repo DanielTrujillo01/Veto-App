@@ -43,6 +43,23 @@ export const CONTRASENA_GOOGLE = 'GOOGLE';
 
 export type UsuarioSesion = PerfilUsuario;
 
+/** Índice único que impide registrar el mismo documento en dos cuentas (migración 0011). */
+const INDICE_DOCUMENTO_UNICO = 'usuario_documento_unico';
+
+/** Columnas del perfil completo (HU-006), con el documento en camelCase. */
+const COLUMNAS_PERFIL = `id, nombre, celular, correo, rol,
+  tipo_documento AS "tipoDocumento", numero_documento AS "numeroDocumento"`;
+
+/** Traduce una violación de unicidad en `usuario` al mensaje del campo repetido. */
+function conflictoDeUsuario(error: unknown): ConflictException {
+  const indice = (error as { constraint?: unknown }).constraint;
+  return new ConflictException(
+    indice === INDICE_DOCUMENTO_UNICO
+      ? 'Ya existe una cuenta con ese documento'
+      : 'Ya existe una cuenta con ese correo',
+  );
+}
+
 @Injectable()
 export class IdentidadService {
   constructor(
@@ -58,9 +75,7 @@ export class IdentidadService {
         this.insertUser(client, input, passwordHash, 'TUTOR'),
       );
     } catch (error) {
-      if (esErrorPg(error, PG.UNICO)) {
-        throw new ConflictException('Ya existe una cuenta con ese correo');
-      }
+      if (esErrorPg(error, PG.UNICO)) throw conflictoDeUsuario(error);
       throw error;
     }
   }
@@ -230,15 +245,29 @@ export class IdentidadService {
    */
   async insertUser(
     client: PoolClient,
-    input: Pick<RegistroUsuario, 'nombre' | 'celular' | 'correo'>,
+    input: Pick<RegistroUsuario, 'nombre' | 'celular' | 'correo'> &
+      Partial<Pick<RegistroUsuario, 'tipoDocumento' | 'numeroDocumento'>>,
     passwordHash: string,
     rol: 'TUTOR' | 'ALIADO' | 'VETERINARIO',
   ): Promise<PerfilUsuario> {
+    const conDocumento = input.tipoDocumento !== undefined && input.numeroDocumento !== undefined;
     const resultado = await client.query<PerfilUsuario>(
-      `INSERT INTO usuario (nombre, celular, correo, password_hash, rol)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, nombre, celular, correo, rol`,
-      [input.nombre, input.celular, input.correo.toLowerCase(), passwordHash, rol],
+      conDocumento
+        ? `INSERT INTO usuario
+             (nombre, celular, correo, password_hash, rol, tipo_documento, numero_documento)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING ${COLUMNAS_PERFIL}`
+        : `INSERT INTO usuario (nombre, celular, correo, password_hash, rol)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id, nombre, celular, correo, rol`,
+      [
+        input.nombre,
+        input.celular,
+        input.correo.toLowerCase(),
+        passwordHash,
+        rol,
+        ...(conDocumento ? [input.tipoDocumento, input.numeroDocumento] : []),
+      ],
     );
     return resultado.rows[0];
   }
@@ -262,10 +291,46 @@ export class IdentidadService {
     return resultado.rows[0] ?? null;
   }
 
+  /** Paso "Confirma tu contraseña": ¿la cuenta tiene contraseña de Veto? (las de Google no). */
+  async tieneContrasena(usuarioId: string): Promise<boolean> {
+    return this.db.withUser(usuarioId, async (client) => {
+      const cuenta = await this.cuentaActiva(client, usuarioId);
+      return cuenta.password_hash !== CONTRASENA_GOOGLE;
+    });
+  }
+
+  /** Comprueba la contraseña de la persona con sesión abierta. 401 si no coincide. */
+  async confirmarContrasena(usuarioId: string, contrasena: string): Promise<void> {
+    await this.db.withUser(usuarioId, async (client) => {
+      const cuenta = await this.cuentaActiva(client, usuarioId);
+      if (cuenta.password_hash === CONTRASENA_GOOGLE) {
+        throw new ConflictException('Esta cuenta todavía no tiene contraseña: créala primero');
+      }
+      if (!(await verificarContrasena(contrasena, cuenta.password_hash))) {
+        throw new UnauthorizedException('La contraseña no es correcta');
+      }
+    });
+  }
+
+  /**
+   * Una cuenta creada con Google crea su contraseña de Veto. Solo si aún no tiene una: para
+   * cambiar una contraseña existente está la recuperación de contraseña.
+   */
+  async crearContrasena(usuarioId: string, contrasena: string): Promise<void> {
+    const hash = await hashContrasena(contrasena);
+    await this.db.withUser(usuarioId, async (client) => {
+      const cuenta = await this.cuentaActiva(client, usuarioId, true);
+      if (cuenta.password_hash !== CONTRASENA_GOOGLE) {
+        throw new ConflictException('Esta cuenta ya tiene contraseña');
+      }
+      await client.query('UPDATE usuario SET password_hash = $2 WHERE id = $1', [usuarioId, hash]);
+    });
+  }
+
   /** HU-006: perfil del usuario autenticado, leído siempre de la base (no de la sesión en caché). */
   async obtenerPerfil(usuarioId: string): Promise<PerfilUsuario> {
     const resultado = await this.db.query<PerfilUsuario>(
-      `SELECT id, nombre, celular, correo, rol FROM usuario
+      `SELECT ${COLUMNAS_PERFIL} FROM usuario
         WHERE id = $1 AND estado = 'ACTIVA' AND eliminado_en IS NULL`,
       [usuarioId],
     );
@@ -296,18 +361,25 @@ export class IdentidadService {
       try {
         const resultado = await client.query<PerfilUsuario>(
           `UPDATE usuario
-              SET nombre  = COALESCE($2, nombre),
-                  celular = COALESCE($3, celular),
-                  correo  = COALESCE($4, correo)
+              SET nombre           = COALESCE($2, nombre),
+                  celular          = COALESCE($3, celular),
+                  correo           = COALESCE($4, correo),
+                  tipo_documento   = COALESCE($5, tipo_documento),
+                  numero_documento = COALESCE($6, numero_documento)
             WHERE id = $1
-        RETURNING id, nombre, celular, correo, rol`,
-          [usuarioId, datos.nombre ?? null, datos.celular ?? null, datos.correo ?? null],
+        RETURNING ${COLUMNAS_PERFIL}`,
+          [
+            usuarioId,
+            datos.nombre ?? null,
+            datos.celular ?? null,
+            datos.correo ?? null,
+            datos.tipoDocumento ?? null,
+            datos.numeroDocumento ?? null,
+          ],
         );
         return resultado.rows[0];
       } catch (error) {
-        if (esErrorPg(error, PG.UNICO)) {
-          throw new ConflictException('Ya existe una cuenta con ese correo');
-        }
+        if (esErrorPg(error, PG.UNICO)) throw conflictoDeUsuario(error);
         throw error;
       }
     });
@@ -361,7 +433,8 @@ export class IdentidadService {
       await client.query(
         `UPDATE usuario
             SET estado = 'ELIMINADA', eliminado_en = now(),
-                nombre = $2, celular = $3, correo = $4, password_hash = $5
+                nombre = $2, celular = $3, correo = $4, password_hash = $5,
+                tipo_documento = NULL, numero_documento = NULL
           WHERE id = $1`,
         [
           usuarioId,

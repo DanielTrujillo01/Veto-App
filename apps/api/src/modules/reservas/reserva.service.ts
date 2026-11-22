@@ -1,7 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  ESTADOS_CITA,
   MENSAJES_HORARIO_NO_DISPONIBLE,
   type CitaDetalle,
+  type EstadoCita,
   type PendienteDeReserva,
   type ReservaConfirmada,
   type ResumenReserva,
@@ -200,6 +202,25 @@ export class ReservaService {
       const creada = await this.citas.detalle(client, citaId);
       if (!creada) throw new Error('La cita recién creada no se pudo leer');
       return { ...creada, repetida: false };
+    });
+  }
+
+  /**
+   * Agenda del aliado o del veterinario (HU-032): sus citas, de la más reciente a la más antigua.
+   * `?estado=` filtra por estado y `?limite=` (1 a 200, por defecto 100) acota la lista.
+   */
+  async agenda(usuarioId: string, query: unknown): Promise<CitaDetalle[]> {
+    const { estado, limite } = (query ?? {}) as { estado?: string; limite?: string };
+    if (estado && !(ESTADOS_CITA as readonly string[]).includes(estado)) {
+      throw new BadRequestException('El estado de la cita no es válido');
+    }
+    const tope = limite === undefined ? 100 : Number(limite);
+    if (!Number.isInteger(tope) || tope < 1 || tope > 200) {
+      throw new BadRequestException('El límite debe ser un número entre 1 y 200');
+    }
+    return this.citas.agendaPara(this.db, usuarioId, {
+      estado: (estado as EstadoCita | undefined) ?? null,
+      limite: tope,
     });
   }
 

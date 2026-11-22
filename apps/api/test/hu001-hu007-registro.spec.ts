@@ -9,13 +9,27 @@ const USUARIO_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const ALIADO_ID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const VET = '44444444-4444-4444-8444-444444444444';
 
-/** Simula los INSERT del registro; `repetido` hace fallar el correo con 23505. */
-function registroEnBd(repetido = false): Manejador {
+/**
+ * Simula los INSERT del registro; `repetido` hace fallar el INSERT con 23505 sobre ese índice
+ * (por defecto el del correo).
+ */
+function registroEnBd(repetido: false | string = false): Manejador {
   return (sql, valores) => {
     if (sql.includes('INSERT INTO usuario')) {
-      if (repetido) throw errorPg('23505');
-      const [nombre, celular, correo, , rol] = valores as string[];
-      return { rows: [{ id: USUARIO_ID, nombre, celular, correo, rol }] };
+      if (repetido) throw Object.assign(errorPg('23505'), { constraint: repetido });
+      const [nombre, celular, correo, , rol, tipoDocumento, numeroDocumento] = valores as string[];
+      return {
+        rows: [
+          {
+            id: USUARIO_ID,
+            nombre,
+            celular,
+            correo,
+            rol,
+            ...(numeroDocumento ? { tipoDocumento, numeroDocumento } : {}),
+          },
+        ],
+      };
     }
     if (sql.includes('INSERT INTO aliado')) {
       const [, tipo, nombre, descripcion, contacto, , ciudad, ubicacion] = valores as (
@@ -60,11 +74,17 @@ const tutor = {
   contrasena: 'password123',
 };
 
+/** El registro de tutores también pide el documento de identidad. */
+const registroTutor = { ...tutor, tipoDocumento: 'CC', numeroDocumento: '1023456789' };
+
 describe('HU-001 · registro de tutor (POST /api/usuarios)', () => {
   it('crea la cuenta con la contraseña hasheada y responde { usuario } sin el hash', async () => {
     const { db, consultas } = crearBdFalsa(registroEnBd(), null);
     const app = await crearApp([IdentidadModule], db);
-    const r = await request(app.getHttpServer()).post('/api/usuarios').send(tutor).expect(201);
+    const r = await request(app.getHttpServer())
+      .post('/api/usuarios')
+      .send(registroTutor)
+      .expect(201);
 
     expect(r.body).toEqual({
       usuario: {
@@ -73,6 +93,8 @@ describe('HU-001 · registro de tutor (POST /api/usuarios)', () => {
         celular: '3000000000',
         correo: 'daniel@example.com',
         rol: 'TUTOR',
+        tipoDocumento: 'CC',
+        numeroDocumento: '1023456789',
       },
     });
     const insert = consultas.find((c) => c.sql.includes('INSERT INTO usuario'));
@@ -97,11 +119,35 @@ describe('HU-001 · registro de tutor (POST /api/usuarios)', () => {
     await app.close();
   });
 
-  it('un correo ya registrado responde 409', async () => {
-    const { db } = crearBdFalsa(registroEnBd(true), null);
+  it('sin documento responde 400', async () => {
+    const { db } = crearBdFalsa(registroEnBd(), null);
     const app = await crearApp([IdentidadModule], db);
-    const r = await request(app.getHttpServer()).post('/api/usuarios').send(tutor).expect(409);
+    const r = await request(app.getHttpServer()).post('/api/usuarios').send(tutor).expect(400);
+    expect(Object.keys(r.body.errores)).toEqual(
+      expect.arrayContaining(['tipoDocumento', 'numeroDocumento']),
+    );
+    await app.close();
+  });
+
+  it('un correo ya registrado responde 409', async () => {
+    const { db } = crearBdFalsa(registroEnBd('usuario_correo_key'), null);
+    const app = await crearApp([IdentidadModule], db);
+    const r = await request(app.getHttpServer())
+      .post('/api/usuarios')
+      .send(registroTutor)
+      .expect(409);
     expect(r.body.message).toBe('Ya existe una cuenta con ese correo');
+    await app.close();
+  });
+
+  it('un documento ya registrado responde 409 con su propio mensaje', async () => {
+    const { db } = crearBdFalsa(registroEnBd('usuario_documento_unico'), null);
+    const app = await crearApp([IdentidadModule], db);
+    const r = await request(app.getHttpServer())
+      .post('/api/usuarios')
+      .send(registroTutor)
+      .expect(409);
+    expect(r.body.message).toBe('Ya existe una cuenta con ese documento');
     await app.close();
   });
 });
@@ -177,7 +223,7 @@ describe('HU-007 · registro de aliado (POST /api/aliados)', () => {
   });
 
   it('un correo ya registrado responde 409', async () => {
-    const { db } = crearBdFalsa(registroEnBd(true), null);
+    const { db } = crearBdFalsa(registroEnBd('usuario_correo_key'), null);
     const app = await crearApp([AliadosModule], db);
     await request(app.getHttpServer()).post('/api/aliados').send(clinica).expect(409);
     await app.close();

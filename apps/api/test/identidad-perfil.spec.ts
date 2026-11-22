@@ -24,11 +24,13 @@ function usuarioEnBd(usuario = TUTOR, extra: Manejador = () => undefined): Manej
     if (sql.includes('SELECT correo, rol, password_hash')) {
       return { rows: [{ correo: usuario.correo, rol: usuario.rol, password_hash: hash }] };
     }
-    if (sql.includes('SELECT id, nombre, celular, correo, rol FROM usuario')) {
+    if (sql.includes('SELECT id, nombre, celular, correo, rol,') && sql.includes('FROM usuario')) {
       return { rows: [usuario] };
     }
     if (sql.includes('UPDATE usuario') && sql.includes('RETURNING')) {
-      const [, nombre, celular, correo] = valores as (string | null)[];
+      const [, nombre, celular, correo, tipoDocumento, numeroDocumento] = valores as (
+        string | null
+      )[];
       return {
         rows: [
           {
@@ -36,6 +38,7 @@ function usuarioEnBd(usuario = TUTOR, extra: Manejador = () => undefined): Manej
             nombre: nombre ?? usuario.nombre,
             celular: celular ?? usuario.celular,
             correo: correo ?? usuario.correo,
+            ...(numeroDocumento ? { tipoDocumento, numeroDocumento } : {}),
           },
         ],
       };
@@ -76,6 +79,45 @@ describe('HU-006 · perfil', () => {
     const update = consultas.find((c) => c.sql.includes('UPDATE usuario'));
     expect(update?.usuarioTx).toBe(TUTOR.id);
     expect(update?.valores[0]).toBe(TUTOR.id);
+    await app.close();
+  });
+
+  it('guarda el documento en mayúsculas y exige enviar tipo y número juntos', async () => {
+    const { db, consultas } = crearBdFalsa(usuarioEnBd());
+    const app = await crearApp([IdentidadModule], db);
+    const r = await request(app.getHttpServer())
+      .patch('/api/identidad/me')
+      .set('Cookie', COOKIE)
+      .send({ tipoDocumento: 'PA', numeroDocumento: 'ab123456' })
+      .expect(200);
+    expect(r.body.usuario).toMatchObject({ tipoDocumento: 'PA', numeroDocumento: 'AB123456' });
+    const update = consultas.find((c) => c.sql.includes('UPDATE usuario'));
+    expect(update?.valores.slice(4)).toEqual(['PA', 'AB123456']);
+
+    const sinTipo = await request(app.getHttpServer())
+      .patch('/api/identidad/me')
+      .set('Cookie', COOKIE)
+      .send({ numeroDocumento: '1023456789' })
+      .expect(400);
+    expect(sinTipo.body.errores).toHaveProperty('numeroDocumento');
+    await app.close();
+  });
+
+  it('un documento que ya usa otra cuenta responde 409', async () => {
+    const { db } = crearBdFalsa(
+      usuarioEnBd(TUTOR, (sql) => {
+        if (sql.includes('UPDATE usuario') && sql.includes('RETURNING')) {
+          throw Object.assign(errorPg('23505'), { constraint: 'usuario_documento_unico' });
+        }
+      }),
+    );
+    const app = await crearApp([IdentidadModule], db);
+    const r = await request(app.getHttpServer())
+      .patch('/api/identidad/me')
+      .set('Cookie', COOKIE)
+      .send({ tipoDocumento: 'CC', numeroDocumento: '1023456789' })
+      .expect(409);
+    expect(r.body.message).toBe('Ya existe una cuenta con ese documento');
     await app.close();
   });
 

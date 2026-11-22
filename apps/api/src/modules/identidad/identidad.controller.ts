@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Patch,
   Post,
+  Put,
   Req,
   Res,
   UnauthorizedException,
@@ -16,6 +17,8 @@ import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   actualizarPerfilSchema,
   codigo2faSchema,
+  confirmarContrasenaSchema,
+  crearContrasenaSchema,
   desafio2faSchema,
   eliminarCuentaSchema,
   loginSchema,
@@ -147,6 +150,45 @@ export class IdentidadController {
     return { usuario: await this.identidad.obtenerPerfil(request.usuario.id) };
   }
 
+  @Get('contrasena')
+  @UseGuards(AuthGuard)
+  @ApiOperation({
+    summary: 'Si la cuenta tiene contraseña de Veto (paso "Confirma tu contraseña")',
+    description: 'Las cuentas creadas con Google no tienen: { tieneContrasena: false }.',
+  })
+  async estadoContrasena(@Req() request: RequestAutenticada) {
+    return { tieneContrasena: await this.identidad.tieneContrasena(request.usuario.id) };
+  }
+
+  @Post('contrasena/confirmar')
+  @UseGuards(AuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Confirmar la contraseña después de ingresar (paso "Confirma tu contraseña")',
+    description:
+      '{ contrasena }. 200 { ok: true } si coincide; 401 si no; 409 si la cuenta aún no tiene ' +
+      'contraseña (cuentas de Google: primero PUT /identidad/contrasena).',
+  })
+  async confirmarContrasena(@Req() request: RequestAutenticada, @Body() body: unknown) {
+    const { contrasena } = validar(confirmarContrasenaSchema, body);
+    await this.identidad.confirmarContrasena(request.usuario.id, contrasena);
+    return { ok: true };
+  }
+
+  @Put('contrasena')
+  @UseGuards(AuthGuard)
+  @ApiOperation({
+    summary: 'Crear la contraseña de Veto de una cuenta creada con Google',
+    description:
+      '{ contrasena } (mínimo 8 caracteres). Solo si la cuenta aún no tiene contraseña; si ya ' +
+      'tiene responde 409 (para cambiarla se usa la recuperación de contraseña).',
+  })
+  async crearContrasena(@Req() request: RequestAutenticada, @Body() body: unknown) {
+    const { contrasena } = validar(crearContrasenaSchema, body);
+    await this.identidad.crearContrasena(request.usuario.id, contrasena);
+    return { ok: true };
+  }
+
   @Patch('me')
   @UseGuards(AuthGuard)
   @ApiOperation({ summary: 'Editar nombre, celular o correo del perfil (HU-006)' })
@@ -192,7 +234,8 @@ export class RegistroUsuariosController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Registrar tutor (HU-001)',
-    description: 'Body { nombre, celular, correo, contrasena }. Correo repetido → 409.',
+    description:
+      'Body { nombre, tipoDocumento, numeroDocumento, celular, correo, contrasena }. Correo repetido → 409.',
   })
   @ApiCreatedResponse({
     description: 'Cuenta creada: { usuario }. La contraseña nunca se devuelve.',

@@ -2,20 +2,30 @@
 
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
-import { AlertBox, VetoButton } from '@/components/ui/veto-components';
-import { registroUsuarioSchema } from '@veto/shared';
+import { AlertBox, CelularField, VetoButton } from '@/components/ui/veto-components';
+import { registroUsuarioSchema, type TipoDocumento } from '@veto/shared';
+import { DocumentoFields } from '@/components/DocumentoFields';
 import { erroresPorCampo } from '@/lib/errores';
 import { api, ApiError } from '@/lib/api';
 import { GoogleAuthButton } from '@/components/GoogleAuthButton';
 
 export default function RegistroTutor() {
-  const [datos, setDatos] = useState({ nombre: '', celular: '', correo: '', contrasena: '' });
+  const [datos, setDatos] = useState({
+    nombre: '',
+    tipoDocumento: 'CC' as TipoDocumento,
+    numeroDocumento: '',
+    celular: '',
+    correo: '',
+    contrasena: '',
+  });
   const [errores, setErrores] = useState<Record<string, string>>({});
   const [acepta, setAcepta] = useState(false);
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
   const [registroCompletado, setRegistroCompletado] = useState(false);
   const [mostrarContrasena, setMostrarContrasena] = useState(false);
+  const [confirmacion, setConfirmacion] = useState('');
+  const contrasenasDistintas = confirmacion.length > 0 && confirmacion !== datos.contrasena;
   const fortaleza = [
     datos.contrasena.length >= 8,
     /[A-Z]/.test(datos.contrasena),
@@ -27,8 +37,14 @@ export default function RegistroTutor() {
     event.preventDefault();
     setError('');
     const resultado = registroUsuarioSchema.safeParse(datos);
+    const erroresConfirmacion: Record<string, string> =
+      confirmacion !== datos.contrasena ? { confirmacion: 'Las contraseñas no coinciden.' } : {};
     if (!resultado.success) {
-      setErrores(erroresPorCampo(resultado.error));
+      setErrores({ ...erroresPorCampo(resultado.error), ...erroresConfirmacion });
+      return;
+    }
+    if (erroresConfirmacion.confirmacion) {
+      setErrores(erroresConfirmacion);
       return;
     }
     if (!acepta) {
@@ -60,16 +76,6 @@ export default function RegistroTutor() {
     <div className="auth-page auth-page--centered">
       <section aria-labelledby="register-title" className="auth-form-panel">
         <div className="auth-card auth-card--wide">
-          <div className="auth-card__brandline">
-            <span aria-hidden="true" className="auth-card__brand-icon auth-card__brand-icon--peach">
-              <svg fill="none" viewBox="0 0 32 32">
-                <path d="M16 27s-11-6.7-11-15a6.1 6.1 0 0 1 11-3.7A6.1 6.1 0 0 1 27 12c0 8.3-11 15-11 15Z" />
-                <path d="M10 16h4l2-4 3 8 2-4h2" />
-              </svg>
-            </span>
-            <span>EMPECEMOS CON SU BIENESTAR</span>
-            <i aria-hidden="true">✿</i>
-          </div>
           <p className="eyebrow eyebrow--dark">PARA TUTORES</p>
           <h1 id="register-title">Crea tu cuenta</h1>
           <p className="auth-intro">Un solo lugar para organizar todo lo que necesita.</p>
@@ -101,24 +107,22 @@ export default function RegistroTutor() {
                   />
                   {errores.nombre && <small className="field-error">{errores.nombre}</small>}
                 </label>
-                <label className="field">
-                  <span>Celular *</span>
-                  <span className="phone-control">
-                    <span className="phone-prefix">+57</span>
-                    <input
-                      autoComplete="tel-national"
-                      className={`control${errores.celular ? ' control--error' : ''}`}
-                      inputMode="numeric"
-                      maxLength={10}
-                      onChange={(event) =>
-                        setDatos({ ...datos, celular: event.target.value.replace(/\D/g, '') })
-                      }
-                      placeholder="300 123 4567"
-                      value={datos.celular}
-                    />
-                  </span>
-                  {errores.celular && <small className="field-error">{errores.celular}</small>}
-                </label>
+                <DocumentoFields
+                  errores={errores}
+                  id="registro-documento"
+                  numero={datos.numeroDocumento}
+                  onChange={(cambio) => setDatos({ ...datos, ...cambio })}
+                  required
+                  tipo={datos.tipoDocumento}
+                />
+                <CelularField
+                  error={errores.celular}
+                  id="registro-celular"
+                  label="Celular *"
+                  onChange={(celular) => setDatos({ ...datos, celular })}
+                  required
+                  value={datos.celular}
+                />
                 <label className="field">
                   <span>Correo electrónico *</span>
                   <input
@@ -159,6 +163,22 @@ export default function RegistroTutor() {
                   </span>
                   {errores.contrasena && (
                     <small className="field-error">{errores.contrasena}</small>
+                  )}
+                </label>
+                <label className="field">
+                  <span>Confirmar contraseña *</span>
+                  <input
+                    aria-invalid={contrasenasDistintas || Boolean(errores.confirmacion)}
+                    autoComplete="new-password"
+                    className={`control${
+                      contrasenasDistintas || errores.confirmacion ? ' control--error' : ''
+                    }`}
+                    onChange={(event) => setConfirmacion(event.target.value)}
+                    type={mostrarContrasena ? 'text' : 'password'}
+                    value={confirmacion}
+                  />
+                  {(contrasenasDistintas || errores.confirmacion) && (
+                    <small className="field-error">Las contraseñas no coinciden.</small>
                   )}
                 </label>
                 <label className="auth-check">

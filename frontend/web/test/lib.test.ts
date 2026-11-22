@@ -9,6 +9,8 @@ describe('erroresPorCampo + esquemas compartidos', () => {
   it('devuelve un mensaje por cada campo inválido del registro', () => {
     const r = registroUsuarioSchema.safeParse({
       nombre: '',
+      tipoDocumento: 'CC',
+      numeroDocumento: '12',
       celular: '123',
       correo: 'x',
       contrasena: 'corta',
@@ -16,7 +18,13 @@ describe('erroresPorCampo + esquemas compartidos', () => {
     expect(r.success).toBe(false);
     if (!r.success) {
       const errores = erroresPorCampo(r.error);
-      expect(Object.keys(errores).sort()).toEqual(['celular', 'contrasena', 'correo', 'nombre']);
+      expect(Object.keys(errores).sort()).toEqual([
+        'celular',
+        'contrasena',
+        'correo',
+        'nombre',
+        'numeroDocumento',
+      ]);
       expect(errores.celular).toBe('El celular debe tener 10 dígitos');
     }
   });

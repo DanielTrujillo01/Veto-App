@@ -5,11 +5,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { BrandLogo } from '@/components/BrandLogo';
+import { CarritoEnlace } from '@/components/CarritoEnlace';
 import { ApiError, api } from '@/lib/api';
 import { escucharCambioSesion, notificarCambioSesion, type UsuarioSesion } from '@/lib/session';
 
 const enlaces = [
+  { href: '/clinicas', etiqueta: 'Clínicas' },
   { href: '/veterinarios', etiqueta: 'Veterinarios' },
+  { href: '/servicios', etiqueta: 'Servicios' },
   { href: '/tienda', etiqueta: 'Tienda' },
   { href: '/adopcion', etiqueta: 'Adopción' },
 ];
@@ -37,7 +40,15 @@ export function SiteChrome({ children }: { children: ReactNode }) {
       setSesionLista(true);
     });
 
-    void api<{ usuario: UsuarioSesion }>('/identidad/me')
+    // Si la API todavía no responde (por ejemplo, mientras arranca), se reintenta una vez.
+    const consultarSesion = () =>
+      api<{ usuario: UsuarioSesion }>('/identidad/me').catch(async (causa: unknown) => {
+        if (causa instanceof ApiError) throw causa;
+        await new Promise((resolver) => setTimeout(resolver, 2000));
+        return api<{ usuario: UsuarioSesion }>('/identidad/me');
+      });
+
+    void consultarSesion()
       .then(({ usuario: sesion }) => {
         if (vigente && !sesionCambiada) setUsuario(sesion);
       })
@@ -46,7 +57,9 @@ export function SiteChrome({ children }: { children: ReactNode }) {
           if (vigente && !sesionCambiada) setUsuario(null);
           return;
         }
-        console.error('No pudimos consultar la sesión de Veto.', causa);
+        // Sin conexión con la API se muestra la web como sin sesión; es un aviso, no un error de
+        // la página (console.error abriría el overlay de errores de Next.js en desarrollo).
+        console.warn('No pudimos consultar la sesión de Veto.', causa);
         if (vigente && !sesionCambiada) setUsuario(null);
       })
       .finally(() => {
@@ -89,144 +102,138 @@ export function SiteChrome({ children }: { children: ReactNode }) {
             etiqueta: 'Mi panel',
           },
         ]
-    : [...enlaces, { href: '/mascotas', etiqueta: 'Mis mascotas' }];
+    : enlaces;
 
   if (paginaInterna) return <>{children}</>;
 
   return (
     <>
-      <header className={`public-header${paginaAutenticacion ? ' public-header--auth' : ''}`}>
+      <header className="public-header">
         <div className="public-header__inner">
-          <Link aria-label="Veto, ir al inicio" className="public-brand" href="/">
+          <Link
+            aria-label="Veto, ir al inicio"
+            className="public-brand public-brand--header"
+            href="/"
+          >
             <BrandLogo className="brand-logo" />
           </Link>
-          {paginaAutenticacion ? (
-            <nav aria-label="Navegación de cuenta" className="public-auth-nav">
-              <Link href="/">Volver al inicio</Link>
-              {sesionLista && usuario ? (
-                <>
-                  <Link className="veto-button veto-button--secondary" href="/perfil">
-                    Mi perfil
-                  </Link>
-                  <button
-                    className="veto-button veto-button--primary"
-                    disabled={cerrandoSesion}
-                    onClick={() => void cerrarSesion()}
-                    type="button"
-                  >
-                    {cerrandoSesion ? 'Cerrando…' : 'Cerrar sesión'}
-                  </button>
-                </>
-              ) : pathname === '/ingresar' ? (
-                <Link className="veto-button veto-button--secondary" href="/clinicas">
-                  Explorar Veto
+          <>
+            <nav
+              aria-label="Navegación principal"
+              className={`public-nav${menuAbierto ? ' public-nav--open' : ''}`}
+            >
+              {enlacesVisibles.map((enlace) => (
+                <Link
+                  aria-current={pathname === enlace.href ? 'page' : undefined}
+                  href={enlace.href}
+                  key={enlace.href}
+                  onClick={() => setMenuAbierto(false)}
+                >
+                  {enlace.etiqueta}
                 </Link>
-              ) : (
-                <Link className="public-auth-nav__login" href="/ingresar">
-                  ¿Ya tienes cuenta? <strong>Inicia sesión</strong>
-                </Link>
-              )}
-              {errorSesion && (
-                <p className="public-header__session-error" role="alert">
-                  {errorSesion}
-                </p>
-              )}
+              ))}
+              <div className="public-nav__actions">
+                {!sesionLista ? (
+                  <span aria-label="Consultando sesión" className="public-nav__session-skeleton" />
+                ) : usuario ? (
+                  <>
+                    <span className="public-nav__greeting">Hola, {usuario.nombre}</span>
+                    <Link className="veto-button veto-button--secondary" href="/perfil">
+                      Mi perfil
+                    </Link>
+                    <button
+                      className="veto-button veto-button--primary"
+                      disabled={cerrandoSesion}
+                      onClick={() => void cerrarSesion()}
+                      type="button"
+                    >
+                      {cerrandoSesion ? 'Cerrando…' : 'Cerrar sesión'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link className="veto-button veto-button--secondary" href="/ingresar">
+                      Ingresar
+                    </Link>
+                    <Link className="veto-button veto-button--primary" href="/registro">
+                      Registrarme
+                    </Link>
+                  </>
+                )}
+              </div>
             </nav>
-          ) : (
-            <>
-              <form action="/buscar" className="public-header-search" role="search">
-                <span aria-hidden="true">⌕</span>
-                <input
-                  aria-label="Buscar servicios, productos o clínicas"
-                  name="q"
-                  placeholder="¿Qué necesita tu mascota?"
-                />
-                <button aria-label="Buscar" type="submit">
-                  Buscar
-                </button>
-              </form>
-              <nav
-                aria-label="Navegación principal"
-                className={`public-nav${menuAbierto ? ' public-nav--open' : ''}`}
-              >
-                {enlacesVisibles.map((enlace) => (
-                  <Link
-                    aria-current={pathname === enlace.href ? 'page' : undefined}
-                    href={enlace.href}
-                    key={enlace.href}
-                    onClick={() => setMenuAbierto(false)}
-                  >
-                    {enlace.etiqueta}
-                  </Link>
-                ))}
-                <div className="public-nav__actions">
-                  {!sesionLista ? (
-                    <span
-                      aria-label="Consultando sesión"
-                      className="public-nav__session-skeleton"
-                    />
-                  ) : usuario ? (
-                    <>
-                      <span className="public-nav__greeting">Hola, {usuario.nombre}</span>
-                      <Link className="veto-button veto-button--secondary" href="/perfil">
-                        Mi perfil
-                      </Link>
-                      <button
-                        className="veto-button veto-button--primary"
-                        disabled={cerrandoSesion}
-                        onClick={() => void cerrarSesion()}
-                        type="button"
-                      >
-                        {cerrandoSesion ? 'Cerrando…' : 'Cerrar sesión'}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <Link className="veto-button veto-button--secondary" href="/ingresar">
-                        Ingresar
-                      </Link>
-                      <Link className="veto-button veto-button--primary" href="/registro">
-                        Registrarme
-                      </Link>
-                    </>
-                  )}
-                </div>
-              </nav>
-              {errorSesion && (
-                <p className="public-header__session-error" role="alert">
-                  {errorSesion}
-                </p>
-              )}
-              <button
-                aria-expanded={menuAbierto}
-                aria-label={menuAbierto ? 'Cerrar menú' : 'Abrir menú'}
-                className="public-menu-toggle"
-                onClick={() => setMenuAbierto(!menuAbierto)}
-                type="button"
-              >
-                <span />
-                <span />
-                <span />
-              </button>
-            </>
-          )}
+            {errorSesion && (
+              <p className="public-header__session-error" role="alert">
+                {errorSesion}
+              </p>
+            )}
+            <CarritoEnlace onClick={() => setMenuAbierto(false)} />
+            <button
+              aria-expanded={menuAbierto}
+              aria-label={menuAbierto ? 'Cerrar menú' : 'Abrir menú'}
+              className="public-menu-toggle"
+              onClick={() => setMenuAbierto(!menuAbierto)}
+              type="button"
+            >
+              <span />
+              <span />
+              <span />
+            </button>
+          </>
         </div>
       </header>
       <main className={`site-main${paginaAutenticacion ? ' site-main--auth' : ''}`}>
         {children}
       </main>
-      <footer className={`public-footer${paginaAutenticacion ? ' public-footer--auth' : ''}`}>
-        <Link aria-label="Veto, ir al inicio" className="public-brand public-brand--light" href="/">
-          <BrandLogo className="brand-logo" />
-        </Link>
-        <span className="public-footer__tagline">CUIDAMOS LO QUE AMAS</span>
-        <nav aria-label="Enlaces legales">
-          <Link href="/clinicas">Veterinarias</Link>
-          <Link href="/tienda">Tienda</Link>
-          <Link href="/adopcion">Adopción</Link>
-          <Link href="/perfil">Mi perfil</Link>
+      <footer className="public-footer public-footer--full">
+        <div className="public-footer__brand">
+          <Link
+            aria-label="Veto, ir al inicio"
+            className="public-brand public-brand--light"
+            href="/"
+          >
+            <BrandLogo className="brand-logo" />
+          </Link>
+          <span className="public-footer__tagline">CUIDAMOS LO QUE AMAS</span>
+          <p>Clínicas, veterinarios, tienda y adopción para tu mascota, en un solo lugar.</p>
+        </div>
+        <nav aria-label="Explora Veto" className="public-footer__col">
+          <strong>Explora</strong>
+          {enlaces.map((enlace) => (
+            <Link href={enlace.href} key={enlace.href}>
+              {enlace.etiqueta}
+            </Link>
+          ))}
         </nav>
-        <small>© 2026 Veto · Hecho con cariño en Bogotá</small>
+        <nav aria-label="Tu cuenta" className="public-footer__col">
+          <strong>Tu cuenta</strong>
+          {!usuario ? (
+            <>
+              <Link href="/ingresar">Ingresar</Link>
+              <Link href="/registro">Crear cuenta</Link>
+              <Link href="/recuperar-contrasena">Recuperar contraseña</Link>
+            </>
+          ) : usuario.rol === 'TUTOR' ? (
+            <>
+              <Link href="/perfil">Mi perfil</Link>
+              <Link href="/mascotas">Mis mascotas</Link>
+              <Link href="/carrito">Carrito</Link>
+            </>
+          ) : (
+            <>
+              <Link href={usuario.rol === 'VETERINARIO' ? '/panel/veterinario' : '/panel/aliado'}>
+                Mi panel
+              </Link>
+              <Link href="/perfil">Mi perfil</Link>
+            </>
+          )}
+        </nav>
+        <nav aria-label="Aliados" className="public-footer__col">
+          <strong>Aliados</strong>
+          <Link href="/registro/aliado">Registra tu clínica, tienda o fundación</Link>
+          <Link href="/ingresar">Ingreso de aliados</Link>
+        </nav>
+        <small className="public-footer__bottom">© 2026 Veto · Hecho con cariño en Colombia</small>
       </footer>
     </>
   );
