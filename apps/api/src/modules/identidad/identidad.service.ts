@@ -291,6 +291,42 @@ export class IdentidadService {
     return resultado.rows[0] ?? null;
   }
 
+  /** Paso "Confirma tu contraseña": ¿la cuenta tiene contraseña de Veto? (las de Google no). */
+  async tieneContrasena(usuarioId: string): Promise<boolean> {
+    return this.db.withUser(usuarioId, async (client) => {
+      const cuenta = await this.cuentaActiva(client, usuarioId);
+      return cuenta.password_hash !== CONTRASENA_GOOGLE;
+    });
+  }
+
+  /** Comprueba la contraseña de la persona con sesión abierta. 401 si no coincide. */
+  async confirmarContrasena(usuarioId: string, contrasena: string): Promise<void> {
+    await this.db.withUser(usuarioId, async (client) => {
+      const cuenta = await this.cuentaActiva(client, usuarioId);
+      if (cuenta.password_hash === CONTRASENA_GOOGLE) {
+        throw new ConflictException('Esta cuenta todavía no tiene contraseña: créala primero');
+      }
+      if (!(await verificarContrasena(contrasena, cuenta.password_hash))) {
+        throw new UnauthorizedException('La contraseña no es correcta');
+      }
+    });
+  }
+
+  /**
+   * Una cuenta creada con Google crea su contraseña de Veto. Solo si aún no tiene una: para
+   * cambiar una contraseña existente está la recuperación de contraseña.
+   */
+  async crearContrasena(usuarioId: string, contrasena: string): Promise<void> {
+    const hash = await hashContrasena(contrasena);
+    await this.db.withUser(usuarioId, async (client) => {
+      const cuenta = await this.cuentaActiva(client, usuarioId, true);
+      if (cuenta.password_hash !== CONTRASENA_GOOGLE) {
+        throw new ConflictException('Esta cuenta ya tiene contraseña');
+      }
+      await client.query('UPDATE usuario SET password_hash = $2 WHERE id = $1', [usuarioId, hash]);
+    });
+  }
+
   /** HU-006: perfil del usuario autenticado, leído siempre de la base (no de la sesión en caché). */
   async obtenerPerfil(usuarioId: string): Promise<PerfilUsuario> {
     const resultado = await this.db.query<PerfilUsuario>(

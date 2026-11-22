@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { iniciales } from '@/components/PortadaCapas';
+import { PasoContrasena } from './PasoContrasena';
 import { useEffect, useState, type FormEvent } from 'react';
 import type { PendienteGoogle } from '@veto/shared';
 import { AlertBox, CelularField, VetoButton } from '@/components/ui/veto-components';
@@ -36,6 +37,8 @@ export default function Ingresar() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [usuario, setUsuario] = useState<Usuario | null>(null);
+  /** Pedido del cliente: tras ingresar (también con Google) se confirma o crea la contraseña. */
+  const [contrasenaVerificada, setContrasenaVerificada] = useState(false);
   const [desafio2fa, setDesafio2fa] = useState('');
   const [codigo2fa, setCodigo2fa] = useState('');
   const [googlePendiente, setGooglePendiente] = useState<PendienteGoogle | null>(null);
@@ -215,7 +218,9 @@ export default function Ingresar() {
     <div className="auth-page auth-page--centered auth-page--login">
       <section aria-labelledby="login-title" className="auth-form-panel">
         <div className="auth-card">
-          {usuario ? (
+          {usuario && !contrasenaVerificada ? (
+            <PasoContrasena nombre={usuario.nombre} onListo={() => setContrasenaVerificada(true)} />
+          ) : usuario ? (
             // Sesión iniciada: bienvenida sencilla con la ficha (monograma peach, saludo en Sora
             // con acento burgundy) en lugar de una alerta verde.
             <div className="auth-welcome">

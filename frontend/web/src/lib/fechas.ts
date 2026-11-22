@@ -1,6 +1,8 @@
 /**
- * Fechas y horas de las citas, siempre en hora de Colombia: los aliados atienden en Colombia y la
- * API devuelve instantes en UTC. Así la hora mostrada no depende del reloj del dispositivo.
+ * Fechas y horas de las citas, siempre en hora de Colombia: los aliados atienden en Colombia. La
+ * API entrega los instantes con desfase de Colombia (`…-05:00`); antes los entregaba en UTC (`…Z`).
+ * Aquí se leen con `new Date()` y se muestran en `America/Bogota`, así que ambas formas funcionan
+ * y la hora mostrada no depende del reloj del dispositivo.
  */
 export const ZONA_HORARIA = 'America/Bogota';
 

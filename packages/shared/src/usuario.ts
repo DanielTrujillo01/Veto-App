@@ -14,6 +14,19 @@ export const contrasenaSchema = z
   .min(8, 'La contraseña debe tener al menos 8 caracteres')
   .max(128, 'La contraseña es demasiado larga');
 
+/**
+ * Paso "Confirma tu contraseña" al ingresar (pedido del cliente). Se compara con la guardada; aquí
+ * solo se exige que no venga vacía.
+ */
+export const confirmarContrasenaSchema = z.object({
+  contrasena: z.string({ error: 'Escribe tu contraseña' }).min(1, 'Escribe tu contraseña'),
+});
+export type ConfirmarContrasena = z.infer<typeof confirmarContrasenaSchema>;
+
+/** Cuentas creadas con Google: crean su contraseña de Veto en ese mismo paso. */
+export const crearContrasenaSchema = z.object({ contrasena: contrasenaSchema });
+export type CrearContrasena = z.infer<typeof crearContrasenaSchema>;
+
 /** Tipos de documento de identidad aceptados en Colombia. */
 export const TIPOS_DOCUMENTO = ['CC', 'CE', 'TI', 'PA', 'PPT'] as const;
 export type TipoDocumento = (typeof TIPOS_DOCUMENTO)[number];

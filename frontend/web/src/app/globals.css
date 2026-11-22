@@ -11428,3 +11428,29 @@ select.control option {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Paso "Confirma / Crea tu contraseña" al ingresar: misma tarjeta que la bienvenida, con un
+   candado en el cuadro peach y el formulario alineado a la izquierda. */
+.auth-confirm__icon svg {
+  width: 32px;
+  height: 32px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.auth-confirm__field {
+  width: 100%;
+  text-align: left;
+}
+
+.auth-confirm__error {
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgb(179 38 30 / 8%);
+  text-align: left;
+}

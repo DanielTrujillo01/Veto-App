@@ -380,7 +380,8 @@ export function ElegirHorario({ servicioId }: { servicioId: string }) {
               const clave = `${espacio.veterinarioId}|${espacio.inicio}`;
               const elegido =
                 seleccionDeEste &&
-                seleccion.inicio === espacio.inicio &&
+                // Mismo instante aunque llegue escrito distinto (`…Z` o `…-05:00`).
+                Date.parse(seleccion.inicio) === Date.parse(espacio.inicio) &&
                 seleccion.veterinarioId === espacio.veterinarioId;
               return (
                 <button
